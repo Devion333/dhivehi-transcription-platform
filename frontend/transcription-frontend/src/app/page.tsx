@@ -3,7 +3,7 @@ import * as React from "react";
 const { useState, useEffect } = React;
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, List, Moon, Sun, Loader2 } from "lucide-react";
+import { Upload, List, Search, Moon, Sun, Loader2 } from "lucide-react";
 import { QDRANT_URL } from "@/config";
 
 // Theme Toggle Component
@@ -223,18 +223,28 @@ export default function TranscriptionApp() {
             }`}>
             Transcription App
           </h1>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-            className="transition-all duration-300 ease-in-out hover:scale-110"
-          >
-            {theme === "light" ? (
-              <Moon className="h-5 w-5 transition-all duration-300 ease-in-out text-stone-700" />
-            ) : (
-              <Sun className="h-5 w-5 transition-all duration-300 ease-in-out text-neutral-400" />
-            )}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => window.location.href = '/Search'}
+              className="transition-all duration-300 ease-in-out hover:scale-110"
+            >
+              <Search className="h-5 w-5 transition-all duration-300 ease-in-out text-stone-700 dark:text-neutral-400" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              className="transition-all duration-300 ease-in-out hover:scale-110"
+            >
+              {theme === "light" ? (
+                <Moon className="h-5 w-5 transition-all duration-300 ease-in-out text-stone-700" />
+              ) : (
+                <Sun className="h-5 w-5 transition-all duration-300 ease-in-out text-neutral-400" />
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 

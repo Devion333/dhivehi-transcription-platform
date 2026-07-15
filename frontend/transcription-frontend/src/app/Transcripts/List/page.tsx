@@ -427,7 +427,17 @@ export default function TranscriptList() {
           >
             Transcription App
           </h1>
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push('/Search')}
+              className="hover:scale-110"
+            >
+              <Search className="h-5 w-5" />
+            </Button>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

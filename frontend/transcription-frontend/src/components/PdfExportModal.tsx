@@ -34,11 +34,10 @@ export default function PdfExportModal({ open, onClose, onGenerate, loading }: P
           <div className="grid grid-cols-1 gap-3">
             <button
               onClick={() => setFormat('segmented')}
-              className={`flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-all duration-200 ${
-                format === 'segmented'
+              className={`flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-all duration-200 ${format === 'segmented'
                   ? 'border-stone-600 dark:border-neutral-400 bg-stone-50 dark:bg-neutral-700/50'
                   : 'border-stone-200 dark:border-neutral-700 bg-transparent hover:bg-stone-50 dark:hover:bg-neutral-700/30'
-              }`}
+                }`}
             >
               <FileText className={`w-6 h-6 mt-0.5 shrink-0 ${format === 'segmented' ? 'text-stone-700 dark:text-neutral-300' : 'text-stone-400 dark:text-neutral-500'}`} />
               <div>
@@ -53,11 +52,10 @@ export default function PdfExportModal({ open, onClose, onGenerate, loading }: P
 
             <button
               onClick={() => setFormat('paragraph')}
-              className={`flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-all duration-200 ${
-                format === 'paragraph'
+              className={`flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-all duration-200 ${format === 'paragraph'
                   ? 'border-stone-600 dark:border-neutral-400 bg-stone-50 dark:bg-neutral-700/50'
                   : 'border-stone-200 dark:border-neutral-700 bg-transparent hover:bg-stone-50 dark:hover:bg-neutral-700/30'
-              }`}
+                }`}
             >
               <AlignLeft className={`w-6 h-6 mt-0.5 shrink-0 ${format === 'paragraph' ? 'text-stone-700 dark:text-neutral-300' : 'text-stone-400 dark:text-neutral-500'}`} />
               <div>
@@ -83,7 +81,8 @@ export default function PdfExportModal({ open, onClose, onGenerate, loading }: P
             <Button
               onClick={() => onGenerate(format)}
               disabled={loading}
-              className="bg-stone-600 hover:bg-stone-700 dark:bg-neutral-700 dark:hover:bg-neutral-600"
+              variant="outline"
+              className="bg-stone-50 hover:bg-stone-200 dark:bg-neutral-700 dark:hover:bg-neutral-600"
             >
               {loading ? (
                 <>

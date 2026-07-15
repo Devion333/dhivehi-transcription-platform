@@ -92,8 +92,12 @@ services:
       MINIO_SECRET_KEY: "minio123"
       DAGSTER_ENABLED: "true"
       DAGSTER_API_URL: "http://dagster:3000"
+      HF_HOME: /root/.cache/huggingface
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_OFFLINE: "1"
     volumes:
       - /data/911/911_whisper_model:/app/models
+      - hf_cache:/root/.cache/huggingface
     networks:
       - app_network
 
@@ -153,3 +157,5 @@ volumes:
   minio_data:
   qdrant_data:
   dagster_home:
+  hf_cache:
+    name: transcript-app_hf_cache

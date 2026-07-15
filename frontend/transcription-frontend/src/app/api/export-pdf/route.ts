@@ -51,37 +51,38 @@ function buildHtml(
   format: 'segmented' | 'paragraph',
   analysisData?: PdfAnalysisData | null
 ): string {
+  const sorted = [...segments].sort((a, b) => a.segment_index - b.segment_index);
   const transcriptHtml =
     format === 'segmented'
-      ? segments
-          .map(
-            (seg) => `
+      ? sorted
+        .map(
+          (seg) => `
         <div class="segment">
           <div class="segment-header">[${seg.speaker}]  ${formatTime(seg.start_time)} &mdash; ${formatTime(seg.end_time)}</div>
           <div class="segment-text">${escHtml(seg.transcript_text || '')}</div>
         </div>`
-          )
-          .join('<hr class="sub-divider" />')
+        )
+        .join('<hr class="sub-divider" />')
       : (() => {
-          const groups: { speaker: string; texts: string[] }[] = [];
-          for (const seg of segments) {
-            const last = groups[groups.length - 1];
-            if (last && last.speaker === seg.speaker) {
-              last.texts.push(seg.transcript_text || '');
-            } else {
-              groups.push({ speaker: seg.speaker, texts: [seg.transcript_text || ''] });
-            }
+        const groups: { speaker: string; texts: string[] }[] = [];
+        for (const seg of sorted) {
+          const last = groups[groups.length - 1];
+          if (last && last.speaker === seg.speaker) {
+            last.texts.push(seg.transcript_text || '');
+          } else {
+            groups.push({ speaker: seg.speaker, texts: [seg.transcript_text || ''] });
           }
-          return groups
-            .map(
-              (g) => `
+        }
+        return groups
+          .map(
+            (g) => `
         <div class="speaker-block">
           <div class="speaker-heading">${escHtml(g.speaker)}</div>
           <div class="paragraph-text">${escHtml(g.texts.join(' '))}</div>
         </div>`
-            )
-            .join('<hr class="sub-divider" />');
-        })();
+          )
+          .join('<hr class="sub-divider" />');
+      })();
 
   const analysisHtml = analysisData
     ? `
@@ -97,28 +98,28 @@ function buildHtml(
         ${analysisData.classification ? `<h3>Classification:</h3><p><span class="classification-badge ${getClassificationClass(analysisData.classification)}">${escHtml(formatClassification(analysisData.classification))}</span></p>` : ''}
 
         ${(() => {
-          const entityTypes: [string, string[]][] = [
-            ['Persons', analysisData.entities?.persons || []],
-            ['Locations', analysisData.entities?.locations || []],
-            ['Organizations', analysisData.entities?.organizations || []],
-            ['Events', analysisData.entities?.events || []],
-          ];
-          const hasEntities = entityTypes.some(([, items]) => items.length > 0);
-          if (!hasEntities) return '';
-          return `
+      const entityTypes: [string, string[]][] = [
+        ['Persons', analysisData.entities?.persons || []],
+        ['Locations', analysisData.entities?.locations || []],
+        ['Organizations', analysisData.entities?.organizations || []],
+        ['Events', analysisData.entities?.events || []],
+      ];
+      const hasEntities = entityTypes.some(([, items]) => items.length > 0);
+      if (!hasEntities) return '';
+      return `
             <h3>Named Entities:</h3>
             ${entityTypes
-              .filter(([, items]) => items.length > 0)
-              .map(
-                ([label, items]) => `
+          .filter(([, items]) => items.length > 0)
+          .map(
+            ([label, items]) => `
               <div class="entity-group">
                 <div class="entity-label">${label}:</div>
                 <div>${items.map((item) => `<span class="pill">${escHtml(item)}</span>`).join(' ')}</div>
               </div>`
-              )
-              .join('')}
+          )
+          .join('')}
           `;
-        })()}
+    })()}
       </div>`
     : '';
 
@@ -203,17 +204,22 @@ export async function POST(request: NextRequest) {
       analysisData?: PdfAnalysisData | null;
     };
 
-    /*
-     * Docker note:
-     * In production Docker, consider using puppeteer-core + system Chromium
-     * to avoid downloading the full Chromium binary.
-     * Local dev uses full puppeteer with bundled Chromium.
-     */
-    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+
+    const browser = await puppeteer.launch({
+      headless: 'shell',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--hide-scrollbars',
+        '--mute-audio'
+      ]
+    });
     const page = await browser.newPage();
 
     const html = buildHtml(parent, segments, format, analysisData);
     await page.setContent(html, { waitUntil: 'load' });
+    await page.evaluate(() => document.fonts.ready);
     await page.emulateMediaType('screen');
 
     const pdf = await page.pdf({

@@ -47,6 +47,7 @@ export async function generateTranscriptPdf(data: {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
+  a.target = '_self';
   const safeFilename = data.parent.filename.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 40);
   a.download = `${safeFilename}_transcript.pdf`;
   document.body.appendChild(a);
