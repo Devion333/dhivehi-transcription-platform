@@ -26,6 +26,21 @@ func TestRequireRoleForbidsNonAdmin(t *testing.T) {
 	}
 }
 
+func TestRequireRolePermitsAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/admin-test", func(c *gin.Context) {
+		c.Set(authUserContextKey, dtos.AuthUser{ID: "u1", Role: "admin"})
+	}, RequireRole("admin"), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin-test", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+}
+
 func TestSessionCookieAttributes(t *testing.T) {
 	t.Setenv("SESSION_COOKIE_NAME", "transcript_session_test")
 	t.Setenv("SESSION_SECURE", "true")

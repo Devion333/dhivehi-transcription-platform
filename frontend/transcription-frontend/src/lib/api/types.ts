@@ -45,6 +45,52 @@ export interface CurrentUserResponse {
   user: AuthUser;
 }
 
+export interface AdminUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: AuthRole;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+}
+
+export type AdminUserDetail = AdminUserSummary;
+
+export interface AdminUserListResponse {
+  items: AdminUserSummary[];
+  pagination: Pagination;
+}
+
+export interface AdminUserResponse {
+  user: AdminUserDetail;
+}
+
+export interface AdminUserListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  role?: "all" | AuthRole;
+  status?: "all" | "active" | "inactive";
+}
+
+export interface CreateAdminUserInput {
+  name: string;
+  email: string;
+  role: AuthRole;
+  password: string;
+}
+
+export interface UpdateAdminUserInput {
+  name?: string;
+  role?: AuthRole;
+}
+
+export interface ResetAdminUserPasswordInput {
+  newPassword: string;
+}
+
 export interface StatsResponse {
   totalTranscripts: number;
   uploaded: number;

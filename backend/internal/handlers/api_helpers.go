@@ -32,6 +32,20 @@ func writeServiceError(c *gin.Context, err error) {
 		case services.ErrCodeSearchUnavailable:
 			log.Printf("search service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, serviceErr.Code, "Search is unavailable", nil)
+		case services.ErrCodeInvalidUserInput:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "User input is invalid", nil)
+		case services.ErrCodeEmailExists:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Email already exists", nil)
+		case services.ErrCodeInvalidRole:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Role is invalid", nil)
+		case services.ErrCodeWeakPassword:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Password does not meet policy", nil)
+		case services.ErrCodeUserNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "User was not found", nil)
+		case services.ErrCodeCannotDeactivateSelf:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "You cannot deactivate your own account", nil)
+		case services.ErrCodeLastActiveAdmin:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "At least one active administrator is required", nil)
 		case services.ErrCodeUpstream:
 			log.Printf("upstream service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "A backend dependency failed", nil)

@@ -59,6 +59,18 @@ func main() {
 			protected.GET("/transcripts/:jobId/analysis", handlers.APIGetAnalysis)
 			protected.POST("/transcripts/:jobId/analyse", handlers.APIAnalyseTranscript)
 		}
+
+		admin := api.Group("/admin")
+		admin.Use(handlers.RequireAuth(), handlers.RequireRole(services.UserRoleAdmin))
+		{
+			admin.GET("/users", handlers.APIAdminListUsers)
+			admin.POST("/users", handlers.APIAdminCreateUser)
+			admin.GET("/users/:userId", handlers.APIAdminGetUser)
+			admin.PATCH("/users/:userId", handlers.APIAdminUpdateUser)
+			admin.POST("/users/:userId/activate", handlers.APIAdminActivateUser)
+			admin.POST("/users/:userId/deactivate", handlers.APIAdminDeactivateUser)
+			admin.POST("/users/:userId/reset-password", handlers.APIAdminResetUserPassword)
+		}
 	}
 
 	log.Println("🚀 Backend server starting on :8000")

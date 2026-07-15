@@ -1,18 +1,18 @@
 "use client";
 
-import { BarChart3, FileAudio, FileText, Home, LogOut, Menu, Search, UploadCloud, UserCircle, X } from "lucide-react";
+import { BarChart3, FileAudio, FileText, Home, LogOut, Menu, Search, UploadCloud, UserCircle, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
-import { LoadingState } from "@/components/app/states";
+import { ErrorState, LoadingState } from "@/components/app/states";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { isProtectedRoute, isPublicRoute } from "@/lib/auth-utils";
+import { isAdminRoute, isProtectedRoute, isPublicRoute } from "@/lib/auth-utils";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+const mainNavItems = [
   { href: "/", label: "Dashboard", icon: Home },
   { href: "/Transcripts", label: "Upload", icon: UploadCloud },
   { href: "/Transcripts/List", label: "Transcripts", icon: FileText },
@@ -21,7 +21,11 @@ const navItems = [
   { href: "/Search", label: "Search", icon: Search },
 ];
 
-function NavLink({ href, label, icon: Icon, onClick }: (typeof navItems)[number] & { onClick?: () => void }) {
+const adminNavItems = [
+  { href: "/Admin/Users", label: "Users", icon: Users },
+];
+
+function NavLink({ href, label, icon: Icon, onClick }: (typeof mainNavItems)[number] & { onClick?: () => void }) {
   const pathname = usePathname();
   const active = href === "/" ? pathname === href : pathname.startsWith(href);
 
@@ -61,6 +65,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <LoadingState label="Checking session" />;
   }
 
+  if (auth.user && isAdminRoute(pathname) && auth.user.role !== "admin") {
+    return <ErrorState title="Forbidden" description="Administrator access required." />;
+  }
+
   async function handleSignOut() {
     await auth.logout();
     setMenuOpen(false);
@@ -78,8 +86,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="text-sm font-semibold tracking-wide">Transcript App</p>
           </div>
         </Link>
-        <nav className="space-y-1">
-          {navItems.map((item) => <NavLink key={item.href} {...item} />)}
+        <nav className="space-y-5">
+          <div className="space-y-1">
+            <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Main</p>
+            {mainNavItems.map((item) => <NavLink key={item.href} {...item} />)}
+          </div>
+          {auth.user?.role === "admin" && (
+            <div className="space-y-1">
+              <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Administration</p>
+              {adminNavItems.map((item) => <NavLink key={item.href} {...item} />)}
+            </div>
+          )}
         </nav>
       </aside>
 
@@ -128,8 +145,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <nav className="space-y-1">
-              {navItems.map((item) => <NavLink key={item.href} {...item} onClick={() => setMobileOpen(false)} />)}
+            <nav className="space-y-5">
+              <div className="space-y-1">
+                <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Main</p>
+                {mainNavItems.map((item) => <NavLink key={item.href} {...item} onClick={() => setMobileOpen(false)} />)}
+              </div>
+              {auth.user?.role === "admin" && (
+                <div className="space-y-1">
+                  <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Administration</p>
+                  {adminNavItems.map((item) => <NavLink key={item.href} {...item} onClick={() => setMobileOpen(false)} />)}
+                </div>
+              )}
             </nav>
             {auth.user && (
               <div className="mt-6 border-t pt-4">

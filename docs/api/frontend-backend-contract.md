@@ -17,6 +17,13 @@ JSON style: camelCase for frontend-facing request and response bodies.
 | POST | `/api/auth/login` | Create a server-managed session cookie from valid credentials. |
 | POST | `/api/auth/logout` | Revoke the current session and clear the session cookie. |
 | GET | `/api/auth/me` | Return the current authenticated user. |
+| GET | `/api/admin/users` | Admin-only user list with pagination and filters. |
+| POST | `/api/admin/users` | Admin-only user creation. |
+| GET | `/api/admin/users/{userId}` | Admin-only user detail. |
+| PATCH | `/api/admin/users/{userId}` | Admin-only name/role update. |
+| POST | `/api/admin/users/{userId}/activate` | Admin-only account activation. |
+| POST | `/api/admin/users/{userId}/deactivate` | Admin-only account deactivation and session revocation. |
+| POST | `/api/admin/users/{userId}/reset-password` | Admin-only password reset and session revocation. |
 | POST | `/api/uploads` | Upload media using the existing upload flow and return a frontend-friendly job envelope. |
 | GET | `/api/transcripts` | List parent transcript jobs with pagination/filtering. |
 | GET | `/api/search/transcripts` | Literal transcript segment text search with parent context. |
@@ -58,7 +65,7 @@ Sessions use an opaque server-generated token. The browser receives only an Http
 
 CORS is credentialed and must use an explicit origin. The local default is `FRONTEND_ORIGIN=http://localhost:3000`; wildcard origins are not valid with credentials.
 
-Roles currently supported: `user` and `admin`. Existing workflow endpoints are accessible to both roles; admin-only workflow is deferred.
+Roles currently supported: `user` and `admin`. Existing transcript workflow endpoints are accessible to both roles. `/api/admin/*` routes require an authenticated `admin` user in the Go backend.
 
 ### AuthUser
 
@@ -313,6 +320,140 @@ Success: `200 OK`
 ```
 
 Unauthenticated response: `401 UNAUTHENTICATED`.
+
+## Admin User DTOs
+
+### AdminUserSummary
+
+```json
+{
+  "id": "22222222-2222-2222-2222-222222222222",
+  "name": "Analyst Name",
+  "email": "analyst@example.com",
+  "role": "user",
+  "isActive": true,
+  "createdAt": "2026-07-15T00:00:00Z",
+  "updatedAt": "2026-07-15T00:00:00Z",
+  "lastLoginAt": null
+}
+```
+
+`AdminUserDetail` currently contains the same fields as `AdminUserSummary`. Admin user DTOs never include password hashes, passwords, session tokens, or session token hashes.
+
+## GET /api/admin/users
+
+Authentication: required, role `admin`.
+
+Query parameters:
+
+| Query | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | `1` | Invalid or less-than-one values normalize to `1`. |
+| `pageSize` | integer | `20` | Maximum `100`. |
+| `search` | string | empty | Matches `name` and `email`. |
+| `role` | string | empty/all | `user` or `admin`. |
+| `status` | string | empty/all | `active` or `inactive`. |
+
+Success: `200 OK`
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 0,
+    "totalPages": 0,
+    "hasNextPage": false
+  }
+}
+```
+
+Ordering is deterministic: newest `createdAt` first, then stable `id` fallback.
+
+## POST /api/admin/users
+
+Authentication: required, role `admin`.
+
+Request:
+
+```json
+{
+  "name": "Analyst Name",
+  "email": "analyst@example.com",
+  "role": "user",
+  "password": "temporary password"
+}
+```
+
+Success: `201 Created`
+
+Returns `{ "user": AdminUserDetail }`. New users are active by default. Email is normalized and unique. Passwords use the existing Argon2id hashing policy and are never returned.
+
+Common errors: `INVALID_USER_INPUT`, `EMAIL_ALREADY_EXISTS`, `INVALID_ROLE`, `WEAK_PASSWORD`.
+
+## GET /api/admin/users/{userId}
+
+Authentication: required, role `admin`.
+
+Success: `200 OK`
+
+Returns `{ "user": AdminUserDetail }`. Missing or invalid IDs return `USER_NOT_FOUND`.
+
+## PATCH /api/admin/users/{userId}
+
+Authentication: required, role `admin`.
+
+Request fields are limited to `name` and `role`; unknown fields are rejected. Email, activation, and password cannot be changed through this endpoint.
+
+```json
+{
+  "name": "Updated Name",
+  "role": "admin"
+}
+```
+
+Success: `200 OK`
+
+Returns `{ "user": AdminUserDetail }` with `updatedAt` changed. Backend safeguards reject demoting the last active administrator with `LAST_ACTIVE_ADMIN`.
+
+## POST /api/admin/users/{userId}/activate
+
+Authentication: required, role `admin`.
+
+Sets `isActive=true`, updates `updatedAt`, and returns `{ "user": AdminUserDetail }`.
+
+## POST /api/admin/users/{userId}/deactivate
+
+Authentication: required, role `admin`.
+
+Sets `isActive=false`, updates `updatedAt`, revokes all active sessions for the target user, and returns `{ "user": AdminUserDetail }`.
+
+Safeguards: administrators cannot deactivate their own current account, and the last active administrator cannot be deactivated. Deactivated users cannot authenticate and existing sessions stop working immediately.
+
+Common errors: `CANNOT_DEACTIVATE_SELF`, `LAST_ACTIVE_ADMIN`, `USER_NOT_FOUND`.
+
+## POST /api/admin/users/{userId}/reset-password
+
+Authentication: required, role `admin`.
+
+Request:
+
+```json
+{
+  "newPassword": "new temporary password"
+}
+```
+
+Success: `200 OK`
+
+```json
+{
+  "message": "Password updated"
+}
+```
+
+The password is hashed with the existing Argon2id implementation and all active sessions for the target user are revoked. Self-reset is allowed and revokes the current session, requiring sign-in again.
 
 ## POST /api/uploads
 

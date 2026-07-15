@@ -30,6 +30,44 @@ type AuthMessageResponse struct {
 	Message string `json:"message"`
 }
 
+type AdminUserSummary struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Email       string  `json:"email"`
+	Role        string  `json:"role"`
+	IsActive    bool    `json:"isActive"`
+	CreatedAt   string  `json:"createdAt"`
+	UpdatedAt   string  `json:"updatedAt"`
+	LastLoginAt *string `json:"lastLoginAt"`
+}
+
+type AdminUserDetail = AdminUserSummary
+
+type AdminUserListResponse struct {
+	Items      []AdminUserSummary `json:"items"`
+	Pagination Pagination         `json:"pagination"`
+}
+
+type AdminUserResponse struct {
+	User AdminUserDetail `json:"user"`
+}
+
+type AdminCreateUserRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+	Password string `json:"password"`
+}
+
+type AdminUpdateUserRequest struct {
+	Name *string `json:"name"`
+	Role *string `json:"role"`
+}
+
+type AdminResetPasswordRequest struct {
+	NewPassword string `json:"newPassword"`
+}
+
 type Pagination struct {
 	Page        int  `json:"page"`
 	PageSize    int  `json:"pageSize"`
