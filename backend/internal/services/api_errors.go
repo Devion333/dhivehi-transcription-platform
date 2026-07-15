@@ -26,6 +26,12 @@ const (
 	ErrCodeAuditNotFound        = "AUDIT_EVENT_NOT_FOUND"
 	ErrCodeInvalidAuditFilter   = "INVALID_AUDIT_FILTER"
 	ErrCodeInvalidAuditEvent    = "INVALID_AUDIT_EVENT"
+	ErrCodeJobNotFound          = "JOB_NOT_FOUND"
+	ErrCodeJobNotFailed         = "JOB_NOT_FAILED"
+	ErrCodeJobNotRetryable      = "JOB_NOT_RETRYABLE"
+	ErrCodeJobAlreadyQueued     = "JOB_ALREADY_QUEUED"
+	ErrCodeJobRetryLimitReached = "JOB_RETRY_LIMIT_REACHED"
+	ErrCodeJobQueueUnavailable  = "JOB_QUEUE_UNAVAILABLE"
 )
 
 var (

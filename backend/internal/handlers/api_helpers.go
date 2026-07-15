@@ -52,6 +52,18 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit filter is invalid", nil)
 		case services.ErrCodeInvalidAuditEvent:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit event is invalid", nil)
+		case services.ErrCodeJobNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Job was not found", nil)
+		case services.ErrCodeJobNotFailed:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job is not failed", nil)
+		case services.ErrCodeJobNotRetryable:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job cannot be retried", nil)
+		case services.ErrCodeJobAlreadyQueued:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job is already queued or processing", nil)
+		case services.ErrCodeJobRetryLimitReached:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job retry limit has been reached", nil)
+		case services.ErrCodeJobQueueUnavailable:
+			writeAPIError(c, http.StatusServiceUnavailable, serviceErr.Code, "Job queue is unavailable", nil)
 		case services.ErrCodeUpstream:
 			log.Printf("upstream service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "A backend dependency failed", nil)

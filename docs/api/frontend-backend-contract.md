@@ -26,6 +26,10 @@ JSON style: camelCase for frontend-facing request and response bodies.
 | POST | `/api/admin/users/{userId}/reset-password` | Admin-only password reset and session revocation. |
 | GET | `/api/admin/audit` | Admin-only audit event list with filters and pagination. |
 | GET | `/api/admin/audit/{eventId}` | Admin-only audit event detail. |
+| GET | `/api/admin/jobs` | Admin-only system job list with filters and pagination. |
+| GET | `/api/admin/jobs/{jobId}` | Admin-only job detail with pipeline and queue state. |
+| POST | `/api/admin/jobs/{jobId}/retry` | Admin-only controlled retry for supported failed stages. |
+| GET | `/api/admin/jobs/health` | Admin-only safe dependency and queue health summary. |
 | POST | `/api/audit/pdf-export` | Authenticated controlled PDF export audit recording endpoint. |
 | POST | `/api/uploads` | Upload media using the existing upload flow and return a frontend-friendly job envelope. |
 | GET | `/api/transcripts` | List parent transcript jobs with pagination/filtering. |
@@ -499,6 +503,8 @@ Adds:
 
 Metadata is action-specific and allowlisted. Passwords, session tokens, cookies, authorization headers, transcript text, search queries, analysis text, provider responses, API keys, database connection strings, Qdrant payloads, and MinIO credentials must not be present.
 
+Job-management audit category: `job_management`. Actions: `admin.job_retry_requested`, `admin.job_retry_succeeded`, `admin.job_retry_failed`. Metadata is limited to `jobId`, `stage`, `previousStatus`, `newStatus`, `retryCount`, and `failureCode`.
+
 ## GET /api/admin/audit
 
 Authentication: required, role `admin`.
@@ -547,6 +553,120 @@ Success: `200 OK`
 Returns `{ "event": AuditEventDetail }`. Missing or invalid IDs return `AUDIT_EVENT_NOT_FOUND`.
 
 Audit retention is handled only by explicit backend maintenance command execution, not by this API surface.
+
+## Admin Job DTOs
+
+### AdminJobSummary
+
+```json
+{
+  "jobId": "7b7d4b3e-0000-0000-0000-000000000000",
+  "filename": "recording.wav",
+  "referenceNumber": "REF-001",
+  "category": "meeting",
+  "status": "transcription_failed",
+  "currentStage": "transcription",
+  "segmentCount": 4,
+  "analysisStatus": "not_started",
+  "createdAt": "2026-07-15T00:00:00Z",
+  "updatedAt": "2026-07-15T00:10:00Z",
+  "failureCode": "TRANSCRIPTION_FAILED",
+  "failureMessage": "model transcription failed",
+  "retryable": true
+}
+```
+
+### AdminJobDetail
+
+Adds safe operational fields:
+
+```json
+{
+  "notes": "Initial upload note",
+  "requestedSpeakers": 2,
+  "mediaAvailable": true,
+  "retryCount": 1,
+  "queueState": { "queued": false, "processing": false, "failed": true },
+  "pipelineStages": [
+    { "name": "conversion", "status": "complete", "startedAt": "", "completedAt": "", "retryCount": 0, "failureMessage": "" },
+    { "name": "diarization", "status": "complete", "startedAt": "", "completedAt": "2026-07-15T00:05:00Z", "retryCount": 0, "failureMessage": "" },
+    { "name": "transcription", "status": "failed", "startedAt": "", "completedAt": "", "retryCount": 0, "failureMessage": "model transcription failed" }
+  ]
+}
+```
+
+Admin job DTOs never return raw Redis payloads, worker URLs, MinIO credentials, Qdrant numeric IDs, stack traces, provider responses, model tokens, or transcript text.
+
+## GET /api/admin/jobs
+
+Authentication: required, role `admin`.
+
+Query parameters:
+
+| Query | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | `1` | Invalid or less-than-one values normalize to `1`. |
+| `pageSize` | integer | `20` | Maximum `100`. |
+| `search` | string | empty | Matches filename, reference number, category, and job ID. |
+| `status` | string | empty/all | Canonical job status, including stage-specific failures. |
+| `stage` | string | empty/all | `conversion`, `diarization`, `transcription`, or `analysis`. |
+| `failedOnly` | boolean | `false` | Limits to failed canonical statuses. |
+| `dateFrom` | RFC3339 | empty | Inclusive created-at lower bound. |
+| `dateTo` | RFC3339 | empty | Inclusive created-at upper bound. |
+
+Ordering is `updatedAt DESC`, `createdAt DESC`, then `jobId` fallback.
+
+## GET /api/admin/jobs/{jobId}
+
+Authentication: required, role `admin`.
+
+Success returns `{ "job": AdminJobDetail }`. Missing parents return `404 JOB_NOT_FOUND`. GET requests do not mutate job or queue state.
+
+## POST /api/admin/jobs/{jobId}/retry
+
+Authentication: required, role `admin`.
+
+Optional request:
+
+```json
+{ "stage": "transcription" }
+```
+
+If omitted, the backend derives the stage from current failed state. The browser cannot supply queue names or payloads.
+
+Retryable stages: `conversion_failed`, `diarization_failed`, failed transcription segments or `transcription_failed`, and `analysis_failed`/analysis status `failed`.
+
+Conflict errors include `JOB_NOT_FAILED`, `JOB_NOT_RETRYABLE`, `JOB_ALREADY_QUEUED`, `JOB_RETRY_LIMIT_REACHED`, and `JOB_QUEUE_UNAVAILABLE`.
+
+Conversion, diarization, and transcription retry enqueue reconstructed existing worker payloads through focused backend code. Analysis retry calls the existing synchronous analysis flow and does not publish to Redis.
+
+## GET /api/admin/jobs/health
+
+Authentication: required, role `admin`.
+
+Returns safe dependency and queue counts:
+
+```json
+{
+  "backend": "healthy",
+  "redis": "healthy",
+  "qdrant": "healthy",
+  "minio": "healthy",
+  "queues": {
+    "conversion": { "queued": 0, "processing": 0, "failed": 0 },
+    "diarization": { "queued": 0, "processing": 0, "failed": 0 },
+    "transcription": { "queued": 0, "processing": 0, "failed": 0 }
+  },
+  "workers": {
+    "conversion": "unknown",
+    "diarization": "unknown",
+    "transcription": "unknown",
+    "analysis": "unknown"
+  }
+}
+```
+
+Worker state remains `unknown` unless a reliable worker signal exists. Internal service URLs are not returned.
 
 ## POST /api/audit/pdf-export
 

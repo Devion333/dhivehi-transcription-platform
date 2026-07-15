@@ -73,6 +73,10 @@ func main() {
 			admin.POST("/users/:userId/reset-password", handlers.APIAdminResetUserPassword)
 			admin.GET("/audit", handlers.APIAdminListAuditEvents)
 			admin.GET("/audit/:eventId", handlers.APIAdminGetAuditEvent)
+			admin.GET("/jobs", handlers.APIAdminListJobs)
+			admin.GET("/jobs/health", handlers.APIAdminJobHealth)
+			admin.GET("/jobs/:jobId", handlers.APIAdminGetJob)
+			admin.POST("/jobs/:jobId/retry", handlers.APIAdminRetryJob)
 		}
 	}
 

@@ -100,6 +100,9 @@ var actionCategories = map[string]string{
 	"search.executed":            "search",
 	"export.pdf_generated":       "export",
 	"export.pdf_failed":          "export",
+	"admin.job_retry_requested":  "job_management",
+	"admin.job_retry_succeeded":  "job_management",
+	"admin.job_retry_failed":     "job_management",
 }
 
 var auditMetadataAllowlist = map[string]map[string]struct{}{
@@ -118,6 +121,9 @@ var auditMetadataAllowlist = map[string]map[string]struct{}{
 	"search.executed":            keys("queryLength", "page", "pageSize", "statusFilter", "categoryFilter", "resultCount"),
 	"export.pdf_generated":       keys("jobId", "format", "includeAnalysis"),
 	"export.pdf_failed":          keys("jobId", "format", "includeAnalysis"),
+	"admin.job_retry_requested":  keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
+	"admin.job_retry_succeeded":  keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
+	"admin.job_retry_failed":     keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
 }
 
 func keys(values ...string) map[string]struct{} {

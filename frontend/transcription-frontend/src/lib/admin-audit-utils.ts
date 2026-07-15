@@ -1,7 +1,7 @@
 import type { AuditCategory, AuditOutcome } from "@/lib/api/types";
 
 export const auditPageSize = 50;
-export const auditCategories = ["all", "authentication", "user_management", "transcript", "analysis", "search", "export"] as const;
+export const auditCategories = ["all", "authentication", "user_management", "job_management", "transcript", "analysis", "search", "export"] as const;
 export const auditOutcomes = ["all", "success", "failure"] as const;
 
 export type AuditCategoryFilter = (typeof auditCategories)[number];
@@ -16,6 +16,9 @@ const actionLabels: Record<string, string> = {
   "admin.user_activated": "User activated",
   "admin.user_deactivated": "User deactivated",
   "admin.password_reset": "Password reset",
+  "admin.job_retry_requested": "Job retry requested",
+  "admin.job_retry_succeeded": "Job retry queued",
+  "admin.job_retry_failed": "Job retry failed",
   "transcript.uploaded": "Transcript uploaded",
   "transcript.viewed": "Transcript viewed",
   "transcript.segment_updated": "Transcript edited",

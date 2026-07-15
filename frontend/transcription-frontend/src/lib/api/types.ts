@@ -15,6 +15,8 @@ export type TranscriptStatus =
 
 export type AnalysisStatus = "not_started" | "processing" | "analysis_pending" | "complete" | "analysis_complete" | "completed" | "failed";
 
+export type AdminJobStage = "conversion" | "diarization" | "transcription" | "analysis" | "complete" | string;
+
 export interface ApiErrorBody {
   error?: {
     code?: string;
@@ -92,7 +94,7 @@ export interface ResetAdminUserPasswordInput {
 }
 
 export type AuditOutcome = "success" | "failure";
-export type AuditCategory = "authentication" | "user_management" | "transcript" | "analysis" | "search" | "export";
+export type AuditCategory = "authentication" | "user_management" | "job_management" | "transcript" | "analysis" | "search" | "export";
 
 export interface AuditActor {
   id: string;
@@ -137,6 +139,89 @@ export interface AuditListParams {
   resourceType?: string;
   dateFrom?: string;
   dateTo?: string;
+}
+
+export interface AdminJobSummary {
+  jobId: string;
+  filename: string;
+  referenceNumber: string;
+  category: string;
+  status: string;
+  currentStage: AdminJobStage;
+  segmentCount: number;
+  analysisStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  failureCode: string;
+  failureMessage: string;
+  retryable: boolean;
+}
+
+export interface PipelineStage {
+  name: string;
+  status: string;
+  startedAt: string;
+  completedAt: string;
+  retryCount: number;
+  failureMessage: string;
+}
+
+export interface JobQueueState {
+  queued: boolean;
+  processing: boolean;
+  failed: boolean;
+}
+
+export interface AdminJobDetail extends AdminJobSummary {
+  notes: string;
+  requestedSpeakers: number;
+  mediaAvailable: boolean;
+  pipelineStages: PipelineStage[];
+  queueState: JobQueueState;
+  retryCount: number;
+}
+
+export interface AdminJobListResponse {
+  items: AdminJobSummary[];
+  pagination: Pagination;
+}
+
+export interface AdminJobResponse {
+  job: AdminJobDetail;
+}
+
+export interface AdminJobRetryResponse {
+  job: AdminJobSummary;
+}
+
+export interface AdminJobListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  stage?: string;
+  failedOnly?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface AdminJobRetryInput {
+  stage?: string;
+}
+
+export interface QueueCounts {
+  queued: number;
+  processing: number;
+  failed: number;
+}
+
+export interface AdminJobHealthResponse {
+  backend: string;
+  redis: string;
+  qdrant: string;
+  minio: string;
+  queues: Record<string, QueueCounts>;
+  workers: Record<string, string>;
 }
 
 export interface StatsResponse {

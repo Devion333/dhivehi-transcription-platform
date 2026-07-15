@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, FileAudio, FileText, History, Home, LogOut, Menu, Search, UploadCloud, UserCircle, Users, X } from "lucide-react";
+import { BarChart3, BriefcaseBusiness, FileAudio, FileText, History, Home, LogOut, Menu, Search, UploadCloud, UserCircle, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -24,6 +24,7 @@ const mainNavItems = [
 const adminNavItems = [
   { href: "/Admin/Users", label: "Users", icon: Users },
   { href: "/Admin/Audit", label: "Audit", icon: History },
+  { href: "/Admin/Jobs", label: "Jobs", icon: BriefcaseBusiness },
 ];
 
 function NavLink({ href, label, icon: Icon, onClick }: (typeof mainNavItems)[number] & { onClick?: () => void }) {
