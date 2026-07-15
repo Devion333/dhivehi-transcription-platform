@@ -9,6 +9,11 @@ const (
 	ErrCodeSegmentConflict     = "SEGMENT_PARENT_MISMATCH"
 	ErrCodeUpstream            = "UPSTREAM_UNAVAILABLE"
 	ErrCodeInternal            = "INTERNAL_ERROR"
+	ErrCodeUnauthenticated     = "UNAUTHENTICATED"
+	ErrCodeForbidden           = "FORBIDDEN"
+	ErrCodeInvalidCredentials  = "INVALID_CREDENTIALS"
+	ErrCodeInactiveUser        = "INACTIVE_USER"
+	ErrCodeRateLimited         = "RATE_LIMITED"
 	ErrCodeSearchQueryRequired = "SEARCH_QUERY_REQUIRED"
 	ErrCodeSearchUnavailable   = "SEARCH_UNAVAILABLE"
 )

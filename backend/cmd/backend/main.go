@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"os"
+	"strings"
 	"transcript_app/backend/internal/handlers"
 	"transcript_app/backend/internal/services"
 
@@ -16,9 +18,14 @@ func main() {
 
 	r := gin.Default()
 
-	// Enable CORS for frontend
+	// Enable credentialed CORS for the configured frontend origin.
 	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		if isAllowedOrigin(origin) {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept")
 		if c.Request.Method == "OPTIONS" {
@@ -28,26 +35,50 @@ func main() {
 		c.Next()
 	})
 
-	r.POST("/upload", handlers.UploadFile)
-	r.POST("/transcripts/:job_id/analyse", handlers.AnalyseTranscript)
-	r.GET("/transcripts", handlers.LegacyListTranscripts)
-	r.GET("/transcripts/stats", handlers.LegacyTranscriptStats)
+	r.POST("/upload", handlers.RequireAuth(), handlers.UploadFile)
+	r.POST("/transcripts/:job_id/analyse", handlers.RequireAuth(), handlers.AnalyseTranscript)
+	r.GET("/transcripts", handlers.RequireAuth(), handlers.LegacyListTranscripts)
+	r.GET("/transcripts/stats", handlers.RequireAuth(), handlers.LegacyTranscriptStats)
 
 	api := r.Group("/api")
 	{
-		api.POST("/uploads", handlers.APIUploadFile)
+		api.POST("/auth/login", handlers.APILogin)
+		api.POST("/auth/logout", handlers.RequireAuth(), handlers.APILogout)
+		api.GET("/auth/me", handlers.RequireAuth(), handlers.APIMe)
 		api.GET("/health", handlers.APIHealth)
-		api.GET("/stats", handlers.APIStats)
-		api.GET("/search/transcripts", handlers.APISearchTranscripts)
-		api.GET("/transcripts", handlers.APIListTranscripts)
-		api.GET("/transcripts/:jobId", handlers.APIGetTranscript)
-		api.PATCH("/transcripts/:jobId/segments/:segmentId", handlers.APIUpdateSegment)
-		api.GET("/transcripts/:jobId/analysis", handlers.APIGetAnalysis)
-		api.POST("/transcripts/:jobId/analyse", handlers.APIAnalyseTranscript)
+
+		protected := api.Group("")
+		protected.Use(handlers.RequireAuth())
+		{
+			protected.POST("/uploads", handlers.APIUploadFile)
+			protected.GET("/stats", handlers.APIStats)
+			protected.GET("/search/transcripts", handlers.APISearchTranscripts)
+			protected.GET("/transcripts", handlers.APIListTranscripts)
+			protected.GET("/transcripts/:jobId", handlers.APIGetTranscript)
+			protected.PATCH("/transcripts/:jobId/segments/:segmentId", handlers.APIUpdateSegment)
+			protected.GET("/transcripts/:jobId/analysis", handlers.APIGetAnalysis)
+			protected.POST("/transcripts/:jobId/analyse", handlers.APIAnalyseTranscript)
+		}
 	}
 
 	log.Println("🚀 Backend server starting on :8000")
 	if err := r.Run(":8000"); err != nil {
 		log.Fatalf("❌ Failed to start server: %v", err)
 	}
+}
+
+func isAllowedOrigin(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	allowed := strings.Split(os.Getenv("FRONTEND_ORIGIN"), ",")
+	if len(allowed) == 1 && strings.TrimSpace(allowed[0]) == "" {
+		allowed = []string{"http://localhost:3000"}
+	}
+	for _, item := range allowed {
+		if strings.TrimSpace(item) == origin {
+			return true
+		}
+	}
+	return false
 }

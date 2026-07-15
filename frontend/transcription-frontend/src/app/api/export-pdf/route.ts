@@ -6,6 +6,7 @@ import puppeteer, { type Browser, type Page } from "puppeteer";
 
 import type { PdfExportPayload, PdfExportSegment } from "@/lib/pdf-export-types";
 import { escapeHtml, formatPdfTimestamp, groupSegmentsBySpeaker, hasUsableAnalysis, pdfDownloadFilename, sortPdfSegments } from "@/lib/pdf-export-utils";
+import { BACKEND_URL } from "@/config";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
   let page: Page | null = null;
 
   try {
+    await requireAuthenticated(request);
     const payload = await readAndValidatePayload(request);
     browser = await puppeteer.launch({
       headless: "shell",
@@ -61,6 +63,18 @@ export async function POST(request: NextRequest) {
     await page?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
+}
+
+async function requireAuthenticated(request: NextRequest) {
+  const cookie = request.headers.get("cookie") ?? "";
+  if (!cookie) throw routeError(401, "UNAUTHENTICATED", "Authentication is required");
+  const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+    method: "GET",
+    headers: { Cookie: cookie, Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (response.status === 401) throw routeError(401, "UNAUTHENTICATED", "Authentication is required");
+  if (!response.ok) throw routeError(500, "AUTH_CHECK_FAILED", "Authentication check failed");
 }
 
 async function readAndValidatePayload(request: NextRequest): Promise<PdfExportPayload> {

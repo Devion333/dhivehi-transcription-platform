@@ -10,6 +10,26 @@ type APIError struct {
 	Details interface{} `json:"details"`
 }
 
+type AuthUser struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type AuthUserResponse struct {
+	User AuthUser `json:"user"`
+}
+
+type AuthMessageResponse struct {
+	Message string `json:"message"`
+}
+
 type Pagination struct {
 	Page        int  `json:"page"`
 	PageSize    int  `json:"pageSize"`

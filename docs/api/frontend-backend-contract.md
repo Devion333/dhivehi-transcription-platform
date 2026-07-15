@@ -2,9 +2,9 @@
 
 Date: 2026-07-15
 
-Status: implemented for backend read/update/upload/analysis/search support. Implemented in this stage: `POST /api/uploads`, `GET /api/health`, `GET /api/stats`, `GET /api/transcripts`, `GET /api/search/transcripts`, `GET /api/transcripts/{jobId}`, `PATCH /api/transcripts/{jobId}/segments/{segmentId}`, `GET /api/transcripts/{jobId}/analysis`, and `POST /api/transcripts/{jobId}/analyse`.
+Status: implemented for backend auth, read/update/upload/analysis/search support. Implemented endpoints include auth (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`), `POST /api/uploads`, `GET /api/health`, `GET /api/stats`, `GET /api/transcripts`, `GET /api/search/transcripts`, `GET /api/transcripts/{jobId}`, `PATCH /api/transcripts/{jobId}/segments/{segmentId}`, `GET /api/transcripts/{jobId}/analysis`, and `POST /api/transcripts/{jobId}/analyse`.
 
-Current legacy routes preserved: `POST /upload` and `POST /transcripts/:job_id/analyse`.
+Current legacy routes preserved and protected by the same authentication middleware: `POST /upload`, `GET /transcripts`, `GET /transcripts/stats`, and `POST /transcripts/:job_id/analyse`.
 
 Base URL: `/api`
 
@@ -14,6 +14,9 @@ JSON style: camelCase for frontend-facing request and response bodies.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| POST | `/api/auth/login` | Create a server-managed session cookie from valid credentials. |
+| POST | `/api/auth/logout` | Revoke the current session and clear the session cookie. |
+| GET | `/api/auth/me` | Return the current authenticated user. |
 | POST | `/api/uploads` | Upload media using the existing upload flow and return a frontend-friendly job envelope. |
 | GET | `/api/transcripts` | List parent transcript jobs with pagination/filtering. |
 | GET | `/api/search/transcripts` | Literal transcript segment text search with parent context. |
@@ -37,6 +40,38 @@ JSON style: camelCase for frontend-facing request and response bodies.
 ```
 
 Common error codes: `bad_request`, `not_found`, `conflict`, `validation_error`, `upstream_unavailable`, `internal_error`.
+
+Auth error codes are uppercase in the implemented auth handlers: `UNAUTHENTICATED`, `FORBIDDEN`, `RATE_LIMITED`. Unauthenticated protected requests return `401`; role failures return `403`.
+
+## Authentication
+
+Public backend endpoints:
+
+| Method | Path |
+| --- | --- |
+| GET | `/api/health` |
+| POST | `/api/auth/login` |
+
+All other Go backend workflow endpoints require authentication, including transcript, search, stats, upload, analysis, and preserved legacy routes.
+
+Sessions use an opaque server-generated token. The browser receives only an HttpOnly cookie named `transcript_session` by default. The backend stores only the SHA-256 hash of the token in PostgreSQL. Session cookies use `Path=/`, `SameSite=Lax`, `HttpOnly=true`, and `Secure=false` locally unless `SESSION_SECURE=true`.
+
+CORS is credentialed and must use an explicit origin. The local default is `FRONTEND_ORIGIN=http://localhost:3000`; wildcard origins are not valid with credentials.
+
+Roles currently supported: `user` and `admin`. Existing workflow endpoints are accessible to both roles; admin-only workflow is deferred.
+
+### AuthUser
+
+```json
+{
+  "id": "9bd45010-9d75-48eb-b46d-05839d636d6f",
+  "name": "Runtime Validation Admin",
+  "email": "admin.local@example.com",
+  "role": "admin"
+}
+```
+
+Password hashes and session tokens are never returned in DTOs.
 
 ## Pagination Format
 
@@ -212,9 +247,78 @@ Analysis statuses:
 }
 ```
 
+## POST /api/auth/login
+
+Request:
+
+```json
+{
+  "email": "admin.local@example.com",
+  "password": "correct horse battery staple"
+}
+```
+
+Success: `200 OK`
+
+The response sets the `transcript_session` HttpOnly cookie and returns the safe user DTO.
+
+```json
+{
+  "user": {
+    "id": "9bd45010-9d75-48eb-b46d-05839d636d6f",
+    "name": "Runtime Validation Admin",
+    "email": "admin.local@example.com",
+    "role": "admin"
+  }
+}
+```
+
+Errors:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `400` | `BAD_REQUEST` | Request body is not valid JSON. |
+| `401` | `UNAUTHENTICATED` | Invalid email/password or inactive user. |
+| `429` | `RATE_LIMITED` | Too many attempts for the same IP/email window. |
+
+## POST /api/auth/logout
+
+Authentication: required.
+
+Success: `200 OK`
+
+The backend revokes the stored session row and clears the session cookie.
+
+```json
+{
+  "message": "Signed out"
+}
+```
+
+## GET /api/auth/me
+
+Authentication: required.
+
+Success: `200 OK`
+
+```json
+{
+  "user": {
+    "id": "9bd45010-9d75-48eb-b46d-05839d636d6f",
+    "name": "Runtime Validation Admin",
+    "email": "admin.local@example.com",
+    "role": "admin"
+  }
+}
+```
+
+Unauthenticated response: `401 UNAUTHENTICATED`.
+
 ## POST /api/uploads
 
 Implementation status: implemented as a compatibility alias that reuses the existing upload flow. The existing `POST /upload` route is preserved for legacy compatibility.
+
+Authentication: required.
 
 Request: `multipart/form-data`
 
@@ -258,6 +362,8 @@ Rules:
 | Secrets | Do not return MinIO credentials or local temp paths. |
 
 ## GET /api/transcripts
+
+Authentication: required.
 
 Query parameters:
 
@@ -307,6 +413,8 @@ Rules:
 
 ## GET /api/transcripts/{jobId}
 
+Authentication: required.
+
 Success: `200 OK`
 
 Returns `TranscriptDetail`.
@@ -321,6 +429,8 @@ Rules:
 | Qdrant internals | Do not return vectors or numeric point IDs. |
 
 ## GET /api/search/transcripts
+
+Authentication: required.
 
 Query parameters:
 
@@ -356,6 +466,8 @@ Rules:
 | Index | Backend startup attempts to ensure a Qdrant text payload index on `transcript_text`; current search does not depend on the index for correctness. |
 
 ## PATCH /api/transcripts/{jobId}/segments/{segmentId}
+
+Authentication: required.
 
 Request:
 
@@ -394,6 +506,8 @@ Update rules:
 
 ## POST /api/transcripts/{jobId}/analyse
 
+Authentication: required.
+
 Implementation status: implemented as an API alias that reuses the existing analysis flow. The existing `POST /transcripts/:job_id/analyse` route is preserved for legacy compatibility.
 
 Request: no body initially.
@@ -431,6 +545,8 @@ Rules:
 | Upstream | Current compatibility behavior uses the existing analysis service URL `http://analysis:7861/run/predict`. A later hardening stage should make this configurable and timeout-protected. |
 
 ## GET /api/transcripts/{jobId}/analysis
+
+Authentication: required.
 
 Success with stored analysis: `200 OK`
 
@@ -472,6 +588,8 @@ Rule: this endpoint must never call the analysis worker.
 
 ## GET /api/stats
 
+Authentication: required.
+
 Success: `200 OK`
 
 ```json
@@ -504,7 +622,8 @@ Success: `200 OK`
   "dependencies": {
     "qdrant": "ok",
     "redis": "ok",
-    "minio": "ok"
+    "minio": "ok",
+    "database": "ok"
   }
 }
 ```
@@ -565,7 +684,7 @@ This keeps stored internal URLs such as `http://minio:9000/uploads/...` in Qdran
 
 Route: `POST /api/export-pdf` in the Next.js frontend app.
 
-This is not a Go backend endpoint. The frontend gathers transcript and stored analysis through the typed backend API first, then posts a structured export payload to the Next.js route. The route must not call Qdrant, MinIO, Redis, workers, or the analysis service.
+This is not a Go backend endpoint. The frontend gathers transcript and stored analysis through the typed backend API first, then posts a structured export payload to the Next.js route. The route validates authentication by forwarding the incoming cookie to Go backend `GET /api/auth/me`. The route must not call Qdrant, MinIO, Redis, workers, or the analysis service.
 
 ```json
 {
@@ -611,4 +730,5 @@ Validation rules:
 | Format | Must be `segmented` or `paragraph`. |
 | Segments | Each segment must include `id`, numeric `segmentIndex`, numeric timestamps, and string `transcriptText`. |
 | Analysis | If `includeAnalysis=true`, supplied analysis must have `status=complete` and at least one usable analysis field. |
+| Authentication | Missing or invalid session returns `401 UNAUTHENTICATED` before PDF generation. |
 | Response | Success returns `200 application/pdf`; failures return `{ error: { code, message, details } }`. |

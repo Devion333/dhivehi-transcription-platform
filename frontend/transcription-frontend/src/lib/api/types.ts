@@ -23,6 +23,28 @@ export interface ApiErrorBody {
   };
 }
 
+export type AuthRole = "user" | "admin";
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: AuthRole;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  user: AuthUser;
+}
+
+export interface CurrentUserResponse {
+  user: AuthUser;
+}
+
 export interface StatsResponse {
   totalTranscripts: number;
   uploaded: number;

@@ -19,11 +19,16 @@ func APIHealth(c *gin.Context) {
 	defer cancel()
 
 	dependencies := map[string]string{
-		"qdrant": "ok",
-		"redis":  "ok",
-		"minio":  "ok",
+		"database": "ok",
+		"qdrant":   "ok",
+		"redis":    "ok",
+		"minio":    "ok",
 	}
 	ready := true
+	if err := services.CheckDatabaseReady(ctx); err != nil {
+		dependencies["database"] = "unavailable"
+		ready = false
+	}
 	if err := services.CheckQdrantReady(); err != nil {
 		dependencies["qdrant"] = "unavailable"
 		ready = false

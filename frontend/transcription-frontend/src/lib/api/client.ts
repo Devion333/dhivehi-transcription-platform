@@ -15,6 +15,7 @@ export class ApiError extends Error {
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BACKEND_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Accept": "application/json",
       ...init?.headers,

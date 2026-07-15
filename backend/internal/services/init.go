@@ -3,12 +3,15 @@ package services
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	redis "github.com/redis/go-redis/v9"
@@ -17,6 +20,7 @@ import (
 var (
 	MinioClient *minio.Client
 	RedisClient *redis.Client
+	Database    *sql.DB
 )
 
 // InitializeServices initializes MinIO, Qdrant, and Redis with auto-creation
@@ -41,7 +45,37 @@ func InitializeServices() error {
 		return fmt.Errorf("failed to initialize Redis: %v", err)
 	}
 
+	if err := initDatabase(ctx); err != nil {
+		return fmt.Errorf("failed to initialize database: %v", err)
+	}
+
 	log.Println("✅ All services initialized successfully")
+	return nil
+}
+
+func initDatabase(ctx context.Context) error {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		databaseURL = "postgres://transcript:transcript_dev_password@postgres:5432/transcript_app?sslmode=disable"
+	}
+	var err error
+	Database, err = sql.Open("pgx", databaseURL)
+	if err != nil {
+		return err
+	}
+	Database.SetMaxOpenConns(10)
+	Database.SetMaxIdleConns(5)
+	Database.SetConnMaxLifetime(30 * time.Minute)
+	if err := Database.PingContext(ctx); err != nil {
+		return err
+	}
+	if err := RunMigrations(ctx, Database); err != nil {
+		return err
+	}
+	if err := BootstrapInitialAdmin(ctx); err != nil {
+		return err
+	}
+	log.Println("✅ Database connection established")
 	return nil
 }
 
