@@ -32,6 +32,9 @@ func InitializeServices() error {
 	if err := initQdrant(); err != nil {
 		return fmt.Errorf("failed to initialize Qdrant: %v", err)
 	}
+	if err := EnsureTranscriptTextIndex(); err != nil {
+		log.Printf("⚠️ Warning: could not ensure transcript_text index: %v", err)
+	}
 
 	// Initialize Redis
 	if err := initRedis(ctx); err != nil {

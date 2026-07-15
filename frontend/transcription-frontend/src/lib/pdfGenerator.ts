@@ -1,37 +1,7 @@
-export interface PdfSegmentData {
-  speaker: string;
-  start_time: number;
-  end_time: number;
-  transcript_text: string;
-  segment_index: number;
-}
+import type { PdfExportPayload } from "./pdf-export-types";
+import { pdfDownloadFilename } from "./pdf-export-utils";
 
-export interface PdfParentData {
-  filename: string;
-  reference_number: string;
-  category: string;
-  status: string;
-  timestamp: string;
-}
-
-export interface PdfAnalysisData {
-  summary: string;
-  keywords: string[];
-  entities: {
-    persons: string[];
-    locations: string[];
-    organizations: string[];
-    events: string[];
-  };
-  classification: string;
-}
-
-export async function generateTranscriptPdf(data: {
-  parent: PdfParentData;
-  segments: PdfSegmentData[];
-  format: 'segmented' | 'paragraph';
-  analysisData?: PdfAnalysisData | null;
-}): Promise<void> {
+export async function generateTranscriptPdf(data: PdfExportPayload): Promise<void> {
   const response = await fetch('/api/export-pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -39,19 +9,28 @@ export async function generateTranscriptPdf(data: {
   });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'PDF generation failed' }));
-    throw new Error(err.error || `Server error: ${response.status}`);
+    const err = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new Error(err?.error?.message || `PDF generation failed with status ${response.status}`);
   }
 
+  const contentType = response.headers.get("Content-Type") ?? "";
+  if (!contentType.includes("application/pdf")) throw new Error("The export route did not return a PDF file.");
+
   const blob = await response.blob();
+  if (blob.size === 0) throw new Error("The generated PDF was empty.");
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.target = '_self';
-  const safeFilename = data.parent.filename.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 40);
-  a.download = `${safeFilename}_transcript.pdf`;
+  a.download = filenameFromContentDisposition(response.headers.get("Content-Disposition")) ?? pdfDownloadFilename(data.transcript);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function filenameFromContentDisposition(value: string | null) {
+  if (!value) return null;
+  const match = value.match(/filename="?([^";]+)"?/i);
+  return match?.[1] || null;
 }

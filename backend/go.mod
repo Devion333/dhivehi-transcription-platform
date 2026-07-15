@@ -1,6 +1,6 @@
 module transcript_app/backend
 
-go 1.23.0
+go 1.24
 
 toolchain go1.24.7
 
@@ -8,7 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
 	github.com/minio/minio-go/v7 v7.0.95
-	github.com/redis/go-redis/v9 v9.15.1
+	github.com/redis/go-redis/v9 v9.21.0
 )
 
 require (
@@ -43,6 +43,7 @@ require (
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/mock v0.5.0 // indirect
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect

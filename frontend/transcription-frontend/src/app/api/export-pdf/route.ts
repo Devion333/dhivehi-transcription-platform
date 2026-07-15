@@ -1,255 +1,286 @@
-import { NextRequest, NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
-interface PdfSegmentData {
-  speaker: string;
-  start_time: number;
-  end_time: number;
-  transcript_text: string;
-  segment_index: number;
+import { NextRequest, NextResponse } from "next/server";
+import puppeteer, { type Browser, type Page } from "puppeteer";
+
+import type { PdfExportPayload, PdfExportSegment } from "@/lib/pdf-export-types";
+import { escapeHtml, formatPdfTimestamp, groupSegmentsBySpeaker, hasUsableAnalysis, pdfDownloadFilename, sortPdfSegments } from "@/lib/pdf-export-utils";
+
+export const runtime = "nodejs";
+
+const MAX_REQUEST_BYTES = 1_500_000;
+const PDF_TIMEOUT_MS = 45_000;
+
+type RouteError = {
+  status: number;
+  code: string;
+  message: string;
+};
+
+export async function POST(request: NextRequest) {
+  let browser: Browser | null = null;
+  let page: Page | null = null;
+
+  try {
+    const payload = await readAndValidatePayload(request);
+    browser = await puppeteer.launch({
+      headless: "shell",
+      timeout: 30_000,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--hide-scrollbars", "--mute-audio"],
+    });
+    page = await browser.newPage();
+    page.setDefaultTimeout(PDF_TIMEOUT_MS);
+
+    const html = await buildHtml(payload);
+    await page.setContent(html, { waitUntil: "load", timeout: PDF_TIMEOUT_MS });
+    await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((resolve) => window.setTimeout(resolve, 5000))]));
+    await page.emulateMediaType("screen");
+
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "18mm", bottom: "18mm", left: "18mm", right: "18mm" },
+      displayHeaderFooter: true,
+      headerTemplate: "<span></span>",
+      footerTemplate: footerTemplate(),
+      timeout: PDF_TIMEOUT_MS,
+    });
+
+    return new NextResponse(Buffer.from(pdf), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${pdfDownloadFilename(payload.transcript)}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    const routeError = normalizeRouteError(error);
+    return NextResponse.json({ error: { code: routeError.code, message: routeError.message, details: null } }, { status: routeError.status });
+  } finally {
+    await page?.close().catch(() => undefined);
+    await browser?.close().catch(() => undefined);
+  }
 }
 
-interface PdfParentData {
-  filename: string;
-  reference_number: string;
-  category: string;
-  status: string;
-  timestamp: string;
-}
+async function readAndValidatePayload(request: NextRequest): Promise<PdfExportPayload> {
+  const raw = await request.text();
+  if (raw.length > MAX_REQUEST_BYTES) throw routeError(413, "PAYLOAD_TOO_LARGE", "PDF export request is too large.");
 
-interface PdfAnalysisData {
-  summary: string;
-  keywords: string[];
-  entities: {
-    persons: string[];
-    locations: string[];
-    organizations: string[];
-    events: string[];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw routeError(400, "BAD_REQUEST", "Request body must be valid JSON.");
+  }
+
+  if (!parsed || typeof parsed !== "object") throw routeError(400, "BAD_REQUEST", "Request body must be an object.");
+  const payload = parsed as Partial<PdfExportPayload>;
+  const transcript = payload.transcript;
+  if (!transcript || typeof transcript !== "object") throw routeError(400, "BAD_REQUEST", "Transcript data is required.");
+  if (!isNonEmptyString(transcript.jobId)) throw routeError(400, "BAD_REQUEST", "Transcript job ID is required.");
+  if (!isNonEmptyString(transcript.filename)) throw routeError(400, "BAD_REQUEST", "Transcript filename is required.");
+  if (payload.format !== "segmented" && payload.format !== "paragraph") throw routeError(400, "BAD_REQUEST", "Unsupported PDF format.");
+  if (!Array.isArray(transcript.segments) || transcript.segments.length === 0) throw routeError(400, "BAD_REQUEST", "At least one transcript segment is required.");
+  transcript.segments.forEach(validateSegment);
+
+  const includeAnalysis = payload.includeAnalysis === true;
+  const analysis = includeAnalysis ? sanitizeAnalysis(payload.analysis) : undefined;
+  if (includeAnalysis && !hasUsableAnalysis(analysis)) throw routeError(400, "BAD_REQUEST", "Complete analysis data is required when includeAnalysis is true.");
+
+  return {
+    transcript: {
+      jobId: transcript.jobId.trim(),
+      filename: transcript.filename.trim(),
+      category: typeof transcript.category === "string" ? transcript.category.trim() : "",
+      referenceNumber: typeof transcript.referenceNumber === "string" ? transcript.referenceNumber.trim() : "",
+      notes: typeof transcript.notes === "string" ? transcript.notes : "",
+      createdAt: typeof transcript.createdAt === "string" ? transcript.createdAt : "",
+      status: typeof transcript.status === "string" ? transcript.status : "unknown",
+      speakers: numberOrZero(transcript.speakers),
+      segmentCount: numberOrZero(transcript.segmentCount),
+      segments: transcript.segments.map((segment) => ({
+        id: String(segment.id).trim(),
+        segmentIndex: numberOrZero(segment.segmentIndex),
+        speaker: String(segment.speaker || "Unknown speaker").trim(),
+        startTime: numberOrZero(segment.startTime),
+        endTime: numberOrZero(segment.endTime),
+        transcriptText: String(segment.transcriptText || ""),
+      })),
+    },
+    format: payload.format,
+    includeAnalysis,
+    analysis,
   };
-  classification: string;
 }
 
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+function sanitizeAnalysis(analysis: unknown): PdfExportPayload["analysis"] {
+  if (!analysis || typeof analysis !== "object") return undefined;
+  const typed = analysis as Partial<NonNullable<PdfExportPayload["analysis"]>>;
+  return {
+    status: typeof typed.status === "string" ? typed.status : "not_started",
+    keywords: Array.isArray(typed.keywords) ? typed.keywords.map((item) => String(item).trim()).filter(Boolean) : [],
+    entities: Array.isArray(typed.entities) ? typed.entities.map((item) => String(item).trim()).filter(Boolean) : [],
+    summary: typeof typed.summary === "string" ? typed.summary : "",
+    classification: typeof typed.classification === "string" ? typed.classification : "",
+    englishTranslation: typeof typed.englishTranslation === "string" ? typed.englishTranslation : "",
+  };
 }
 
-function formatDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+function validateSegment(segment: unknown, index: number) {
+  if (!segment || typeof segment !== "object") throw routeError(400, "BAD_REQUEST", `Segment ${index + 1} is malformed.`);
+  const typed = segment as Partial<PdfExportSegment>;
+  if (!isNonEmptyString(typed.id)) throw routeError(400, "BAD_REQUEST", `Segment ${index + 1} is missing an ID.`);
+  if (!Number.isFinite(typed.segmentIndex)) throw routeError(400, "BAD_REQUEST", `Segment ${index + 1} has an invalid index.`);
+  if (!Number.isFinite(typed.startTime) || !Number.isFinite(typed.endTime)) throw routeError(400, "BAD_REQUEST", `Segment ${index + 1} has invalid timestamps.`);
+  if (typeof typed.transcriptText !== "string") throw routeError(400, "BAD_REQUEST", `Segment ${index + 1} has invalid transcript text.`);
 }
 
-function buildHtml(
-  parent: PdfParentData,
-  segments: PdfSegmentData[],
-  format: 'segmented' | 'paragraph',
-  analysisData?: PdfAnalysisData | null
-): string {
-  const sorted = [...segments].sort((a, b) => a.segment_index - b.segment_index);
-  const transcriptHtml =
-    format === 'segmented'
-      ? sorted
-        .map(
-          (seg) => `
-        <div class="segment">
-          <div class="segment-header">[${seg.speaker}]  ${formatTime(seg.start_time)} &mdash; ${formatTime(seg.end_time)}</div>
-          <div class="segment-text">${escHtml(seg.transcript_text || '')}</div>
-        </div>`
-        )
-        .join('<hr class="sub-divider" />')
-      : (() => {
-        const groups: { speaker: string; texts: string[] }[] = [];
-        for (const seg of sorted) {
-          const last = groups[groups.length - 1];
-          if (last && last.speaker === seg.speaker) {
-            last.texts.push(seg.transcript_text || '');
-          } else {
-            groups.push({ speaker: seg.speaker, texts: [seg.transcript_text || ''] });
-          }
-        }
-        return groups
-          .map(
-            (g) => `
-        <div class="speaker-block">
-          <div class="speaker-heading">${escHtml(g.speaker)}</div>
-          <div class="paragraph-text">${escHtml(g.texts.join(' '))}</div>
-        </div>`
-          )
-          .join('<hr class="sub-divider" />');
-      })();
-
-  const analysisHtml = analysisData
-    ? `
-      <hr class="divider" />
-      <div class="analysis-section">
-        <h2>Analysis Summary</h2>
-
-        <h3>Summary:</h3>
-        <p>${escHtml(analysisData.summary || '')}</p>
-
-        ${analysisData.keywords?.length ? `<h3>Keywords:</h3><p>${analysisData.keywords.map((kw) => `<span class="pill">${escHtml(kw)}</span>`).join(' ')}</p>` : ''}
-
-        ${analysisData.classification ? `<h3>Classification:</h3><p><span class="classification-badge ${getClassificationClass(analysisData.classification)}">${escHtml(formatClassification(analysisData.classification))}</span></p>` : ''}
-
-        ${(() => {
-      const entityTypes: [string, string[]][] = [
-        ['Persons', analysisData.entities?.persons || []],
-        ['Locations', analysisData.entities?.locations || []],
-        ['Organizations', analysisData.entities?.organizations || []],
-        ['Events', analysisData.entities?.events || []],
-      ];
-      const hasEntities = entityTypes.some(([, items]) => items.length > 0);
-      if (!hasEntities) return '';
-      return `
-            <h3>Named Entities:</h3>
-            ${entityTypes
-          .filter(([, items]) => items.length > 0)
-          .map(
-            ([label, items]) => `
-              <div class="entity-group">
-                <div class="entity-label">${label}:</div>
-                <div>${items.map((item) => `<span class="pill">${escHtml(item)}</span>`).join(' ')}</div>
-              </div>`
-          )
-          .join('')}
-          `;
-    })()}
-      </div>`
-    : '';
+async function buildHtml(payload: PdfExportPayload) {
+  const fontFace = await farumaFontFace();
+  const transcriptHtml = payload.format === "segmented" ? segmentedHtml(payload.transcript.segments) : paragraphHtml(payload.transcript.segments);
+  const analysisHtml = payload.includeAnalysis && payload.analysis ? buildAnalysisHtml(payload.analysis) : "";
+  const generatedAt = new Date().toISOString();
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thaana:wght@400;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    @page { margin: 20mm; }
-    body { font-family: 'Noto Sans Thaana', Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 10pt; line-height: 1.5; }
-    .header-box { background: #f0f0f0; padding: 6mm 4mm; margin-bottom: 4mm; }
-    .header-box h1 { font-size: 18pt; font-weight: bold; margin: 0 0 4mm 0; }
-    .header-box p { font-size: 10pt; margin: 1mm 0; }
-    .header-box .note { font-size: 8pt; color: #666; margin-top: 3mm; }
-    .divider { border: none; border-top: 1px solid #b0b0b0; margin: 4mm 0; }
-    .sub-divider { border: none; border-top: 1px solid #ddd; margin: 2mm 0; }
-    .segment { margin-bottom: 3mm; }
-    .segment-header { font-weight: bold; font-size: 10pt; }
-    .segment-text { direction: rtl; }
-    .speaker-block { margin-bottom: 3mm; }
-    .speaker-heading { font-weight: bold; font-size: 11pt; margin-top: 3mm; }
-    .paragraph-text { direction: rtl; }
-    .analysis-section { margin-top: 6mm; }
-    .analysis-section h2 { font-size: 14pt; font-weight: bold; margin-top: 4mm; margin-bottom: 3mm; }
-    .analysis-section h3 { font-size: 10pt; font-weight: bold; margin-top: 3mm; margin-bottom: 1mm; }
-    .analysis-section p { margin: 0 0 2mm 0; }
-    .pill { display: inline-block; background: #e0e0e0; padding: 0.5mm 2mm; border-radius: 2mm; margin: 0.3mm; font-size: 9pt; }
-    .classification-badge { display: inline-block; padding: 1.5mm 3mm; border-radius: 2mm; font-weight: bold; font-size: 10pt; }
-    .classification-threat { background: #fee; color: #c00; }
-    .classification-alibi { background: #fff3e0; color: #e65100; }
-    .classification-emergency { background: #fff3e0; color: #cc5500; }
-    .classification-general_discussion { background: #e3f2fd; color: #1565c0; }
-    .classification-other { background: #f5f5f5; color: #666; }
-    .entity-group { margin-bottom: 2mm; }
-    .entity-label { font-weight: bold; margin-bottom: 0.5mm; }
+    ${fontFace}
+    @page { size: A4; margin: 18mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #171717; font-family: Inter, Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.55; direction: ltr; }
+    h1, h2, h3, p { margin: 0; }
+    .header { border-bottom: 1px solid #d4d4d4; padding-bottom: 6mm; margin-bottom: 6mm; }
+    .eyebrow { color: #737373; font-size: 8pt; letter-spacing: 0.08em; text-transform: uppercase; }
+    .title { font-size: 20pt; margin-top: 1mm; }
+    .subtitle { color: #525252; margin-top: 2mm; word-break: break-word; }
+    .metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2mm 6mm; margin: 5mm 0 7mm; }
+    .meta-item { border-bottom: 1px solid #eeeeee; padding-bottom: 1.5mm; }
+    .meta-label { color: #737373; font-size: 8pt; text-transform: uppercase; }
+    .meta-value { margin-top: 0.5mm; word-break: break-word; }
+    .notes { border-left: 3px solid #d4d4d4; padding: 2mm 3mm; margin-bottom: 6mm; white-space: pre-wrap; }
+    .section-title { font-size: 14pt; margin: 6mm 0 3mm; border-bottom: 1px solid #e5e5e5; padding-bottom: 2mm; }
+    .segment { break-inside: avoid; margin-bottom: 4mm; padding-bottom: 3mm; border-bottom: 1px solid #eeeeee; }
+    .segment-header, .speaker-heading { direction: ltr; unicode-bidi: isolate; font-family: Inter, Arial, Helvetica, sans-serif; font-weight: 700; color: #404040; margin-bottom: 1.5mm; }
+    .segment-text, .paragraph-text { direction: rtl; unicode-bidi: plaintext; text-align: right; white-space: pre-wrap; font-family: FarumaPdf, 'MV Faruma', 'Noto Sans Thaana', Arial, sans-serif; font-size: 12pt; line-height: 1.9; }
+    .paragraph-block { break-inside: avoid; margin-bottom: 5mm; }
+    .analysis { margin-top: 7mm; }
+    .analysis-card { break-inside: avoid; margin-bottom: 4mm; }
+    .analysis h3 { font-size: 10.5pt; margin-bottom: 1mm; color: #404040; }
+    .analysis p { white-space: pre-wrap; }
+    .analysis .translation { direction: ltr; unicode-bidi: isolate; text-align: left; }
+    .pills { display: flex; flex-wrap: wrap; gap: 1.5mm; }
+    .pill { display: inline-block; border: 1px solid #d4d4d4; border-radius: 99px; padding: 0.8mm 2mm; margin: 0 1mm 1mm 0; background: #f7f7f7; font-size: 9pt; }
   </style>
 </head>
 <body>
-  <div class="header-box">
-    <h1>Dhivehi Transcription Platform</h1>
-    <p><strong>File:</strong> ${escHtml(parent.filename)}</p>
-    <p><strong>Reference:</strong> ${escHtml(parent.reference_number)} &nbsp;|&nbsp; <strong>Category:</strong> ${escHtml(parent.category)} &nbsp;|&nbsp; <strong>Status:</strong> ${escHtml(parent.status.toUpperCase())}</p>
-    <p><strong>Uploaded:</strong> ${formatDate(parent.timestamp)}</p>
-    <p class="note">Note: Dhivehi text may not render correctly in all PDF viewers. For accurate Dhivehi display, refer to the on-screen transcript.</p>
-  </div>
-
-  <hr class="divider" />
-
+  <header class="header">
+    <div class="eyebrow">Transcript App PDF Export</div>
+    <h1 class="title">Transcript Report</h1>
+    <p class="subtitle">${escapeHtml(payload.transcript.filename)}</p>
+    <p class="subtitle">Generated ${escapeHtml(formatDate(generatedAt))}</p>
+  </header>
+  ${metadataHtml(payload)}
+  <h2 class="section-title">Transcript (${escapeHtml(formatLabel(payload.format))})</h2>
   ${transcriptHtml}
   ${analysisHtml}
 </body>
 </html>`;
 }
 
-function escHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+function segmentedHtml(segments: PdfExportSegment[]) {
+  return sortPdfSegments(segments).map((segment) => `
+    <section class="segment">
+      <div class="segment-header">${escapeHtml(segment.speaker || "Unknown speaker")} - ${formatPdfTimestamp(segment.startTime)}-${formatPdfTimestamp(segment.endTime)}</div>
+      <div class="segment-text" lang="dv">${escapeHtml(segment.transcriptText || "")}</div>
+    </section>`).join("");
 }
 
-function getClassificationClass(classification: string): string {
-  const known = ['threat', 'alibi', 'emergency', 'general_discussion'];
-  return known.includes(classification) ? `classification-${classification}` : 'classification-other';
+function paragraphHtml(segments: PdfExportSegment[]) {
+  return groupSegmentsBySpeaker(segments).map((group) => `
+    <section class="paragraph-block">
+      <div class="speaker-heading">${escapeHtml(group.speaker)}</div>
+      <div class="paragraph-text" lang="dv">${escapeHtml(group.text)}</div>
+    </section>`).join("");
 }
 
-function formatClassification(classification: string): string {
-  return classification.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+function metadataHtml(payload: PdfExportPayload) {
+  const transcript = payload.transcript;
+  const notes = transcript.notes?.trim();
+  return `
+    <section class="metadata">
+      ${metaItem("Reference", transcript.referenceNumber || "Not provided")}
+      ${metaItem("Category", transcript.category || "Uncategorized")}
+      ${metaItem("Status", formatLabel(transcript.status))}
+      ${metaItem("Created", transcript.createdAt ? formatDate(transcript.createdAt) : "Unknown")}
+      ${metaItem("Speakers", String(transcript.speakers || 0))}
+      ${metaItem("Segments", String(transcript.segmentCount || transcript.segments.length))}
+    </section>
+    ${notes ? `<section class="notes"><div class="meta-label">Notes</div><div>${escapeHtml(notes)}</div></section>` : ""}`;
 }
 
-export async function POST(request: NextRequest) {
+function buildAnalysisHtml(analysis: NonNullable<PdfExportPayload["analysis"]>) {
+  const sections = [
+    analysis.summary.trim() ? `<div class="analysis-card"><h3>Summary</h3><p>${escapeHtml(analysis.summary.trim())}</p></div>` : "",
+    analysis.classification.trim() ? `<div class="analysis-card"><h3>Classification</h3><span class="pill">${escapeHtml(formatLabel(analysis.classification.trim()))}</span></div>` : "",
+    analysis.keywords.length > 0 ? `<div class="analysis-card"><h3>Keywords</h3><div class="pills">${analysis.keywords.map((keyword) => `<span class="pill">${escapeHtml(keyword)}</span>`).join("")}</div></div>` : "",
+    analysis.entities.length > 0 ? `<div class="analysis-card"><h3>Entities</h3><div class="pills">${analysis.entities.map((entity) => `<span class="pill">${escapeHtml(entity)}</span>`).join("")}</div></div>` : "",
+    analysis.englishTranslation.trim() ? `<div class="analysis-card"><h3>English Translation</h3><p class="translation">${escapeHtml(analysis.englishTranslation.trim())}</p></div>` : "",
+  ].filter(Boolean).join("");
+  return sections ? `<section class="analysis"><h2 class="section-title">Stored Analysis</h2>${sections}</section>` : "";
+}
+
+async function farumaFontFace() {
   try {
-    const body = await request.json();
-    const { parent, segments, format, analysisData } = body as {
-      parent: PdfParentData;
-      segments: PdfSegmentData[];
-      format: 'segmented' | 'paragraph';
-      analysisData?: PdfAnalysisData | null;
-    };
-
-
-    const browser = await puppeteer.launch({
-      headless: 'shell',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-gpu',
-        '--hide-scrollbars',
-        '--mute-audio'
-      ]
-    });
-    const page = await browser.newPage();
-
-    const html = buildHtml(parent, segments, format, analysisData);
-    await page.setContent(html, { waitUntil: 'load' });
-    await page.evaluate(() => document.fonts.ready);
-    await page.emulateMediaType('screen');
-
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', bottom: '20mm', left: '20mm', right: '20mm' },
-      displayHeaderFooter: true,
-      headerTemplate: '<span></span>',
-      footerTemplate: `
-        <div style="width:100%;font-size:8pt;color:#888;display:flex;justify-content:space-between;padding:0 20mm;box-sizing:border-box;">
-          <span>CONFIDENTIAL &mdash; FOR LAW ENFORCEMENT USE ONLY</span>
-          <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-        </div>
-      `,
-    });
-
-    await browser.close();
-
-    const safeFilename = parent.filename.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 40);
-
-    return new NextResponse(Buffer.from(pdf), {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${safeFilename}_transcript.pdf"`,
-      },
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || 'PDF generation failed' },
-      { status: 500 }
-    );
+    const fontPath = path.join(process.cwd(), "src", "app", "fonts", "Faruma.ttf");
+    const font = await readFile(fontPath);
+    return `@font-face { font-family: FarumaPdf; src: url(data:font/ttf;base64,${font.toString("base64")}) format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }`;
+  } catch {
+    return "";
   }
+}
+
+function metaItem(label: string, value: string) {
+  return `<div class="meta-item"><div class="meta-label">${escapeHtml(label)}</div><div class="meta-value">${escapeHtml(value)}</div></div>`;
+}
+
+function footerTemplate() {
+  return `<div style="width:100%;font-size:8pt;color:#737373;display:flex;justify-content:space-between;padding:0 18mm;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;">
+    <span>Generated by Transcript App</span>
+    <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+  </div>`;
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")} ${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")} UTC`;
+}
+
+function formatLabel(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function routeError(status: number, code: string, message: string): RouteError {
+  return { status, code, message };
+}
+
+function normalizeRouteError(error: unknown): RouteError {
+  if (isRouteError(error)) return error;
+  return routeError(500, "PDF_GENERATION_FAILED", "PDF generation failed. Please try again.");
+}
+
+function isRouteError(error: unknown): error is RouteError {
+  return Boolean(error && typeof error === "object" && "status" in error && "code" in error && "message" in error);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function numberOrZero(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }

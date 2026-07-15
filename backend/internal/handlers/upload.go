@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
+	"transcript_app/backend/internal/dtos"
 	"transcript_app/backend/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -16,20 +19,84 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+type uploadMetadata struct {
+	Category        string
+	ReferenceNumber string
+	Notes           string
+	Speakers        string
+}
+
+type uploadResult struct {
+	FileID          string
+	Filename        string
+	MinioURL        string
+	LocalPath       string
+	Status          string
+	Category        string
+	ReferenceNumber string
+	Notes           string
+	Speakers        string
+	CreatedAt       string
+}
+
 // UploadFile handles file uploads, saves to MinIO, and records metadata in Qdrant
 func UploadFile(c *gin.Context) {
-	// Get uploaded file
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file not provided"})
 		return
 	}
 
-	// Capture extra form fields
-	category := c.PostForm("category")
-	referenceNumber := c.PostForm("reference_number")
-	notes := c.PostForm("notes")
-	speakers := c.PostForm("speakers") // comma-separated string for now
+	result, err := processUpload(c, file, uploadMetadata{
+		Category:        c.PostForm("category"),
+		ReferenceNumber: c.PostForm("reference_number"),
+		Notes:           c.PostForm("notes"),
+		Speakers:        c.PostForm("speakers"),
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"file_id":          result.FileID,
+		"filename":         result.Filename,
+		"minio_url":        result.MinioURL,
+		"local_path":       result.LocalPath,
+		"status":           result.Status,
+		"category":         result.Category,
+		"reference_number": result.ReferenceNumber,
+		"notes":            result.Notes,
+		"speakers":         result.Speakers,
+	})
+}
+
+func APIUploadFile(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "A media file is required", nil)
+		return
+	}
+
+	result, err := processUpload(c, file, uploadMetadata{
+		Category:        c.PostForm("category"),
+		ReferenceNumber: firstNonEmpty(c.PostForm("referenceNumber"), c.PostForm("reference_number")),
+		Notes:           c.PostForm("notes"),
+		Speakers:        firstNonEmpty(c.PostForm("requestedSpeakers"), c.PostForm("speakers")),
+	})
+	if err != nil {
+		log.Printf("api upload failed: %v", err)
+		writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "Upload could not be accepted", nil)
+		return
+	}
+
+	c.JSON(http.StatusCreated, mapAPIUploadResponse(result))
+}
+
+func processUpload(c *gin.Context, file *multipart.FileHeader, uploadMeta uploadMetadata) (uploadResult, error) {
+	if file == nil || file.Filename == "" {
+		return uploadResult{}, fmt.Errorf("file not provided")
+	}
 
 	// Generate unique file ID
 	fileID := uuid.NewString()
@@ -37,8 +104,7 @@ func UploadFile(c *gin.Context) {
 
 	// Save file locally
 	if err := c.SaveUploadedFile(file, localPath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
-		return
+		return uploadResult{}, fmt.Errorf("failed to save file")
 	}
 
 	// Upload to MinIO
@@ -46,12 +112,11 @@ func UploadFile(c *gin.Context) {
 	ctx := context.Background()
 	objectName := fmt.Sprintf("%s_%s", fileID, file.Filename)
 
-	_, err = services.MinioClient.FPutObject(ctx, bucket, objectName, localPath, minio.PutObjectOptions{
+	_, err := services.MinioClient.FPutObject(ctx, bucket, objectName, localPath, minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to upload to MinIO: %v", err)})
-		return
+		return uploadResult{}, fmt.Errorf("failed to upload to MinIO: %v", err)
 	}
 
 	// Build file URL (based on environment variable)
@@ -61,23 +126,25 @@ func UploadFile(c *gin.Context) {
 	}
 	fileURL := fmt.Sprintf("http://%s/%s/%s", minioEndpoint, bucket, objectName)
 
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+
 	// Prepare metadata payload for Qdrant
-	metadata := map[string]interface{}{
+	payload := map[string]interface{}{
 		"type":             "parent",
 		"job_id":           fileID,
 		"filename":         file.Filename,
 		"minio_url":        fileURL,
 		"local_path":       localPath,
 		"status":           "uploaded",
-		"category":         category,
-		"reference_number": referenceNumber,
-		"notes":            notes,
-		"speakers":         speakers,
-		"timestamp":        time.Now().UTC().Format(time.RFC3339),
+		"category":         uploadMeta.Category,
+		"reference_number": uploadMeta.ReferenceNumber,
+		"notes":            uploadMeta.Notes,
+		"speakers":         uploadMeta.Speakers,
+		"timestamp":        createdAt,
 	}
 
 	// Insert metadata into Qdrant
-	if err := services.InsertFileMetadata(fileID, metadata); err != nil {
+	if err := services.InsertFileMetadata(fileID, payload); err != nil {
 		log.Printf("⚠️ Failed to insert metadata into Qdrant: %v", err)
 	} else {
 		log.Printf("✅ Successfully inserted metadata for file %s", fileID)
@@ -106,16 +173,51 @@ func UploadFile(c *gin.Context) {
 		}
 	}
 
-	// Return response
-	c.JSON(http.StatusOK, gin.H{
-		"file_id":          fileID,
-		"filename":         file.Filename,
-		"minio_url":        fileURL,
-		"local_path":       localPath,
-		"status":           "uploaded",
-		"category":         category,
-		"reference_number": referenceNumber,
-		"notes":            notes,
-		"speakers":         speakers,
-	})
+	return uploadResult{
+		FileID:          fileID,
+		Filename:        file.Filename,
+		MinioURL:        fileURL,
+		LocalPath:       localPath,
+		Status:          "uploaded",
+		Category:        uploadMeta.Category,
+		ReferenceNumber: uploadMeta.ReferenceNumber,
+		Notes:           uploadMeta.Notes,
+		Speakers:        uploadMeta.Speakers,
+		CreatedAt:       createdAt,
+	}, nil
+}
+
+func mapAPIUploadResponse(result uploadResult) dtos.UploadResponse {
+	return dtos.UploadResponse{
+		Job: dtos.UploadJob{
+			JobID:           result.FileID,
+			Filename:        result.Filename,
+			Category:        result.Category,
+			ReferenceNumber: result.ReferenceNumber,
+			Notes:           result.Notes,
+			Status:          result.Status,
+			CreatedAt:       result.CreatedAt,
+			SpeakerCount:    parseSpeakerCount(result.Speakers),
+			SegmentCount:    0,
+			AnalysisStatus:  "not_started",
+		},
+		Message: "Upload accepted for processing",
+	}
+}
+
+func parseSpeakerCount(value string) int {
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return 0
+	}
+	return parsed
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

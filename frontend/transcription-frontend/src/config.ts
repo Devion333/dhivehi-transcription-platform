@@ -1,4 +1,2 @@
-// Central config — change these when deploying to a different environment
-export const QDRANT_URL = 'http://localhost:6333';
-export const BACKEND_URL = 'http://localhost:8000';
-export const MINIO_URL = 'http://localhost:9000';
+// Browser-facing config. The rebuilt frontend talks to the Go backend only.
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";

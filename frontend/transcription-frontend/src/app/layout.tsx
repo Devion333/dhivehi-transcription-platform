@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import localFont from "next/font/local";
+import { AppShell } from "@/components/app/app-shell";
 
 const mvFaruma = localFont({
   src: "./fonts/Faruma.ttf",
@@ -21,8 +22,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Transcription WebApp',
-  description: 'Upload audio/video for transcription',
+  title: "Transcript App",
+  description: "Upload, process, and review transcripts",
 };
 
 export default function RootLayout({
@@ -32,14 +33,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${mvFaruma.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${mvFaruma.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <AppShell>{children}</AppShell>
         </ThemeProvider>
       </body>
     </html>

@@ -132,5 +132,19 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-geist-sans), system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .font-thaana {
+    font-family: var(--font-faruma), var(--font-geist-sans), system-ui, sans-serif;
+  }
+
+  .transcript-text {
+    direction: rtl;
+    unicode-bidi: plaintext;
+    font-family: var(--font-faruma), var(--font-geist-sans), system-ui, sans-serif;
+    line-height: 1.9;
   }
 }

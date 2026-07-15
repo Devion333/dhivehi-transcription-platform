@@ -23,14 +23,10 @@ export default function PdfExportModal({ open, onClose, onGenerate, loading }: P
         <CardHeader>
           <CardTitle className="text-lg text-neutral-900 dark:text-white flex items-center gap-2">
             <FileDown className="w-5 h-5" />
-            Export Transcript PDF
+            Export PDF
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-stone-600 dark:text-neutral-400">
-            Choose how you want the transcript formatted in the PDF.
-          </p>
-
           <div className="grid grid-cols-1 gap-3">
             <button
               onClick={() => setFormat('segmented')}
@@ -45,7 +41,7 @@ export default function PdfExportModal({ open, onClose, onGenerate, loading }: P
                   Segmented
                 </p>
                 <p className="text-xs text-stone-500 dark:text-neutral-500 mt-1">
-                  Transcript presented segment by segment with speaker labels and timestamps, preserving the original conversation structure.
+                  Speaker and timestamps
                 </p>
               </div>
             </button>
@@ -63,7 +59,7 @@ export default function PdfExportModal({ open, onClose, onGenerate, loading }: P
                   Paragraph
                 </p>
                 <p className="text-xs text-stone-500 dark:text-neutral-500 mt-1">
-                  Transcript grouped by speaker into continuous paragraphs without timestamps for a cleaner readable document.
+                  Grouped by speaker
                 </p>
               </div>
             </button>

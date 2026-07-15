@@ -25,7 +25,7 @@ const Popover: React.FC<PopoverProps> = ({ children, open = false, onOpenChange 
 const PopoverTrigger = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & { asChild?: boolean }
->(({ children, asChild, ...props }, ref) => {
+>(({ children, ...props }, ref) => {
   const context = React.useContext(PopoverContext)
   
   return (
@@ -67,7 +67,7 @@ const PopoverContent = React.forwardRef<
       ref={(node) => {
         if (typeof ref === 'function') ref(node)
         else if (ref) ref.current = node
-        if (node) (contentRef as any).current = node
+        contentRef.current = node
       }}
       className={`absolute z-50 w-full rounded-md border bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 shadow-md outline-none animate-in fade-in-0 zoom-in-95 mt-2 ${className}`}
       {...props}
