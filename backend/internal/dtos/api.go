@@ -68,6 +68,47 @@ type AdminResetPasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 }
 
+type AuditActor struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+type AuditEventSummary struct {
+	ID           string      `json:"id"`
+	CreatedAt    string      `json:"createdAt"`
+	Actor        *AuditActor `json:"actor"`
+	Action       string      `json:"action"`
+	Category     string      `json:"category"`
+	Outcome      string      `json:"outcome"`
+	ResourceType string      `json:"resourceType"`
+	ResourceID   string      `json:"resourceId"`
+	IPAddress    string      `json:"ipAddress"`
+}
+
+type AuditEventDetail struct {
+	AuditEventSummary
+	UserAgent string                 `json:"userAgent"`
+	Metadata  map[string]interface{} `json:"metadata"`
+}
+
+type AuditListResponse struct {
+	Items      []AuditEventSummary `json:"items"`
+	Pagination Pagination          `json:"pagination"`
+}
+
+type AuditEventResponse struct {
+	Event AuditEventDetail `json:"event"`
+}
+
+type PDFExportAuditRequest struct {
+	JobID           string `json:"jobId"`
+	Format          string `json:"format"`
+	IncludeAnalysis bool   `json:"includeAnalysis"`
+	Outcome         string `json:"outcome"`
+}
+
 type Pagination struct {
 	Page        int  `json:"page"`
 	PageSize    int  `json:"pageSize"`

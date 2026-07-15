@@ -22,10 +22,11 @@ type RouteError = {
 export async function POST(request: NextRequest) {
   let browser: Browser | null = null;
   let page: Page | null = null;
+  let payload: PdfExportPayload | null = null;
 
   try {
     await requireAuthenticated(request);
-    const payload = await readAndValidatePayload(request);
+    payload = await readAndValidatePayload(request);
     browser = await puppeteer.launch({
       headless: "shell",
       timeout: 30_000,
@@ -49,6 +50,8 @@ export async function POST(request: NextRequest) {
       timeout: PDF_TIMEOUT_MS,
     });
 
+    await recordPDFExportAudit(request, payload, "success");
+
     return new NextResponse(Buffer.from(pdf), {
       headers: {
         "Content-Type": "application/pdf",
@@ -58,11 +61,21 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const routeError = normalizeRouteError(error);
+    if (payload) await recordPDFExportAudit(request, payload, "failure");
     return NextResponse.json({ error: { code: routeError.code, message: routeError.message, details: null } }, { status: routeError.status });
   } finally {
     await page?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
+}
+
+async function recordPDFExportAudit(request: NextRequest, payload: PdfExportPayload, outcome: "success" | "failure") {
+  await fetch(`${BACKEND_URL}/api/audit/pdf-export`, {
+    method: "POST",
+    headers: { Cookie: request.headers.get("cookie") ?? "", "Content-Type": "application/json", Accept: "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ jobId: payload.transcript.jobId, format: payload.format, includeAnalysis: payload.includeAnalysis, outcome }),
+  }).catch(() => undefined);
 }
 
 async function requireAuthenticated(request: NextRequest) {

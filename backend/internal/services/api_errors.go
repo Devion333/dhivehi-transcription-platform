@@ -23,6 +23,9 @@ const (
 	ErrCodeUserNotFound         = "USER_NOT_FOUND"
 	ErrCodeCannotDeactivateSelf = "CANNOT_DEACTIVATE_SELF"
 	ErrCodeLastActiveAdmin      = "LAST_ACTIVE_ADMIN"
+	ErrCodeAuditNotFound        = "AUDIT_EVENT_NOT_FOUND"
+	ErrCodeInvalidAuditFilter   = "INVALID_AUDIT_FILTER"
+	ErrCodeInvalidAuditEvent    = "INVALID_AUDIT_EVENT"
 )
 
 var (

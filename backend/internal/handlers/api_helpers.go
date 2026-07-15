@@ -46,6 +46,12 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "You cannot deactivate your own account", nil)
 		case services.ErrCodeLastActiveAdmin:
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "At least one active administrator is required", nil)
+		case services.ErrCodeAuditNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Audit event was not found", nil)
+		case services.ErrCodeInvalidAuditFilter:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit filter is invalid", nil)
+		case services.ErrCodeInvalidAuditEvent:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit event is invalid", nil)
 		case services.ErrCodeUpstream:
 			log.Printf("upstream service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "A backend dependency failed", nil)

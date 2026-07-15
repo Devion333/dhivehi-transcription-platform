@@ -21,10 +21,12 @@ func APILogin(c *gin.Context) {
 	}
 	user, token, err := services.Login(c.Request.Context(), request.Email, request.Password, c.ClientIP())
 	if err != nil {
+		auditRequestEventWithActor(c, nil, services.AuditEventInput{Action: "auth.login_failed", Category: "authentication", Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"loginIdentifierHash": services.HashAuditIdentifier(request.Email)}})
 		writeAuthServiceError(c, err)
 		return
 	}
 	setSessionCookie(c, token)
+	auditRequestEventWithActor(c, &user, services.AuditEventInput{Action: "auth.login_succeeded", Category: "authentication", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess})
 	c.JSON(http.StatusOK, dtos.AuthUserResponse{User: user})
 }
 
@@ -35,6 +37,7 @@ func APILogout(c *gin.Context) {
 		return
 	}
 	clearSessionCookie(c)
+	auditRequestEvent(c, services.AuditEventInput{Action: "auth.logout", Category: "authentication", ResourceType: "session", Outcome: services.AuditOutcomeSuccess})
 	c.JSON(http.StatusOK, dtos.AuthMessageResponse{Message: "Signed out"})
 }
 

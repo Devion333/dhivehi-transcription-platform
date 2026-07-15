@@ -24,6 +24,9 @@ JSON style: camelCase for frontend-facing request and response bodies.
 | POST | `/api/admin/users/{userId}/activate` | Admin-only account activation. |
 | POST | `/api/admin/users/{userId}/deactivate` | Admin-only account deactivation and session revocation. |
 | POST | `/api/admin/users/{userId}/reset-password` | Admin-only password reset and session revocation. |
+| GET | `/api/admin/audit` | Admin-only audit event list with filters and pagination. |
+| GET | `/api/admin/audit/{eventId}` | Admin-only audit event detail. |
+| POST | `/api/audit/pdf-export` | Authenticated controlled PDF export audit recording endpoint. |
 | POST | `/api/uploads` | Upload media using the existing upload flow and return a frontend-friendly job envelope. |
 | GET | `/api/transcripts` | List parent transcript jobs with pagination/filtering. |
 | GET | `/api/search/transcripts` | Literal transcript segment text search with parent context. |
@@ -454,6 +457,120 @@ Success: `200 OK`
 ```
 
 The password is hashed with the existing Argon2id implementation and all active sessions for the target user are revoked. Self-reset is allowed and revokes the current session, requiring sign-in again.
+
+## Audit DTOs
+
+### AuditEventSummary
+
+```json
+{
+  "id": "33333333-3333-3333-3333-333333333333",
+  "createdAt": "2026-07-15T00:00:00Z",
+  "actor": {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "name": "Admin",
+    "email": "admin@example.com",
+    "role": "admin"
+  },
+  "action": "admin.user_created",
+  "category": "user_management",
+  "outcome": "success",
+  "resourceType": "user",
+  "resourceId": "22222222-2222-2222-2222-222222222222",
+  "ipAddress": "127.0.0.1"
+}
+```
+
+For unauthenticated failed-login events, `actor` is `null`.
+
+### AuditEventDetail
+
+Adds:
+
+```json
+{
+  "userAgent": "Mozilla/5.0 ...",
+  "metadata": {
+    "targetUserId": "22222222-2222-2222-2222-222222222222",
+    "targetRole": "user"
+  }
+}
+```
+
+Metadata is action-specific and allowlisted. Passwords, session tokens, cookies, authorization headers, transcript text, search queries, analysis text, provider responses, API keys, database connection strings, Qdrant payloads, and MinIO credentials must not be present.
+
+## GET /api/admin/audit
+
+Authentication: required, role `admin`.
+
+Query parameters:
+
+| Query | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | `1` | Invalid or less-than-one values normalize to `1`. |
+| `pageSize` | integer | `50` | Maximum `100`. |
+| `search` | string | empty | Matches actor name, actor email, action, and resource ID. |
+| `category` | string | empty/all | `authentication`, `user_management`, `transcript`, `analysis`, `search`, `export`. |
+| `action` | string | empty/all | Must be a known audit action. |
+| `outcome` | string | empty/all | `success` or `failure`. |
+| `actorUserId` | UUID | empty/all | Exact actor ID match. |
+| `resourceType` | string | empty/all | Exact resource type match. |
+| `resourceId` | string | empty/all | Exact resource ID match. |
+| `dateFrom` | RFC3339 | empty | Inclusive lower bound. |
+| `dateTo` | RFC3339 | empty | Inclusive upper bound. |
+
+Success: `200 OK`
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "pageSize": 50,
+    "total": 0,
+    "totalPages": 0,
+    "hasNextPage": false
+  }
+}
+```
+
+Ordering is newest first: `createdAt DESC`, then stable event ID fallback.
+
+## GET /api/admin/audit/{eventId}
+
+Authentication: required, role `admin`.
+
+Success: `200 OK`
+
+Returns `{ "event": AuditEventDetail }`. Missing or invalid IDs return `AUDIT_EVENT_NOT_FOUND`.
+
+## POST /api/audit/pdf-export
+
+Authentication: required.
+
+This endpoint is only for the Next.js PDF export route to record export events. It is not a public generic audit-ingestion API.
+
+Request:
+
+```json
+{
+  "jobId": "7b7d4b3e-0000-0000-0000-000000000000",
+  "format": "segmented",
+  "includeAnalysis": true,
+  "outcome": "success"
+}
+```
+
+Rules:
+
+| Field | Rule |
+| --- | --- |
+| `jobId` | Required transcript/job ID. |
+| `format` | Must be `segmented` or `paragraph`. |
+| `includeAnalysis` | Boolean only. |
+| `outcome` | Must be `success` or `failure`; maps to `export.pdf_generated` or `export.pdf_failed`. |
+
+Arbitrary action names and arbitrary metadata are rejected or ignored.
 
 ## POST /api/uploads
 

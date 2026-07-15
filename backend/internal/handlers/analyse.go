@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"transcript_app/backend/internal/dtos"
 	"transcript_app/backend/internal/services"
@@ -75,12 +76,16 @@ func APIAnalyseTranscript(c *gin.Context) {
 		return
 	}
 
+	started := time.Now()
+	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "started", "provider": "analysis"}})
 	result, analysisErr := runTranscriptAnalysis(jobID)
 	if analysisErr != nil {
+		auditRequestEvent(c, services.AuditEventInput{Action: "analysis.failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"analysisStatus": "failed", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
 		writeAPIError(c, analysisErr.status, analysisErr.code, analysisErr.message, nil)
 		return
 	}
 
+	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.completed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "complete", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
 	c.JSON(http.StatusOK, dtos.AnalysisTriggerResponse{
 		Analysis: mapAnalysisResult(result),
 		Message:  "Analysis completed",

@@ -58,6 +58,7 @@ func main() {
 			protected.PATCH("/transcripts/:jobId/segments/:segmentId", handlers.APIUpdateSegment)
 			protected.GET("/transcripts/:jobId/analysis", handlers.APIGetAnalysis)
 			protected.POST("/transcripts/:jobId/analyse", handlers.APIAnalyseTranscript)
+			protected.POST("/audit/pdf-export", handlers.APIAuditPDFExport)
 		}
 
 		admin := api.Group("/admin")
@@ -70,6 +71,8 @@ func main() {
 			admin.POST("/users/:userId/activate", handlers.APIAdminActivateUser)
 			admin.POST("/users/:userId/deactivate", handlers.APIAdminDeactivateUser)
 			admin.POST("/users/:userId/reset-password", handlers.APIAdminResetUserPassword)
+			admin.GET("/audit", handlers.APIAdminListAuditEvents)
+			admin.GET("/audit/:eventId", handlers.APIAdminGetAuditEvent)
 		}
 	}
 

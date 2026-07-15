@@ -91,6 +91,54 @@ export interface ResetAdminUserPasswordInput {
   newPassword: string;
 }
 
+export type AuditOutcome = "success" | "failure";
+export type AuditCategory = "authentication" | "user_management" | "transcript" | "analysis" | "search" | "export";
+
+export interface AuditActor {
+  id: string;
+  name: string;
+  email: string;
+  role: AuthRole;
+}
+
+export interface AuditEventSummary {
+  id: string;
+  createdAt: string;
+  actor: AuditActor | null;
+  action: string;
+  category: AuditCategory;
+  outcome: AuditOutcome;
+  resourceType: string;
+  resourceId: string;
+  ipAddress: string;
+}
+
+export interface AuditEventDetail extends AuditEventSummary {
+  userAgent: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface AuditListResponse {
+  items: AuditEventSummary[];
+  pagination: Pagination;
+}
+
+export interface AuditEventResponse {
+  event: AuditEventDetail;
+}
+
+export interface AuditListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  category?: "all" | AuditCategory;
+  outcome?: "all" | AuditOutcome;
+  action?: string;
+  resourceType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export interface StatsResponse {
   totalTranscripts: number;
   uploaded: number;

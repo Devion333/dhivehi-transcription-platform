@@ -37,6 +37,7 @@ func APIAdminCreateUser(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "admin.user_created", Category: "user_management", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"targetUserId": user.ID, "targetRole": user.Role}})
 	c.JSON(http.StatusCreated, dtos.AdminUserResponse{User: user})
 }
 
@@ -59,20 +60,31 @@ func APIAdminUpdateUser(c *gin.Context) {
 		writeUnauthenticated(c)
 		return
 	}
+	previous, _ := services.GetAdminUser(c.Request.Context(), c.Param("userId"))
 	user, err := services.UpdateAdminUser(c.Request.Context(), actor.ID, c.Param("userId"), services.AdminUpdateUserInput{Name: request.Name, Role: request.Role})
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
+	changed := []string{}
+	if request.Name != nil {
+		changed = append(changed, "name")
+	}
+	if request.Role != nil {
+		changed = append(changed, "role")
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "admin.user_updated", Category: "user_management", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"targetUserId": user.ID, "changedFields": changed, "previousRole": previous.Role, "newRole": user.Role}})
 	c.JSON(http.StatusOK, dtos.AdminUserResponse{User: user})
 }
 
 func APIAdminActivateUser(c *gin.Context) {
+	previous, _ := services.GetAdminUser(c.Request.Context(), c.Param("userId"))
 	user, err := services.ActivateAdminUser(c.Request.Context(), c.Param("userId"))
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "admin.user_activated", Category: "user_management", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"targetUserId": user.ID, "previousActiveState": previous.IsActive, "newActiveState": user.IsActive}})
 	c.JSON(http.StatusOK, dtos.AdminUserResponse{User: user})
 }
 
@@ -82,11 +94,13 @@ func APIAdminDeactivateUser(c *gin.Context) {
 		writeUnauthenticated(c)
 		return
 	}
+	previous, _ := services.GetAdminUser(c.Request.Context(), c.Param("userId"))
 	user, err := services.DeactivateAdminUser(c.Request.Context(), actor.ID, c.Param("userId"))
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "admin.user_deactivated", Category: "user_management", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"targetUserId": user.ID, "previousActiveState": previous.IsActive, "newActiveState": user.IsActive, "sessionsRevoked": true}})
 	c.JSON(http.StatusOK, dtos.AdminUserResponse{User: user})
 }
 
@@ -95,10 +109,12 @@ func APIAdminResetUserPassword(c *gin.Context) {
 	if !decodeAdminJSON(c, &request) {
 		return
 	}
-	if err := services.ResetAdminUserPassword(c.Request.Context(), c.Param("userId"), request.NewPassword); err != nil {
+	userID := c.Param("userId")
+	if err := services.ResetAdminUserPassword(c.Request.Context(), userID, request.NewPassword); err != nil {
 		writeServiceError(c, err)
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "admin.password_reset", Category: "user_management", ResourceType: "user", ResourceID: userID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"targetUserId": userID, "sessionsRevoked": true}})
 	c.JSON(http.StatusOK, dtos.AuthMessageResponse{Message: "Password updated"})
 }
 
