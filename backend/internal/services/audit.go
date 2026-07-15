@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,12 +19,25 @@ import (
 )
 
 const (
-	AuditOutcomeSuccess = "success"
-	AuditOutcomeFailure = "failure"
-	maxAuditPageSize    = 100
-	maxAuditMetaBytes   = 4096
-	maxUserAgentLength  = 256
+	AuditOutcomeSuccess       = "success"
+	AuditOutcomeFailure       = "failure"
+	maxAuditPageSize          = 100
+	maxAuditMetaBytes         = 4096
+	maxUserAgentLength        = 256
+	DefaultAuditRetentionDays = 365
+	MinAuditRetentionDays     = 30
+	MaxAuditRetentionDays     = 3650
+	DefaultAuditCleanupBatch  = 500
 )
+
+type AuditCleanupResult struct {
+	Cutoff        time.Time
+	EligibleCount int
+	DeletedCount  int
+	DryRun        bool
+	RetentionDays int
+	BatchSize     int
+}
 
 type AuditEventInput struct {
 	Actor        *dtos.AuthUser
@@ -204,6 +219,58 @@ func GetAuditEvent(ctx context.Context, eventID string) (dtos.AuditEventDetail, 
 		return dtos.AuditEventDetail{}, err
 	}
 	return auditDetailDTO(record), nil
+}
+
+func AuditRetentionDaysFromEnv() (int, error) {
+	return ParseAuditRetentionDays(os.Getenv("AUDIT_RETENTION_DAYS"))
+}
+
+func ParseAuditRetentionDays(value string) (int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return DefaultAuditRetentionDays, nil
+	}
+	days, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("AUDIT_RETENTION_DAYS must be an integer")
+	}
+	if days < MinAuditRetentionDays || days > MaxAuditRetentionDays {
+		return 0, fmt.Errorf("AUDIT_RETENTION_DAYS must be between %d and %d", MinAuditRetentionDays, MaxAuditRetentionDays)
+	}
+	return days, nil
+}
+
+func DeleteAuditEventsBefore(ctx context.Context, cutoff time.Time, batchSize int, dryRun bool, retentionDays int) (AuditCleanupResult, error) {
+	if batchSize < 1 {
+		batchSize = DefaultAuditCleanupBatch
+	}
+	cutoff = cutoff.UTC()
+	result := AuditCleanupResult{Cutoff: cutoff, DryRun: dryRun, RetentionDays: retentionDays, BatchSize: batchSize}
+	if err := Database.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_events WHERE created_at < $1`, cutoff).Scan(&result.EligibleCount); err != nil {
+		return AuditCleanupResult{}, err
+	}
+	if dryRun || result.EligibleCount == 0 {
+		return result, nil
+	}
+	for {
+		exec, err := Database.ExecContext(ctx, `WITH doomed AS (SELECT id FROM audit_events WHERE created_at < $1 ORDER BY created_at ASC, id ASC LIMIT $2 FOR UPDATE SKIP LOCKED) DELETE FROM audit_events WHERE id IN (SELECT id FROM doomed)`, cutoff, batchSize)
+		if err != nil {
+			return AuditCleanupResult{}, err
+		}
+		deleted, err := exec.RowsAffected()
+		if err != nil {
+			return AuditCleanupResult{}, err
+		}
+		result.DeletedCount += int(deleted)
+		if deleted < int64(batchSize) {
+			break
+		}
+	}
+	return result, nil
+}
+
+func AuditRetentionCutoff(now time.Time, retentionDays int) time.Time {
+	return now.UTC().AddDate(0, 0, -retentionDays)
 }
 
 func validateAuditEvent(input AuditEventInput) error {

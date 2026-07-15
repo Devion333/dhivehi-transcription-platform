@@ -2,9 +2,9 @@ package services
 
 import (
 	"context"
-	"regexp"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -112,5 +112,87 @@ func TestAuditFilterValidation(t *testing.T) {
 	_ = withMockDatabase(t)
 	if _, err := ListAuditEvents(context.Background(), AuditFilters{Outcome: "maybe"}); err == nil {
 		t.Fatal("expected invalid outcome")
+	}
+}
+
+func TestParseAuditRetentionDays(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{name: "default", value: "", want: DefaultAuditRetentionDays},
+		{name: "custom", value: "730", want: 730},
+		{name: "minimum", value: "30", want: 30},
+		{name: "maximum", value: "3650", want: 3650},
+		{name: "too low", value: "29", wantErr: true},
+		{name: "too high", value: "3651", wantErr: true},
+		{name: "not numeric", value: "year", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseAuditRetentionDays(tt.value)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("got %d want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuditRetentionCutoffUsesUTC(t *testing.T) {
+	now := time.Date(2026, 7, 15, 10, 30, 0, 0, time.FixedZone("offset", 2*60*60))
+	cutoff := AuditRetentionCutoff(now, 365)
+	if cutoff.Location() != time.UTC {
+		t.Fatalf("cutoff should be UTC: %s", cutoff.Location())
+	}
+	if cutoff.Format(time.RFC3339) != "2025-07-15T08:30:00Z" {
+		t.Fatalf("unexpected cutoff %s", cutoff.Format(time.RFC3339))
+	}
+}
+
+func TestDeleteAuditEventsBeforeDryRunCountsOnly(t *testing.T) {
+	mock := withMockDatabase(t)
+	cutoff := time.Date(2025, 7, 15, 0, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM audit_events WHERE created_at < $1`)).
+		WithArgs(cutoff).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(12))
+	result, err := DeleteAuditEventsBefore(context.Background(), cutoff, 500, true, 365)
+	if err != nil {
+		t.Fatalf("DeleteAuditEventsBefore failed: %v", err)
+	}
+	if result.EligibleCount != 12 || result.DeletedCount != 0 || !result.DryRun {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeleteAuditEventsBeforeDeletesInBatches(t *testing.T) {
+	mock := withMockDatabase(t)
+	cutoff := time.Date(2025, 7, 15, 0, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM audit_events WHERE created_at < $1`)).
+		WithArgs(cutoff).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(503))
+	deleteSQL := regexp.QuoteMeta(`WITH doomed AS (SELECT id FROM audit_events WHERE created_at < $1 ORDER BY created_at ASC, id ASC LIMIT $2 FOR UPDATE SKIP LOCKED) DELETE FROM audit_events WHERE id IN (SELECT id FROM doomed)`)
+	mock.ExpectExec(deleteSQL).WithArgs(cutoff, 500).WillReturnResult(sqlmock.NewResult(0, 500))
+	mock.ExpectExec(deleteSQL).WithArgs(cutoff, 500).WillReturnResult(sqlmock.NewResult(0, 3))
+	result, err := DeleteAuditEventsBefore(context.Background(), cutoff, 500, false, 365)
+	if err != nil {
+		t.Fatalf("DeleteAuditEventsBefore failed: %v", err)
+	}
+	if result.EligibleCount != 503 || result.DeletedCount != 503 || result.DryRun {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }

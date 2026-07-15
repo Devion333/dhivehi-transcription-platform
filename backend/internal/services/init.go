@@ -54,6 +54,20 @@ func InitializeServices() error {
 }
 
 func initDatabase(ctx context.Context) error {
+	if err := OpenDatabase(ctx); err != nil {
+		return err
+	}
+	if err := RunMigrations(ctx, Database); err != nil {
+		return err
+	}
+	if err := BootstrapInitialAdmin(ctx); err != nil {
+		return err
+	}
+	log.Println("✅ Database connection established")
+	return nil
+}
+
+func OpenDatabase(ctx context.Context) error {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		databaseURL = "postgres://transcript:transcript_dev_password@postgres:5432/transcript_app?sslmode=disable"
@@ -69,13 +83,6 @@ func initDatabase(ctx context.Context) error {
 	if err := Database.PingContext(ctx); err != nil {
 		return err
 	}
-	if err := RunMigrations(ctx, Database); err != nil {
-		return err
-	}
-	if err := BootstrapInitialAdmin(ctx); err != nil {
-		return err
-	}
-	log.Println("✅ Database connection established")
 	return nil
 }
 

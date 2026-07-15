@@ -536,6 +536,8 @@ Success: `200 OK`
 
 Ordering is newest first: `createdAt DESC`, then stable event ID fallback.
 
+Audit APIs are read-only. There is no browser-accessible audit deletion, edit, clear, or retention-cleanup endpoint.
+
 ## GET /api/admin/audit/{eventId}
 
 Authentication: required, role `admin`.
@@ -543,6 +545,8 @@ Authentication: required, role `admin`.
 Success: `200 OK`
 
 Returns `{ "event": AuditEventDetail }`. Missing or invalid IDs return `AUDIT_EVENT_NOT_FOUND`.
+
+Audit retention is handled only by explicit backend maintenance command execution, not by this API surface.
 
 ## POST /api/audit/pdf-export
 
