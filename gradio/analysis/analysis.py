@@ -1,7 +1,9 @@
 import os
 import json
 import google.generativeai as genai
+import redis
 from flask import Flask, request, jsonify
+from worker_heartbeat import start_heartbeat
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 if not GEMINI_API_KEY:
@@ -30,6 +32,11 @@ Transcript:
 {transcript}"""
 
 app = Flask(__name__)
+
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+start_heartbeat(redis_client, "analysis", modelName="gemini-2.5-flash")
 
 
 def call_gemini(transcript_text: str) -> dict:

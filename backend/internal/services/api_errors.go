@@ -32,6 +32,7 @@ const (
 	ErrCodeJobAlreadyQueued     = "JOB_ALREADY_QUEUED"
 	ErrCodeJobRetryLimitReached = "JOB_RETRY_LIMIT_REACHED"
 	ErrCodeJobQueueUnavailable  = "JOB_QUEUE_UNAVAILABLE"
+	ErrCodeWorkerUnavailable    = "WORKER_UNAVAILABLE"
 )
 
 var (

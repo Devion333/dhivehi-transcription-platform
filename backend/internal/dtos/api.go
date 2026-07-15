@@ -173,13 +173,19 @@ type QueueCounts struct {
 	Failed     int `json:"failed"`
 }
 
+type WorkerHealthSummary struct {
+	Status          string  `json:"status"`
+	Instances       int     `json:"instances"`
+	LastHeartbeatAt *string `json:"lastHeartbeatAt"`
+}
+
 type AdminJobHealthResponse struct {
-	Backend string                 `json:"backend"`
-	Redis   string                 `json:"redis"`
-	Qdrant  string                 `json:"qdrant"`
-	Minio   string                 `json:"minio"`
-	Queues  map[string]QueueCounts `json:"queues"`
-	Workers map[string]string      `json:"workers"`
+	Backend string                         `json:"backend"`
+	Redis   string                         `json:"redis"`
+	Qdrant  string                         `json:"qdrant"`
+	Minio   string                         `json:"minio"`
+	Queues  map[string]QueueCounts         `json:"queues"`
+	Workers map[string]WorkerHealthSummary `json:"workers"`
 }
 
 type Pagination struct {

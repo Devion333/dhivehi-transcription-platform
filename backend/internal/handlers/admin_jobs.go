@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -64,7 +65,7 @@ func APIAdminRetryJob(c *gin.Context) {
 	if stage == services.JobStageAnalysis {
 		job, err := retryAnalysisJob(c, jobID, before)
 		if err != nil {
-			auditRequestEvent(c, services.AuditEventInput{Action: "admin.job_retry_failed", Category: "job_management", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: retryAuditMetadata(jobID, stage, before.Status, "", before.RetryCount, before.FailureCode)})
+			auditRequestEvent(c, services.AuditEventInput{Action: "admin.job_retry_failed", Category: "job_management", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: retryAuditMetadata(jobID, stage, before.Status, "", before.RetryCount, retryFailureCode(err, before.FailureCode))})
 			writeServiceError(c, err)
 			return
 		}
@@ -74,7 +75,7 @@ func APIAdminRetryJob(c *gin.Context) {
 	}
 	job, err := services.RetryAdminJob(c.Request.Context(), jobID, request.Stage)
 	if err != nil {
-		auditRequestEvent(c, services.AuditEventInput{Action: "admin.job_retry_failed", Category: "job_management", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: retryAuditMetadata(jobID, stage, before.Status, "", before.RetryCount, before.FailureCode)})
+		auditRequestEvent(c, services.AuditEventInput{Action: "admin.job_retry_failed", Category: "job_management", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: retryAuditMetadata(jobID, stage, before.Status, "", before.RetryCount, retryFailureCode(err, before.FailureCode))})
 		writeServiceError(c, err)
 		return
 	}
@@ -88,6 +89,9 @@ func retryAnalysisJob(c *gin.Context, jobID string, before dtos.AdminJobDetail) 
 	}
 	if before.QueueState.Queued || before.QueueState.Processing {
 		return dtos.AdminJobDetail{}, services.NewJobAlreadyQueuedError()
+	}
+	if services.WorkerAvailability(c.Request.Context(), services.JobStageAnalysis) == services.WorkerAvailabilityUnavailable {
+		return dtos.AdminJobDetail{}, services.NewWorkerUnavailableError()
 	}
 	result, analysisErr := runTranscriptAnalysis(jobID)
 	if analysisErr != nil {
@@ -108,6 +112,14 @@ func APIAdminJobHealth(c *gin.Context) {
 
 func retryAuditMetadata(jobID, stage, previousStatus, newStatus string, retryCount int, failureCode string) map[string]interface{} {
 	return map[string]interface{}{"jobId": jobID, "stage": stage, "previousStatus": previousStatus, "newStatus": newStatus, "retryCount": retryCount, "failureCode": failureCode}
+}
+
+func retryFailureCode(err error, fallback string) string {
+	var serviceErr *services.ServiceError
+	if errors.As(err, &serviceErr) && serviceErr.Code == services.ErrCodeWorkerUnavailable {
+		return services.ErrCodeWorkerUnavailable
+	}
+	return fallback
 }
 
 func parseBoolQuery(value string) bool {

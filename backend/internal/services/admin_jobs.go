@@ -131,6 +131,9 @@ func RetryAdminJob(ctx context.Context, jobID, requestedStage string) (dtos.Admi
 	if retryCount >= workerMaxAttempts {
 		return dtos.AdminJobSummary{}, newServiceError(ErrCodeJobRetryLimitReached, errors.New("job retry limit reached"))
 	}
+	if WorkerAvailability(ctx, stage) == WorkerAvailabilityUnavailable {
+		return dtos.AdminJobSummary{}, newServiceError(ErrCodeWorkerUnavailable, errors.New("target worker is unavailable"))
+	}
 	if stage == JobStageAnalysis {
 		return dtos.AdminJobSummary{}, newServiceError(ErrCodeJobNotRetryable, errors.New("analysis retry uses the existing analysis endpoint"))
 	}
@@ -154,7 +157,7 @@ func RetryAdminJob(ctx context.Context, jobID, requestedStage string) (dtos.Admi
 }
 
 func GetAdminJobHealth(ctx context.Context) dtos.AdminJobHealthResponse {
-	response := dtos.AdminJobHealthResponse{Backend: "healthy", Redis: "healthy", Qdrant: "healthy", Minio: "healthy", Queues: map[string]dtos.QueueCounts{}, Workers: map[string]string{JobStageConversion: "unknown", JobStageDiarization: "unknown", JobStageTranscription: "unknown", JobStageAnalysis: "unknown"}}
+	response := dtos.AdminJobHealthResponse{Backend: "healthy", Redis: "healthy", Qdrant: "healthy", Minio: "healthy", Queues: map[string]dtos.QueueCounts{}, Workers: GetWorkerAvailabilitySummary(ctx)}
 	if err := CheckRedisReady(ctx); err != nil {
 		response.Redis = "unavailable"
 	}
@@ -184,6 +187,10 @@ func NewJobAlreadyQueuedError() error {
 
 func NewJobNotRetryableError(err error) error {
 	return newServiceError(ErrCodeJobNotRetryable, err)
+}
+
+func NewWorkerUnavailableError() error {
+	return newServiceError(ErrCodeWorkerUnavailable, errors.New("target worker is unavailable"))
 }
 
 func IsJobQueued(ctx context.Context, stage, jobID string) bool {

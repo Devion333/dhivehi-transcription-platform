@@ -61,10 +61,11 @@ models/
 AGENTS.md
 
 # Docker compose dev file
-compose.dev.yml
+!compose.dev.yml
 
 # Mock workers (entire folder)
-mock_workers/
+!mock_workers/
+!mock_workers/**
 
 # Gradio outputs (if generated data)
 gradio/analysis/outputs/

@@ -636,7 +636,7 @@ If omitted, the backend derives the stage from current failed state. The browser
 
 Retryable stages: `conversion_failed`, `diarization_failed`, failed transcription segments or `transcription_failed`, and `analysis_failed`/analysis status `failed`.
 
-Conflict errors include `JOB_NOT_FAILED`, `JOB_NOT_RETRYABLE`, `JOB_ALREADY_QUEUED`, `JOB_RETRY_LIMIT_REACHED`, and `JOB_QUEUE_UNAVAILABLE`.
+Conflict errors include `JOB_NOT_FAILED`, `JOB_NOT_RETRYABLE`, `JOB_ALREADY_QUEUED`, `JOB_RETRY_LIMIT_REACHED`, `JOB_QUEUE_UNAVAILABLE`, and `WORKER_UNAVAILABLE`.
 
 Conversion, diarization, and transcription retry enqueue reconstructed existing worker payloads through focused backend code. Analysis retry calls the existing synchronous analysis flow and does not publish to Redis.
 
@@ -658,15 +658,15 @@ Returns safe dependency and queue counts:
     "transcription": { "queued": 0, "processing": 0, "failed": 0 }
   },
   "workers": {
-    "conversion": "unknown",
-    "diarization": "unknown",
-    "transcription": "unknown",
-    "analysis": "unknown"
+    "conversion": { "status": "available", "instances": 1, "lastHeartbeatAt": "2026-07-16T12:00:00Z" },
+    "diarization": { "status": "available", "instances": 1, "lastHeartbeatAt": "2026-07-16T12:00:00Z" },
+    "transcription": { "status": "available", "instances": 1, "lastHeartbeatAt": "2026-07-16T12:00:00Z" },
+    "analysis": { "status": "unknown", "instances": 0, "lastHeartbeatAt": null }
   }
 }
 ```
 
-Worker state remains `unknown` unless a reliable worker signal exists. Internal service URLs are not returned.
+Worker `status` is one of `available`, `unavailable`, or `unknown`. Backend reads Redis heartbeat keys shaped as `worker_heartbeat:<workerType>:<instanceId>` via per-type Redis sets, not `KEYS *`. A missing fresh heartbeat for an expected worker is `unavailable`; Redis read failure or non-expected workers are `unknown`. Internal service URLs are not returned.
 
 ## POST /api/audit/pdf-export
 

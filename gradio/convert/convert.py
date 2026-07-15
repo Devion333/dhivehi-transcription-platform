@@ -7,6 +7,7 @@ import tempfile
 import subprocess
 from datetime import datetime
 from minio import Minio
+from worker_heartbeat import start_heartbeat
 
 # =========================
 # Environment & Setup
@@ -30,6 +31,7 @@ minio_client = Minio(
 )
 
 print("✅ Connected to MinIO and Redis")
+start_heartbeat(r, "conversion")
 
 # Dagster integration 
 DAGSTER_ENABLED = os.getenv("DAGSTER_ENABLED", "false").lower() == "true"

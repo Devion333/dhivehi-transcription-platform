@@ -9,6 +9,7 @@ from transformers import WhisperProcessor, WhisperForConditionalGeneration
 import librosa
 import tempfile
 import noisereduce as nr
+from worker_heartbeat import start_heartbeat
 
 # =========================
 # Environment & Setup
@@ -87,6 +88,7 @@ model.eval()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = model.to(device)
 print(f"✅ Whisper model loaded from {model_path} on {device}")
+start_heartbeat(r, "transcription", device=device, modelName=model_path)
 
 # =========================
 # Helper Functions

@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getAdminJob, getAdminJobHealth, getAdminJobs, retryAdminJob } from "@/lib/api/admin-jobs";
 import { ApiError } from "@/lib/api/client";
-import type { AdminJobDetail, AdminJobHealthResponse, AdminJobSummary, Pagination } from "@/lib/api/types";
+import type { AdminJobDetail, AdminJobHealthResponse, AdminJobSummary, Pagination, WorkerHealthSummary } from "@/lib/api/types";
 import { adminJobStages, adminJobStatuses, adminJobsPageSize, buildAdminJobsPath, canRetryJob, formatJobDate, jobStatusLabel, normalizeAdminJobDate, normalizeAdminJobPage, normalizeAdminJobSearch, normalizeAdminJobStage, normalizeAdminJobStatus, retryCopy, stageLabel, toJobRFC3339Date } from "@/lib/admin-jobs-utils";
 
 type ListState = { items: AdminJobSummary[]; pagination: Pagination | null };
@@ -119,11 +119,16 @@ export function AdminJobsClient() {
 
 function HealthSummary({ health }: { health: AdminJobHealthResponse | null }) {
   if (!health) return null;
-  return <div className="mb-5 grid gap-3 md:grid-cols-4"><HealthCard label="Redis" value={health.redis} /><HealthCard label="Qdrant" value={health.qdrant} /><HealthCard label="MinIO" value={health.minio} /><Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Queues</p><p className="mt-1 text-sm">{Object.entries(health.queues).map(([name, counts]) => `${stageLabel(name)} ${counts.queued}/${counts.processing}/${counts.failed}`).join(" · ")}</p></CardContent></Card></div>;
+  return <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><HealthCard label="Redis" value={health.redis} /><HealthCard label="Qdrant" value={health.qdrant} /><HealthCard label="MinIO" value={health.minio} /><Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Queues</p><p className="mt-1 text-sm">{Object.entries(health.queues).map(([name, counts]) => `${stageLabel(name)} ${counts.queued}/${counts.processing}/${counts.failed}`).join(" · ")}</p></CardContent></Card><Card className="md:col-span-2 xl:col-span-4"><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Workers</p><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(health.workers).map(([name, worker]) => <WorkerHealth key={name} name={name} worker={worker} />)}</div></CardContent></Card></div>;
 }
 
 function HealthCard({ label, value }: { label: string; value: string }) {
   return <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 font-medium">{value}</p></CardContent></Card>;
+}
+
+function WorkerHealth({ name, worker }: { name: string; worker: WorkerHealthSummary }) {
+  const variant = worker.status === "available" ? "secondary" : worker.status === "unavailable" ? "destructive" : "outline";
+  return <div className="rounded-lg border p-3 text-sm"><div className="flex items-center justify-between gap-2"><span className="font-medium">{stageLabel(name)}</span><Badge variant={variant}>{worker.status}</Badge></div><p className="mt-2 text-muted-foreground">{worker.instances} active {worker.instances === 1 ? "instance" : "instances"}</p>{worker.lastHeartbeatAt && <p className="mt-1 text-xs text-muted-foreground">Last heartbeat {formatJobDate(worker.lastHeartbeatAt)}</p>}</div>;
 }
 
 function JobTable({ items, onDetail, onRetry }: JobActionsProps) {

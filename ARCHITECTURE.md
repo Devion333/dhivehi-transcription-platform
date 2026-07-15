@@ -29,7 +29,7 @@ All Compose services use a bridge network named `app_network`. Persistent named 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `minio` | image `minio/minio:latest` | MinIO | `server /data --console-address ":9001"` | `9000`, `9001` | both | no | Object storage for uploaded and converted files. |
 | `qdrant` | image `qdrant/qdrant:latest` | Qdrant | image default | `6333`, `6334` | both | no | Vector/metadata store, collection `file_metadata`. |
-| `redis` | image `redis:7` | Redis | image default | `6379` | both | no | Pipeline queues. |
+| `redis` | image `redis:7` | Redis | image default | `6379` | both | no | Pipeline queues and worker heartbeat keys. |
 | `backend` | `backend/` | Go 1.24 image, module Go 1.23/toolchain 1.24.7 | `./backend` from `cmd/backend/main.go` | `8000` | both | no | Upload API, service initialization, analysis orchestration. |
 | `gradio_convert` | `gradio/convert/` | Python 3.10 | `python -u convert.py` | `7860` exposed in Compose, app is a worker not HTTP server | prod-style only | no | Converts video files to mono 16 kHz WAV or forwards audio. |
 | `gradio_diarization` | `gradio/diarization/` | Python 3.10, pyannote | `python -u diarization.py` | none | prod-style only | likely GPU useful, not configured | Loads pyannote and creates segment jobs. |
@@ -62,6 +62,8 @@ Mounted volumes: none.
 `gradio_transcription` loads model `Devion333/whisper-small-dv-syn` at process startup, falling back from `AutoProcessor`/`AutoModelForSpeechSeq2Seq` to Whisper-specific classes. It selects `cuda` if `torch.cuda.is_available()` else CPU. It atomically moves jobs from `transcription_queue` to `transcription_processing_queue`, downloads full audio for each segment, extracts the segment with `librosa`, applies `noisereduce`, transcribes, updates Qdrant, and marks the parent `transcribed` only after a paginated segment completion check succeeds. Failed jobs are retried and then moved to `transcription_failed_queue`.
 
 `analysis` exposes Flask endpoints `POST /run/predict` and `GET /health`. It calls Gemini model `gemini-2.5-flash` when `GEMINI_API_KEY` is present, otherwise returns a fallback result.
+
+Workers publish ephemeral Redis heartbeat keys as `worker_heartbeat:<workerType>:<instanceId>` and register those keys in `worker_heartbeat_keys:<workerType>`. The admin jobs health endpoint reads those keys to report worker availability without scanning Redis with `KEYS *`.
 
 ## Storage Inventory
 

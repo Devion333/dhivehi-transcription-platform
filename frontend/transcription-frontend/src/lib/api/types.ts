@@ -215,13 +215,19 @@ export interface QueueCounts {
   failed: number;
 }
 
+export interface WorkerHealthSummary {
+  status: "available" | "unavailable" | "unknown";
+  instances: number;
+  lastHeartbeatAt?: string | null;
+}
+
 export interface AdminJobHealthResponse {
   backend: string;
   redis: string;
   qdrant: string;
   minio: string;
   queues: Record<string, QueueCounts>;
-  workers: Record<string, string>;
+  workers: Record<string, WorkerHealthSummary>;
 }
 
 export interface StatsResponse {

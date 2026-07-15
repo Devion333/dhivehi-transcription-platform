@@ -47,6 +47,9 @@ services:
       MINIO_SECRET_KEY: "minio123"
       DAGSTER_ENABLED: "true"
       DAGSTER_API_URL: "http://dagster:3000"
+      WORKER_INSTANCE_ID: gradio_convert
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
     networks:
       - app_network
 
@@ -66,6 +69,9 @@ services:
       HUGGINGFACE_ACCESS_TOKEN: ${HUGGINGFACE_ACCESS_TOKEN}
       DAGSTER_ENABLED: "true"
       DAGSTER_API_URL: "http://dagster:3000"
+      WORKER_INSTANCE_ID: gradio_diarization
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
 
     volumes:
       - ./gradio/diarization/outputs:/app/outputs
@@ -92,6 +98,9 @@ services:
       MINIO_SECRET_KEY: "minio123"
       DAGSTER_ENABLED: "true"
       DAGSTER_API_URL: "http://dagster:3000"
+      WORKER_INSTANCE_ID: gradio_transcription
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
       HF_HOME: /root/.cache/huggingface
       TRANSFORMERS_OFFLINE: "1"
       HF_HUB_OFFLINE: "1"
@@ -122,6 +131,9 @@ services:
       MINIO_SECRET_KEY: "minio123"
       MINIO_PUBLIC_URL: "http://localhost:9000"
       QDRANT_HOST: "http://qdrant:6333"
+      EXPECTED_WORKERS: ${EXPECTED_WORKERS:-conversion,diarization,transcription,analysis}
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
     depends_on:
       - minio
     networks:

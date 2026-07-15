@@ -64,6 +64,8 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job retry limit has been reached", nil)
 		case services.ErrCodeJobQueueUnavailable:
 			writeAPIError(c, http.StatusServiceUnavailable, serviceErr.Code, "Job queue is unavailable", nil)
+		case services.ErrCodeWorkerUnavailable:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Worker is unavailable", nil)
 		case services.ErrCodeUpstream:
 			log.Printf("upstream service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "A backend dependency failed", nil)

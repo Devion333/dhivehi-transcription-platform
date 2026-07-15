@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSafeFailureMessageRedactsInternals(t *testing.T) {
@@ -73,5 +74,35 @@ func TestAuditMetadataAllowsJobRetryActions(t *testing.T) {
 	}
 	if metadata["jobId"] != "job-1" || metadata["stage"] != "transcription" {
 		t.Fatalf("unexpected metadata: %#v", metadata)
+	}
+}
+
+func TestParseExpectedWorkersDefaultsAndFilters(t *testing.T) {
+	defaults := ParseExpectedWorkers("")
+	for _, workerType := range []string{JobStageConversion, JobStageDiarization, JobStageTranscription, JobStageAnalysis} {
+		if !defaults[workerType] {
+			t.Fatalf("expected default worker %q", workerType)
+		}
+	}
+	parsed := ParseExpectedWorkers("conversion,unknown, analysis ")
+	if !parsed[JobStageConversion] || !parsed[JobStageAnalysis] || parsed["unknown"] || parsed[JobStageDiarization] {
+		t.Fatalf("unexpected parsed workers: %#v", parsed)
+	}
+}
+
+func TestSummarizeWorkerHeartbeatsAvailability(t *testing.T) {
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	fresh := now.Add(-10 * time.Second).Format(time.RFC3339)
+	stale := now.Add(-2 * time.Minute).Format(time.RFC3339)
+	summary := summarizeWorkerHeartbeats([]WorkerHeartbeatRecord{
+		{WorkerType: JobStageConversion, InstanceID: "one", Status: WorkerAvailabilityAvailable, LastHeartbeatAt: stale},
+		{WorkerType: JobStageConversion, InstanceID: "two", Status: WorkerAvailabilityAvailable, LastHeartbeatAt: fresh},
+	}, time.Minute, now)
+	if summary.Status != WorkerAvailabilityAvailable || summary.Instances != 1 || summary.LastHeartbeatAt == nil || *summary.LastHeartbeatAt != fresh {
+		t.Fatalf("unexpected available summary: %#v", summary)
+	}
+	unavailable := summarizeWorkerHeartbeats([]WorkerHeartbeatRecord{{WorkerType: JobStageConversion, InstanceID: "one", Status: WorkerAvailabilityAvailable, LastHeartbeatAt: stale}}, time.Minute, now)
+	if unavailable.Status != WorkerAvailabilityUnavailable || unavailable.Instances != 0 || unavailable.LastHeartbeatAt != nil {
+		t.Fatalf("unexpected unavailable summary: %#v", unavailable)
 	}
 }
