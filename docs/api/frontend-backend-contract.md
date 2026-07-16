@@ -55,7 +55,7 @@ JSON style: camelCase for frontend-facing request and response bodies.
 
 Common error codes: `bad_request`, `not_found`, `conflict`, `validation_error`, `upstream_unavailable`, `internal_error`.
 
-Auth error codes are uppercase in the implemented auth handlers: `UNAUTHENTICATED`, `FORBIDDEN`, `RATE_LIMITED`. Unauthenticated protected requests return `401`; role failures return `403`.
+Auth error codes are uppercase in the implemented auth handlers: `UNAUTHENTICATED`, `FORBIDDEN`, `TOO_MANY_LOGIN_ATTEMPTS`. Unauthenticated protected requests return `401`; role failures return `403`.
 
 ## Authentication
 
@@ -293,7 +293,11 @@ Errors:
 | --- | --- | --- |
 | `400` | `BAD_REQUEST` | Request body is not valid JSON. |
 | `401` | `UNAUTHENTICATED` | Invalid email/password or inactive user. |
-| `429` | `RATE_LIMITED` | Too many attempts for the same IP/email window. |
+| `429` | `TOO_MANY_LOGIN_ATTEMPTS` | Too many failed attempts for the same IP/email window. |
+
+Failed login attempts are limited to 5 per normalized identifier and IP within 15 minutes. Successful login clears the relevant counter. Redis is used when available, with a local fail-open fallback if Redis is unavailable.
+
+State-changing browser requests must come from the configured frontend origin. The backend validates `Origin` or, when `Origin` is absent, `Referer` for `POST`, `PATCH`, and future `DELETE` requests. Non-browser/internal requests without either header remain allowed.
 
 ## POST /api/auth/logout
 

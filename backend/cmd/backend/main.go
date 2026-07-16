@@ -2,8 +2,10 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"strings"
+	"transcript_app/backend/internal/dtos"
 	"transcript_app/backend/internal/handlers"
 	"transcript_app/backend/internal/services"
 
@@ -30,6 +32,10 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
+			return
+		}
+		if requiresTrustedBrowserOrigin(c.Request.Method) && !isTrustedBrowserOrigin(c.Request.Header.Get("Origin"), c.Request.Header.Get("Referer")) {
+			c.AbortWithStatusJSON(http.StatusForbidden, dtos.APIErrorBody{Error: dtos.APIError{Code: services.ErrCodeForbidden, Message: "You do not have permission to perform this action", Details: nil}})
 			return
 		}
 		c.Next()
@@ -87,17 +93,53 @@ func main() {
 }
 
 func isAllowedOrigin(origin string) bool {
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
 	if origin == "" {
 		return false
 	}
-	allowed := strings.Split(os.Getenv("FRONTEND_ORIGIN"), ",")
-	if len(allowed) == 1 && strings.TrimSpace(allowed[0]) == "" {
-		allowed = []string{"http://localhost:3000"}
-	}
-	for _, item := range allowed {
-		if strings.TrimSpace(item) == origin {
+	for _, item := range allowedOrigins() {
+		if item == origin {
 			return true
 		}
 	}
 	return false
+}
+
+func requiresTrustedBrowserOrigin(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func isTrustedBrowserOrigin(origin, referer string) bool {
+	if origin != "" {
+		return isAllowedOrigin(origin)
+	}
+	if referer == "" {
+		return true
+	}
+	for _, allowed := range allowedOrigins() {
+		if strings.HasPrefix(referer, allowed+"/") || referer == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func allowedOrigins() []string {
+	configured := strings.Split(os.Getenv("FRONTEND_ORIGIN"), ",")
+	if len(configured) == 1 && strings.TrimSpace(configured[0]) == "" {
+		configured = []string{"http://localhost:3000"}
+	}
+	allowed := []string{}
+	for _, item := range configured {
+		item = strings.TrimRight(strings.TrimSpace(item), "/")
+		if item != "" {
+			allowed = append(allowed, item)
+		}
+	}
+	return allowed
 }

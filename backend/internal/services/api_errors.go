@@ -13,7 +13,7 @@ const (
 	ErrCodeForbidden            = "FORBIDDEN"
 	ErrCodeInvalidCredentials   = "INVALID_CREDENTIALS"
 	ErrCodeInactiveUser         = "INACTIVE_USER"
-	ErrCodeRateLimited          = "RATE_LIMITED"
+	ErrCodeRateLimited          = "TOO_MANY_LOGIN_ATTEMPTS"
 	ErrCodeSearchQueryRequired  = "SEARCH_QUERY_REQUIRED"
 	ErrCodeSearchUnavailable    = "SEARCH_UNAVAILABLE"
 	ErrCodeInvalidUserInput     = "INVALID_USER_INPUT"

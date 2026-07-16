@@ -97,7 +97,7 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 	segments, err := services.ScrollSegmentsByParent(jobID)
 	if err != nil {
 		log.Printf("Failed to fetch segments for %s: %v", jobID, err)
-		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeInternal, message: fmt.Sprintf("failed to fetch segments: %v", err), err: err}
+		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeInternal, message: "Failed to fetch transcript segments", err: err}
 	}
 
 	if len(segments) == 0 {
@@ -133,7 +133,7 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 	resp, err := http.Post("http://analysis:7861/run/predict", "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
 		log.Printf("Failed to call analysis service for %s: %v", jobID, err)
-		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: fmt.Sprintf("analysis service unavailable: %v", err), err: err}
+		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: "Analysis service is unavailable", err: err}
 	}
 	defer resp.Body.Close()
 
@@ -144,8 +144,8 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 	}
 
 	if resp.StatusCode >= 300 {
-		log.Printf("Analysis service returned error %d for %s: %s", resp.StatusCode, jobID, string(respBody))
-		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: fmt.Sprintf("analysis service error: %s", string(respBody))}
+		log.Printf("Analysis service returned error %d for %s", resp.StatusCode, jobID)
+		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: "Analysis service returned an error"}
 	}
 
 	var analysisResp AnalysisResponse
@@ -160,7 +160,7 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 
 	var result AnalysisResult
 	if err := json.Unmarshal([]byte(analysisResp.Data[0]), &result); err != nil {
-		log.Printf("Failed to parse analysis JSON result for %s: %v - raw: %s", jobID, err, analysisResp.Data[0])
+		log.Printf("Failed to parse analysis JSON result for %s: %v", jobID, err)
 		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: "failed to parse analysis result", err: err}
 	}
 

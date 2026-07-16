@@ -12,6 +12,7 @@ export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 1_500_000;
 const PDF_TIMEOUT_MS = 45_000;
+const AUTH_CHECK_TIMEOUT_MS = 5_000;
 
 type RouteError = {
   status: number;
@@ -85,6 +86,7 @@ async function requireAuthenticated(request: NextRequest) {
     method: "GET",
     headers: { Cookie: cookie, Accept: "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(AUTH_CHECK_TIMEOUT_MS),
   });
   if (response.status === 401) throw routeError(401, "UNAUTHENTICATED", "Authentication is required");
   if (!response.ok) throw routeError(500, "AUTH_CHECK_FAILED", "Authentication check failed");

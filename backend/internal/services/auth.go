@@ -19,6 +19,7 @@ import (
 	"transcript_app/backend/internal/dtos"
 
 	"github.com/google/uuid"
+	redis "github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -28,6 +29,9 @@ const (
 	MinPasswordLength  = 10
 	defaultCookieName  = "transcript_session"
 	defaultSessionLife = 12 * time.Hour
+	loginAttemptLimit  = 5
+	loginAttemptWindow = 15 * time.Minute
+	lastSeenInterval   = 5 * time.Minute
 )
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
@@ -186,14 +190,15 @@ func AuthenticateSession(ctx context.Context, rawToken string) (dtos.AuthUser, e
 		return dtos.AuthUser{}, newServiceError(ErrCodeUnauthenticated, errors.New("missing session"))
 	}
 	row := Database.QueryRowContext(ctx, `
-		SELECT u.id, u.name, u.email, u.role, u.is_active
+		SELECT u.id, u.name, u.email, u.role, u.is_active, s.last_seen_at
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
 	`, HashSessionToken(rawToken))
 	var user dtos.AuthUser
 	var isActive bool
-	if err := row.Scan(&user.ID, &user.Name, &user.Email, &user.Role, &isActive); err != nil {
+	var lastSeenAt time.Time
+	if err := row.Scan(&user.ID, &user.Name, &user.Email, &user.Role, &isActive, &lastSeenAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return dtos.AuthUser{}, newServiceError(ErrCodeUnauthenticated, errors.New("invalid session"))
 		}
@@ -202,7 +207,9 @@ func AuthenticateSession(ctx context.Context, rawToken string) (dtos.AuthUser, e
 	if !isActive {
 		return dtos.AuthUser{}, newServiceError(ErrCodeUnauthenticated, errors.New("inactive user"))
 	}
-	_, _ = Database.ExecContext(ctx, `UPDATE sessions SET last_seen_at = NOW() WHERE token_hash = $1`, HashSessionToken(rawToken))
+	if time.Since(lastSeenAt) >= lastSeenInterval {
+		_, _ = Database.ExecContext(ctx, `UPDATE sessions SET last_seen_at = NOW() WHERE token_hash = $1`, HashSessionToken(rawToken))
+	}
 	return user, nil
 }
 
@@ -211,24 +218,27 @@ func Login(ctx context.Context, email, password, remoteAddr string) (dtos.AuthUs
 	if normalized == "" || password == "" {
 		return dtos.AuthUser{}, "", newServiceError(ErrCodeInvalidCredentials, ErrInvalidCredentials)
 	}
-	if !allowLoginAttempt(remoteAddr, normalized) {
+	if isLoginRateLimited(ctx, remoteAddr, normalized) {
 		return dtos.AuthUser{}, "", newServiceError(ErrCodeRateLimited, errors.New("too many login attempts"))
 	}
 
 	user, err := GetUserByEmail(ctx, normalized)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			recordFailedLoginAttempt(ctx, remoteAddr, normalized)
 			return dtos.AuthUser{}, "", newServiceError(ErrCodeInvalidCredentials, ErrInvalidCredentials)
 		}
 		return dtos.AuthUser{}, "", err
 	}
 	if !user.IsActive || !VerifyPassword(password, user.PasswordHash) {
+		recordFailedLoginAttempt(ctx, remoteAddr, normalized)
 		return dtos.AuthUser{}, "", newServiceError(ErrCodeInvalidCredentials, ErrInvalidCredentials)
 	}
 	token, _, err := CreateSession(ctx, user.ID)
 	if err != nil {
 		return dtos.AuthUser{}, "", err
 	}
+	clearLoginAttempts(ctx, remoteAddr, normalized)
 	_, _ = Database.ExecContext(ctx, `UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1`, user.ID)
 	return SafeUserDTO(user), token, nil
 }
@@ -318,24 +328,74 @@ var loginLimiter = struct {
 	Buckets map[string]loginBucket
 }{Buckets: map[string]loginBucket{}}
 
-func allowLoginAttempt(remoteAddr, email string) bool {
+func loginAttemptKey(remoteAddr, email string) string {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil || host == "" {
 		host = remoteAddr
 	}
-	key := host + "|" + email
+	return "login_attempt:" + host + ":" + HashAuditIdentifier(email)
+}
+
+func isLoginRateLimited(ctx context.Context, remoteAddr, email string) bool {
+	key := loginAttemptKey(remoteAddr, email)
+	if RedisClient != nil {
+		count, err := RedisClient.Get(ctx, key).Int()
+		if err == nil {
+			return count >= loginAttemptLimit
+		}
+		if err != redis.Nil {
+			return isLocalLoginRateLimited(key)
+		}
+		return false
+	}
+	return isLocalLoginRateLimited(key)
+}
+
+func recordFailedLoginAttempt(ctx context.Context, remoteAddr, email string) {
+	key := loginAttemptKey(remoteAddr, email)
+	if RedisClient != nil {
+		count, err := RedisClient.Incr(ctx, key).Result()
+		if err == nil {
+			if count == 1 {
+				_ = RedisClient.Expire(ctx, key, loginAttemptWindow).Err()
+			}
+			return
+		}
+	}
+	recordLocalFailedLoginAttempt(key)
+}
+
+func clearLoginAttempts(ctx context.Context, remoteAddr, email string) {
+	key := loginAttemptKey(remoteAddr, email)
+	if RedisClient != nil {
+		_ = RedisClient.Del(ctx, key).Err()
+	}
+	loginLimiter.Lock()
+	delete(loginLimiter.Buckets, key)
+	loginLimiter.Unlock()
+}
+
+func isLocalLoginRateLimited(key string) bool {
 	now := time.Now().UTC()
 	loginLimiter.Lock()
 	defer loginLimiter.Unlock()
 	bucket := loginLimiter.Buckets[key]
 	if now.After(bucket.ExpiresAt) {
-		loginLimiter.Buckets[key] = loginBucket{Count: 1, ExpiresAt: now.Add(5 * time.Minute)}
-		return true
-	}
-	if bucket.Count >= 10 {
+		delete(loginLimiter.Buckets, key)
 		return false
+	}
+	return bucket.Count >= loginAttemptLimit
+}
+
+func recordLocalFailedLoginAttempt(key string) {
+	now := time.Now().UTC()
+	loginLimiter.Lock()
+	defer loginLimiter.Unlock()
+	bucket := loginLimiter.Buckets[key]
+	if now.After(bucket.ExpiresAt) {
+		loginLimiter.Buckets[key] = loginBucket{Count: 1, ExpiresAt: now.Add(loginAttemptWindow)}
+		return
 	}
 	bucket.Count++
 	loginLimiter.Buckets[key] = bucket
-	return true
 }

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -12,10 +14,18 @@ import (
 )
 
 const authUserContextKey = "authUser"
+const authJSONMaxBytes = 32 << 10
 
 func APILogin(c *gin.Context) {
 	var request dtos.LoginRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, authJSONMaxBytes)
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Email and password are required", nil)
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Email and password are required", nil)
 		return
 	}

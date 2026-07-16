@@ -12,12 +12,17 @@ import (
 
 func withMockDatabase(t *testing.T) sqlmock.Sqlmock {
 	t.Helper()
+	RedisClient = nil
+	loginLimiter.Lock()
+	loginLimiter.Buckets = map[string]loginBucket{}
+	loginLimiter.Unlock()
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
 	t.Cleanup(func() {
 		Database = nil
+		RedisClient = nil
 		_ = db.Close()
 	})
 	Database = db
@@ -112,6 +117,58 @@ func TestAuthenticateSessionRejectsExpiredOrRevoked(t *testing.T) {
 	_, err := AuthenticateSession(context.Background(), "raw-token")
 	if err == nil {
 		t.Fatal("expected invalid session")
+	}
+}
+
+func TestAuthenticateSessionThrottlesLastSeenUpdate(t *testing.T) {
+	mock := withMockDatabase(t)
+	recent := time.Now().UTC().Add(-time.Minute)
+	mock.ExpectQuery("SELECT u.id, u.name, u.email, u.role, u.is_active, s.last_seen_at").
+		WithArgs(HashSessionToken("raw-token")).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "role", "is_active", "last_seen_at"}).
+			AddRow("user-id", "User", "user@example.com", "user", true, recent))
+	user, err := AuthenticateSession(context.Background(), "raw-token")
+	if err != nil || user.ID != "user-id" {
+		t.Fatalf("unexpected auth result: %#v err=%v", user, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAuthenticateSessionUpdatesStaleLastSeen(t *testing.T) {
+	mock := withMockDatabase(t)
+	stale := time.Now().UTC().Add(-10 * time.Minute)
+	mock.ExpectQuery("SELECT u.id, u.name, u.email, u.role, u.is_active, s.last_seen_at").
+		WithArgs(HashSessionToken("raw-token")).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "role", "is_active", "last_seen_at"}).
+			AddRow("user-id", "User", "user@example.com", "user", true, stale))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE sessions SET last_seen_at = NOW() WHERE token_hash = $1`)).
+		WithArgs(HashSessionToken("raw-token")).WillReturnResult(sqlmock.NewResult(1, 1))
+	_, err := AuthenticateSession(context.Background(), "raw-token")
+	if err != nil {
+		t.Fatalf("AuthenticateSession failed: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoginAttemptLimitAndClear(t *testing.T) {
+	RedisClient = nil
+	loginLimiter.Lock()
+	loginLimiter.Buckets = map[string]loginBucket{}
+	loginLimiter.Unlock()
+	ctx := context.Background()
+	for i := 0; i < loginAttemptLimit; i++ {
+		recordFailedLoginAttempt(ctx, "192.0.2.50:1234", "user@example.com")
+	}
+	if !isLoginRateLimited(ctx, "192.0.2.50:1234", "user@example.com") {
+		t.Fatal("expected login attempt to be rate limited")
+	}
+	clearLoginAttempts(ctx, "192.0.2.50:1234", "user@example.com")
+	if isLoginRateLimited(ctx, "192.0.2.50:1234", "user@example.com") {
+		t.Fatal("expected successful login clear to remove rate limit")
 	}
 }
 
