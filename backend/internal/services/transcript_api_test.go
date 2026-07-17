@@ -222,6 +222,49 @@ func TestMapTranscriptDetailIncludesSpeakerNames(t *testing.T) {
 	}
 }
 
+func TestMapTranscriptStatusNormalizesProcessingStages(t *testing.T) {
+	tests := []struct {
+		name           string
+		parent         map[string]interface{}
+		segments       []QdrantPoint
+		expectedStatus string
+		expectedStage  string
+		terminal       bool
+	}{
+		{"queued conversion", map[string]interface{}{"job_id": "job", "status": "uploaded"}, nil, "queued_conversion", JobStageConversion, false},
+		{"diarizing", map[string]interface{}{"job_id": "job", "status": "diarizing"}, nil, "diarizing", JobStageDiarization, false},
+		{"transcribing", map[string]interface{}{"job_id": "job", "status": "diarized"}, nil, "transcribing", JobStageTranscription, false},
+		{"ready", map[string]interface{}{"job_id": "job", "status": "transcribed"}, nil, "transcribed", "complete", true},
+		{"analysis", map[string]interface{}{"job_id": "job", "status": "transcribed", "analysis_status": "processing"}, nil, "analysing", JobStageAnalysis, false},
+		{"complete", map[string]interface{}{"job_id": "job", "status": "transcribed", "analysis_status": "complete"}, nil, "complete", "complete", true},
+		{"segment failure", map[string]interface{}{"job_id": "job", "status": "transcribed"}, []QdrantPoint{{Payload: map[string]interface{}{"status": "transcription_failed"}}}, "failed", JobStageTranscription, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			status := MapTranscriptStatus(test.parent, test.segments, false)
+			if status.Status != test.expectedStatus || status.Stage != test.expectedStage || status.IsTerminal != test.terminal {
+				t.Fatalf("unexpected status: %+v", status)
+			}
+		})
+	}
+}
+
+func TestMapTranscriptStatusRedactsFailureForStandardUsers(t *testing.T) {
+	parent := map[string]interface{}{"job_id": "job", "status": "conversion_failed", "conversion_error": "open /srv/secret/file.wav: denied"}
+	standard := MapTranscriptStatus(parent, nil, false)
+	admin := MapTranscriptStatus(parent, nil, true)
+	if standard.FailureCode == nil || *standard.FailureCode != "CONVERSION_FAILED" {
+		t.Fatalf("expected conversion failure code, got %+v", standard.FailureCode)
+	}
+	if standard.FailureMessage == nil || strings.Contains(*standard.FailureMessage, "secret") {
+		t.Fatalf("expected redacted standard message, got %+v", standard.FailureMessage)
+	}
+	if admin.FailureMessage == nil || !strings.Contains(*admin.FailureMessage, "[redacted]") {
+		t.Fatalf("expected safe admin failure detail, got %+v", admin.FailureMessage)
+	}
+}
+
 func TestUpdateSpeakerNameOwnerPersistsMapping(t *testing.T) {
 	var payload map[string]interface{}
 	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job", "owner_user_id": "owner", "speaker_names": map[string]interface{}{}}, &payload)

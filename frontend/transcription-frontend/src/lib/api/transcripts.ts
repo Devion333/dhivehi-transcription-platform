@@ -1,5 +1,5 @@
 import { request } from "./client";
-import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptSegment } from "./types";
+import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
 
 export type TranscriptListParams = {
   page?: number;
@@ -26,6 +26,12 @@ export function getTranscript(jobId: string, signal?: AbortSignal) {
   const trimmed = jobId.trim();
   if (!trimmed) throw new Error("A transcript job ID is required");
   return request<TranscriptDetail>(`/api/transcripts/${encodeURIComponent(trimmed)}`, { signal });
+}
+
+export function getTranscriptStatus(jobId: string, signal?: AbortSignal) {
+  const trimmed = jobId.trim();
+  if (!trimmed) throw new Error("A transcript job ID is required");
+  return request<TranscriptStatusResponse>(`/api/transcripts/${encodeURIComponent(trimmed)}/status`, { signal });
 }
 
 export function getTranscriptAnalysis(jobId: string, signal?: AbortSignal) {

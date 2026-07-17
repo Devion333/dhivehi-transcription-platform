@@ -737,3 +737,12 @@ Validation rules added:
 ## 15. Implementation Boundary Confirmation
 
 This backend extension stage added frontend-facing Go API endpoints and documentation updates. It did not modify the active frontend, transcription, diarization, conversion, analysis workers, Docker images, model caches, Redis queues, MinIO data, Qdrant data, or Docker volumes.
+## Live Processing Status Addition
+
+Added authenticated transcript status polling API:
+
+```http
+GET /api/transcripts/:jobId/status
+```
+
+The endpoint returns `jobId`, normalized `status`, `stage`, `isTerminal`, `updatedAt`, and nullable safe failure fields. Standard users can only access owned transcript status; admins can access all transcript status. Upload, Transcript List, and Transcript Details poll this endpoint or refresh the current list page approximately every 3 seconds while work is non-terminal, abort on unmount, skip hidden-tab requests, and stop on terminal status.

@@ -10,11 +10,12 @@ import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { uploadTranscript } from "@/lib/api/uploads";
-import type { UploadResult } from "@/lib/api/types";
+import type { TranscriptStatusResponse, UploadResult } from "@/lib/api/types";
 import {
   acceptedFileInputValue,
   audioExtensions,
@@ -44,6 +45,7 @@ export default function UploadTranscriptPage() {
   const [submitAttempted, setSubmitAttempted] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<UploadResult | null>(null);
+  const [processingStatus, setProcessingStatus] = React.useState<TranscriptStatusResponse | null>(null);
   const [uploadProgress, setUploadProgress] = React.useState<number | null>(null);
   const [progressComputable, setProgressComputable] = React.useState(true);
 
@@ -54,6 +56,12 @@ export default function UploadTranscriptPage() {
   );
   const hasMetadataErrors = Object.keys(metadataErrors).length > 0;
   const canSubmit = fileValidation.valid && !hasMetadataErrors && state !== "uploading";
+  const { polling } = useTranscriptStatusPolling({
+    jobId: result?.job.jobId ?? "",
+    enabled: state === "accepted" && Boolean(result),
+    initialTerminal: processingStatus?.isTerminal ?? false,
+    onStatus: setProcessingStatus,
+  });
 
   React.useEffect(() => {
     return () => abortRef.current?.abort();
@@ -63,6 +71,7 @@ export default function UploadTranscriptPage() {
     if (!selected) return;
     setFile(selected);
     setResult(null);
+    setProcessingStatus(null);
     setError(null);
     setUploadProgress(null);
     setProgressComputable(true);
@@ -72,6 +81,7 @@ export default function UploadTranscriptPage() {
   function clearFile() {
     setFile(null);
     setResult(null);
+    setProcessingStatus(null);
     setError(null);
     setUploadProgress(null);
     setProgressComputable(true);
@@ -136,6 +146,15 @@ export default function UploadTranscriptPage() {
         },
       });
       setResult(uploadResult);
+      setProcessingStatus({
+        jobId: uploadResult.job.jobId,
+        status: uploadResult.job.status,
+        stage: uploadResult.job.status,
+        isTerminal: false,
+        updatedAt: uploadResult.job.createdAt,
+        failureCode: null,
+        failureMessage: null,
+      });
       setState("accepted");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -290,7 +309,7 @@ export default function UploadTranscriptPage() {
               </div>
 
               {state === "uploading" && <UploadProgress progress={uploadProgress} computable={progressComputable} />}
-              {state === "accepted" && result && <SuccessPanel result={result} onUploadAnother={resetForm} />}
+              {state === "accepted" && result && <SuccessPanel result={result} status={processingStatus} polling={polling} onUploadAnother={resetForm} />}
               {state === "error" && error && (
                 <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
                   {error}
@@ -315,7 +334,8 @@ export default function UploadTranscriptPage() {
     </PageContainer>
   );
 
-  function SuccessPanel({ result, onUploadAnother }: { result: UploadResult; onUploadAnother: () => void }) {
+  function SuccessPanel({ result, status, polling, onUploadAnother }: { result: UploadResult; status: TranscriptStatusResponse | null; polling: boolean; onUploadAnother: () => void }) {
+    const currentStatus = status?.status ?? result.job.status;
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
         <div className="flex gap-3">
@@ -325,7 +345,11 @@ export default function UploadTranscriptPage() {
               <p className="font-semibold">Upload accepted</p>
               <p className="text-sm opacity-85">Processing has started.</p>
             </div>
-            <StatusBadge status={result.job.status} />
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={currentStatus} />
+              {polling && <span className="inline-flex items-center gap-1 text-xs opacity-75"><Loader2 className="h-3 w-3 animate-spin" /> Checking status</span>}
+            </div>
+            {status?.failureMessage && <p className="text-sm text-red-700 dark:text-red-300">{status.failureMessage}</p>}
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" onClick={() => router.push(`/Transcripts/Details?job_id=${result.job.jobId}`)}>View transcript</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => router.push("/Transcripts")}>Transcripts</Button>

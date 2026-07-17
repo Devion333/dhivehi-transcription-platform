@@ -328,6 +328,18 @@ func GetAPITranscriptDetail(scope TranscriptAccessScope, jobID string) (dtos.Tra
 	return detail, nil
 }
 
+func GetAPITranscriptStatus(scope TranscriptAccessScope, jobID string) (dtos.TranscriptStatusResponse, error) {
+	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
+	if err != nil {
+		return dtos.TranscriptStatusResponse{}, err
+	}
+	segments, err := ListSegmentPointsByParent(jobID)
+	if err != nil {
+		return dtos.TranscriptStatusResponse{}, err
+	}
+	return MapTranscriptStatus(parent.Payload, segments, scope.IsAdmin), nil
+}
+
 func UpdateSegmentTranscript(scope TranscriptAccessScope, jobID, segmentID, transcriptText string) (dtos.Segment, error) {
 	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
 	if err != nil {
@@ -774,6 +786,70 @@ func MapTranscriptDetail(parent map[string]interface{}, segments []dtos.Segment)
 		SpeakerNames:     MapSpeakerNames(parent),
 		Segments:         segments,
 	}
+}
+
+func MapTranscriptStatus(parent map[string]interface{}, segments []QdrantPoint, includeFailureDetails bool) dtos.TranscriptStatusResponse {
+	status := getString(parent, "status", "uploaded")
+	analysisStatus := getString(parent, "analysis_status", "not_started")
+	stage := currentStage(status, analysisStatus, segments)
+	normalizedStatus := transcriptStatusKey(status, analysisStatus, segments)
+	updatedAt := firstString(parent, "updated_at", "analysis_completed_at", "transcription_completed_at", "diarization_completed_at", "timestamp")
+	failure := failureMessage(parent, segments)
+	var failureCodeValue *string
+	var failureMessageValue *string
+	if normalizedStatus == "failed" {
+		code := failureCode(stage, failure)
+		if code == "" {
+			code = strings.ToUpper(stage) + "_FAILED"
+		}
+		failureCodeValue = &code
+		message := "Transcript processing failed. Please contact an administrator."
+		if includeFailureDetails && failure != "" {
+			message = failure
+		}
+		failureMessageValue = &message
+	}
+
+	return dtos.TranscriptStatusResponse{
+		JobID:          getString(parent, "job_id", ""),
+		Status:         normalizedStatus,
+		Stage:          stage,
+		IsTerminal:     transcriptStatusTerminal(normalizedStatus),
+		UpdatedAt:      updatedAt,
+		FailureCode:    failureCodeValue,
+		FailureMessage: failureMessageValue,
+	}
+}
+
+func transcriptStatusKey(status, analysisStatus string, segments []QdrantPoint) string {
+	canonical := canonicalJobStatus(status, analysisStatus, segments)
+	switch canonical {
+	case "conversion_failed", "diarization_failed", "transcription_failed", "analysis_failed", "failed", "error":
+		return "failed"
+	case "uploaded", "queued", "pending", "pending_conversion":
+		return "queued_conversion"
+	case "converting":
+		return "converting"
+	case "diarizing":
+		return "diarizing"
+	case "diarized", "transcribing", "processing":
+		return "transcribing"
+	case "transcribed", "completed":
+		return "transcribed"
+	case "analysis_processing", "analysis_pending":
+		return "analysing"
+	case "analysis_complete", "complete":
+		return "complete"
+	default:
+		if status == "" {
+			return "queued_conversion"
+		}
+		return publicParentStatus(status)
+	}
+}
+
+func transcriptStatusTerminal(status string) bool {
+	return status == "complete" || status == "transcribed" || status == "failed"
 }
 
 func MapSpeakerNames(payload map[string]interface{}) map[string]string {

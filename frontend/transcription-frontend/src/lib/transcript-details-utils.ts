@@ -1,4 +1,5 @@
 import type { TranscriptSegment } from "./api/types";
+import { isProcessingTranscriptStatus } from "./transcript-status";
 
 export function formatTimestamp(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -56,5 +57,5 @@ export function safeValue(value: string | number | null | undefined, fallback: s
 }
 
 export function isProcessingStatus(status: string) {
-  return ["uploaded", "processing", "converting", "diarizing", "diarized", "transcribing"].includes(status);
+  return isProcessingTranscriptStatus(status);
 }
