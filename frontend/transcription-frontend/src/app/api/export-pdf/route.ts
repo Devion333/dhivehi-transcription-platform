@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuthenticated(request);
     payload = await readAndValidatePayload(request);
+    await requireTranscriptAccess(request, payload.transcript.jobId);
     browser = await puppeteer.launch({
       headless: "shell",
       timeout: 30_000,
@@ -68,6 +69,19 @@ export async function POST(request: NextRequest) {
     await page?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
+}
+
+async function requireTranscriptAccess(request: NextRequest, jobId: string) {
+  const response = await fetch(`${BACKEND_URL}/api/transcripts/${encodeURIComponent(jobId)}`, {
+    method: "GET",
+    headers: { Cookie: request.headers.get("cookie") ?? "", Accept: "application/json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(AUTH_CHECK_TIMEOUT_MS),
+  });
+  if (response.status === 401) throw routeError(401, "UNAUTHENTICATED", "Authentication is required");
+  if (response.status === 403) throw routeError(403, "FORBIDDEN", "You do not have permission to export this transcript.");
+  if (response.status === 404) throw routeError(404, "TRANSCRIPT_NOT_FOUND", "Transcript was not found.");
+  if (!response.ok) throw routeError(500, "TRANSCRIPT_ACCESS_CHECK_FAILED", "Transcript access check failed");
 }
 
 async function recordPDFExportAudit(request: NextRequest, payload: PdfExportPayload, outcome: "success" | "failure") {

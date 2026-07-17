@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/components/auth/auth-provider";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Pagination, TranscriptSummary } from "@/lib/api/types";
 import {
@@ -34,6 +35,7 @@ type ListState = {
 };
 
 export function TranscriptListClient() {
+	const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -94,6 +96,7 @@ export function TranscriptListClient() {
   const totalPages = pagination?.totalPages ?? 0;
   const hasFilters = Boolean(search || status !== "all");
   const showPagination = !loading && !error && pagination && totalPages > 0;
+  const isAdmin = auth.user?.role === "admin";
 
   return (
     <PageContainer>
@@ -158,8 +161,8 @@ export function TranscriptListClient() {
       )}
       {!loading && !error && data.items.length > 0 && (
         <>
-          <TranscriptTable items={data.items} />
-          <TranscriptCards items={data.items} />
+          <TranscriptTable items={data.items} isAdmin={isAdmin} />
+          <TranscriptCards items={data.items} isAdmin={isAdmin} />
         </>
       )}
 
@@ -182,18 +185,19 @@ export function TranscriptListClient() {
   );
 }
 
-function TranscriptTable({ items }: { items: TranscriptSummary[] }) {
+function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdmin: boolean }) {
   return (
     <Card className="hidden overflow-hidden lg:block">
       <table className="w-full table-fixed text-sm">
         <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="w-[34%] px-4 py-3 font-medium">Filename</th>
+            <th className="w-[30%] px-4 py-3 font-medium">Filename</th>
             <th className="w-[16%] px-4 py-3 font-medium">Reference</th>
             <th className="hidden w-[12%] px-4 py-3 font-medium xl:table-cell">Category</th>
             <th className="w-[13%] px-4 py-3 font-medium">Status</th>
             <th className="w-[10%] px-4 py-3 font-medium">Segments</th>
             <th className="hidden w-[12%] px-4 py-3 font-medium 2xl:table-cell">Analysis</th>
+            {isAdmin && <th className="hidden w-[14%] px-4 py-3 font-medium 2xl:table-cell">Owner</th>}
             <th className="w-[14%] px-4 py-3 font-medium">Created</th>
             <th className="w-[9%] px-4 py-3 text-right font-medium">Action</th>
           </tr>
@@ -211,6 +215,7 @@ function TranscriptTable({ items }: { items: TranscriptSummary[] }) {
               <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
               <td className="px-4 py-4 text-muted-foreground">{segmentCountLabel(item.segmentCount)}</td>
               <td className="hidden px-4 py-4 2xl:table-cell"><StatusBadge status={item.analysisStatus} /></td>
+              {isAdmin && <td className="hidden min-w-0 px-4 py-4 text-muted-foreground 2xl:table-cell"><div className="truncate" title={ownerLabel(item)}>{ownerLabel(item)}</div></td>}
               <td className="px-4 py-4 text-muted-foreground">{formatTranscriptDate(item.createdAt)}</td>
               <td className="px-4 py-4 text-right"><Button asChild size="sm" variant="outline"><Link href={transcriptDetailPath(item.jobId)}>View</Link></Button></td>
             </tr>
@@ -221,7 +226,7 @@ function TranscriptTable({ items }: { items: TranscriptSummary[] }) {
   );
 }
 
-function TranscriptCards({ items }: { items: TranscriptSummary[] }) {
+function TranscriptCards({ items, isAdmin }: { items: TranscriptSummary[]; isAdmin: boolean }) {
   return (
     <div className="grid gap-3 lg:hidden">
       {items.map((item) => (
@@ -241,6 +246,7 @@ function TranscriptCards({ items }: { items: TranscriptSummary[] }) {
               <div><dt className="text-muted-foreground">Reference</dt><dd>{fallbackText(item.referenceNumber, "No reference")}</dd></div>
               <div><dt className="text-muted-foreground">Category</dt><dd>{fallbackText(item.category, "Uncategorized")}</dd></div>
               <div><dt className="text-muted-foreground">Segments</dt><dd>{segmentCountLabel(item.segmentCount)}</dd></div>
+              {isAdmin && <div><dt className="text-muted-foreground">Owner</dt><dd>{ownerLabel(item)}</dd></div>}
             </dl>
             {item.notes && <p className="line-clamp-2 text-sm text-muted-foreground">{item.notes}</p>}
             <Button asChild className="w-full" variant="outline"><Link href={transcriptDetailPath(item.jobId)}>View transcript</Link></Button>
@@ -249,4 +255,8 @@ function TranscriptCards({ items }: { items: TranscriptSummary[] }) {
       ))}
     </div>
   );
+}
+
+function ownerLabel(item: Pick<TranscriptSummary, "ownerDisplayName" | "ownerEmail" | "ownerUserId">) {
+  return item.ownerDisplayName || item.ownerEmail || item.ownerUserId || "Legacy ownerless";
 }

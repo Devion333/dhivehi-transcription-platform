@@ -27,16 +27,19 @@ type uploadMetadata struct {
 }
 
 type uploadResult struct {
-	FileID          string
-	Filename        string
-	MinioURL        string
-	LocalPath       string
-	Status          string
-	Category        string
-	ReferenceNumber string
-	Notes           string
-	Speakers        string
-	CreatedAt       string
+	FileID           string
+	Filename         string
+	MinioURL         string
+	LocalPath        string
+	Status           string
+	Category         string
+	ReferenceNumber  string
+	Notes            string
+	Speakers         string
+	CreatedAt        string
+	OwnerUserID      string
+	OwnerDisplayName string
+	OwnerEmail       string
 }
 
 // UploadFile handles file uploads, saves to MinIO, and records metadata in Qdrant
@@ -129,20 +132,24 @@ func processUpload(c *gin.Context, file *multipart.FileHeader, uploadMeta upload
 	fileURL := fmt.Sprintf("http://%s/%s/%s", minioEndpoint, bucket, objectName)
 
 	createdAt := time.Now().UTC().Format(time.RFC3339)
+	user, _ := CurrentUser(c)
 
 	// Prepare metadata payload for Qdrant
 	payload := map[string]interface{}{
-		"type":             "parent",
-		"job_id":           fileID,
-		"filename":         file.Filename,
-		"minio_url":        fileURL,
-		"local_path":       localPath,
-		"status":           "uploaded",
-		"category":         uploadMeta.Category,
-		"reference_number": uploadMeta.ReferenceNumber,
-		"notes":            uploadMeta.Notes,
-		"speakers":         uploadMeta.Speakers,
-		"timestamp":        createdAt,
+		"type":               "parent",
+		"job_id":             fileID,
+		"filename":           file.Filename,
+		"minio_url":          fileURL,
+		"local_path":         localPath,
+		"status":             "uploaded",
+		"category":           uploadMeta.Category,
+		"reference_number":   uploadMeta.ReferenceNumber,
+		"notes":              uploadMeta.Notes,
+		"speakers":           uploadMeta.Speakers,
+		"timestamp":          createdAt,
+		"owner_user_id":      user.ID,
+		"owner_display_name": user.Name,
+		"owner_email":        user.Email,
 	}
 
 	// Insert metadata into Qdrant
@@ -176,32 +183,38 @@ func processUpload(c *gin.Context, file *multipart.FileHeader, uploadMeta upload
 	}
 
 	return uploadResult{
-		FileID:          fileID,
-		Filename:        file.Filename,
-		MinioURL:        fileURL,
-		LocalPath:       localPath,
-		Status:          "uploaded",
-		Category:        uploadMeta.Category,
-		ReferenceNumber: uploadMeta.ReferenceNumber,
-		Notes:           uploadMeta.Notes,
-		Speakers:        uploadMeta.Speakers,
-		CreatedAt:       createdAt,
+		FileID:           fileID,
+		Filename:         file.Filename,
+		MinioURL:         fileURL,
+		LocalPath:        localPath,
+		Status:           "uploaded",
+		Category:         uploadMeta.Category,
+		ReferenceNumber:  uploadMeta.ReferenceNumber,
+		Notes:            uploadMeta.Notes,
+		Speakers:         uploadMeta.Speakers,
+		CreatedAt:        createdAt,
+		OwnerUserID:      user.ID,
+		OwnerDisplayName: user.Name,
+		OwnerEmail:       user.Email,
 	}, nil
 }
 
 func mapAPIUploadResponse(result uploadResult) dtos.UploadResponse {
 	return dtos.UploadResponse{
 		Job: dtos.UploadJob{
-			JobID:           result.FileID,
-			Filename:        result.Filename,
-			Category:        result.Category,
-			ReferenceNumber: result.ReferenceNumber,
-			Notes:           result.Notes,
-			Status:          result.Status,
-			CreatedAt:       result.CreatedAt,
-			SpeakerCount:    parseSpeakerCount(result.Speakers),
-			SegmentCount:    0,
-			AnalysisStatus:  "not_started",
+			JobID:            result.FileID,
+			Filename:         result.Filename,
+			Category:         result.Category,
+			ReferenceNumber:  result.ReferenceNumber,
+			Notes:            result.Notes,
+			Status:           result.Status,
+			CreatedAt:        result.CreatedAt,
+			SpeakerCount:     parseSpeakerCount(result.Speakers),
+			SegmentCount:     0,
+			AnalysisStatus:   "not_started",
+			OwnerUserID:      result.OwnerUserID,
+			OwnerDisplayName: result.OwnerDisplayName,
+			OwnerEmail:       result.OwnerEmail,
 		},
 		Message: "Upload accepted for processing",
 	}

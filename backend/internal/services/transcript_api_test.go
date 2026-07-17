@@ -117,13 +117,38 @@ func TestFindSegmentForUpdateSupportsDeterministicID(t *testing.T) {
 }
 
 func TestSearchTranscriptTextRejectsEmptyQuery(t *testing.T) {
-	_, err := SearchTranscriptText("   ", 1, 20, "", "")
+	_, err := SearchTranscriptText(TranscriptAccessScope{UserID: "user-1"}, "   ", 1, 20, "", "")
 	if err == nil {
 		t.Fatal("expected empty query error")
 	}
 	var serviceErr *ServiceError
 	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeSearchQueryRequired {
 		t.Fatalf("expected search query required error, got %#v", err)
+	}
+}
+
+func TestListParentTranscriptPointsForScopeFiltersStandardUser(t *testing.T) {
+	parents := []QdrantPoint{
+		{Payload: map[string]interface{}{"job_id": "owned", "owner_user_id": "user-1"}},
+		{Payload: map[string]interface{}{"job_id": "other", "owner_user_id": "user-2"}},
+		{Payload: map[string]interface{}{"job_id": "legacy"}},
+	}
+
+	filtered := filterParentTranscriptPointsForScope(TranscriptAccessScope{UserID: "user-1"}, parents)
+	if len(filtered) != 1 || getString(filtered[0].Payload, "job_id", "") != "owned" {
+		t.Fatalf("expected only owned transcript, got %+v", filtered)
+	}
+}
+
+func TestListParentTranscriptPointsForScopeAllowsAdminLegacy(t *testing.T) {
+	parents := []QdrantPoint{
+		{Payload: map[string]interface{}{"job_id": "owned", "owner_user_id": "user-1"}},
+		{Payload: map[string]interface{}{"job_id": "legacy"}},
+	}
+
+	filtered := filterParentTranscriptPointsForScope(TranscriptAccessScope{IsAdmin: true}, parents)
+	if len(filtered) != 2 {
+		t.Fatalf("expected admin to see all transcripts, got %+v", filtered)
 	}
 }
 

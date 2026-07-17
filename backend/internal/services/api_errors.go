@@ -39,6 +39,7 @@ var (
 	ErrTranscriptNotFound = errors.New("transcript not found")
 	ErrSegmentNotFound    = errors.New("segment not found")
 	ErrSegmentConflict    = errors.New("segment does not belong to transcript")
+	ErrForbidden          = errors.New("forbidden")
 )
 
 type ServiceError struct {

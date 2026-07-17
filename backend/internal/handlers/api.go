@@ -56,7 +56,7 @@ func APIHealth(c *gin.Context) {
 }
 
 func APIStats(c *gin.Context) {
-	stats, err := services.GetAPIStats()
+	stats, err := services.GetAPIStats(transcriptAccessScope(c))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -69,7 +69,7 @@ func APIListTranscripts(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	page, pageSize = services.NormalizePagination(page, pageSize)
 
-	result, err := services.GetAPITranscripts(page, pageSize, c.Query("search"), c.Query("status"))
+	result, err := services.GetAPITranscripts(transcriptAccessScope(c), page, pageSize, c.Query("search"), c.Query("status"))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -87,7 +87,7 @@ func APISearchTranscripts(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	page, pageSize = services.NormalizePagination(page, pageSize)
 
-	result, err := services.SearchTranscriptText(query, page, pageSize, c.Query("status"), c.Query("category"))
+	result, err := services.SearchTranscriptText(transcriptAccessScope(c), query, page, pageSize, c.Query("status"), c.Query("category"))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -103,7 +103,7 @@ func APIGetTranscript(c *gin.Context) {
 		return
 	}
 
-	detail, err := services.GetAPITranscriptDetail(jobID)
+	detail, err := services.GetAPITranscriptDetail(transcriptAccessScope(c), jobID)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -140,7 +140,7 @@ func APIUpdateSegment(c *gin.Context) {
 		return
 	}
 
-	segment, err := services.UpdateSegmentTranscript(jobID, segmentID, transcriptText)
+	segment, err := services.UpdateSegmentTranscript(transcriptAccessScope(c), jobID, segmentID, transcriptText)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -156,7 +156,7 @@ func APIGetAnalysis(c *gin.Context) {
 		return
 	}
 
-	analysis, err := services.GetStoredAnalysis(jobID)
+	analysis, err := services.GetStoredAnalysis(transcriptAccessScope(c), jobID)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -169,9 +169,9 @@ func LegacyListTranscripts(c *gin.Context) {
 	var transcripts []services.TranscriptListItem
 	var err error
 	if status != "" {
-		transcripts, err = services.GetTranscriptsByStatus(status)
+		transcripts, err = services.GetTranscriptsByStatus(transcriptAccessScope(c), status)
 	} else {
-		transcripts, err = services.GetAllTranscripts()
+		transcripts, err = services.GetAllTranscripts(transcriptAccessScope(c))
 	}
 	if err != nil {
 		writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "Failed to fetch transcripts", nil)
@@ -181,7 +181,7 @@ func LegacyListTranscripts(c *gin.Context) {
 }
 
 func LegacyTranscriptStats(c *gin.Context) {
-	stats, err := services.GetTranscriptStats()
+	stats, err := services.GetTranscriptStats(transcriptAccessScope(c))
 	if err != nil {
 		writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "Failed to fetch stats", nil)
 		return
@@ -190,3 +190,11 @@ func LegacyTranscriptStats(c *gin.Context) {
 }
 
 var _ = dtos.APIError{}
+
+func transcriptAccessScope(c *gin.Context) services.TranscriptAccessScope {
+	user, ok := CurrentUser(c)
+	if !ok {
+		return services.TranscriptAccessScope{}
+	}
+	return services.TranscriptAccessScope{UserID: user.ID, IsAdmin: user.Role == services.UserRoleAdmin}
+}

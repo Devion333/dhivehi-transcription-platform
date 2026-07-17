@@ -197,16 +197,19 @@ type Pagination struct {
 }
 
 type TranscriptSummary struct {
-	JobID           string `json:"jobId"`
-	Filename        string `json:"filename"`
-	Category        string `json:"category"`
-	ReferenceNumber string `json:"referenceNumber"`
-	Notes           string `json:"notes"`
-	Status          string `json:"status"`
-	SegmentCount    int    `json:"segmentCount"`
-	CreatedAt       string `json:"createdAt"`
-	UpdatedAt       string `json:"updatedAt"`
-	AnalysisStatus  string `json:"analysisStatus"`
+	JobID            string `json:"jobId"`
+	Filename         string `json:"filename"`
+	Category         string `json:"category"`
+	ReferenceNumber  string `json:"referenceNumber"`
+	Notes            string `json:"notes"`
+	Status           string `json:"status"`
+	SegmentCount     int    `json:"segmentCount"`
+	CreatedAt        string `json:"createdAt"`
+	UpdatedAt        string `json:"updatedAt"`
+	AnalysisStatus   string `json:"analysisStatus"`
+	OwnerUserID      string `json:"ownerUserId"`
+	OwnerDisplayName string `json:"ownerDisplayName"`
+	OwnerEmail       string `json:"ownerEmail"`
 }
 
 type Segment struct {
@@ -221,19 +224,22 @@ type Segment struct {
 }
 
 type TranscriptDetail struct {
-	JobID           string    `json:"jobId"`
-	Filename        string    `json:"filename"`
-	Category        string    `json:"category"`
-	ReferenceNumber string    `json:"referenceNumber"`
-	Notes           string    `json:"notes"`
-	Status          string    `json:"status"`
-	Speakers        int       `json:"speakers"`
-	SegmentCount    int       `json:"segmentCount"`
-	MediaURL        string    `json:"mediaUrl"`
-	CreatedAt       string    `json:"createdAt"`
-	UpdatedAt       string    `json:"updatedAt"`
-	AnalysisStatus  string    `json:"analysisStatus"`
-	Segments        []Segment `json:"segments"`
+	JobID            string    `json:"jobId"`
+	Filename         string    `json:"filename"`
+	Category         string    `json:"category"`
+	ReferenceNumber  string    `json:"referenceNumber"`
+	Notes            string    `json:"notes"`
+	Status           string    `json:"status"`
+	Speakers         int       `json:"speakers"`
+	SegmentCount     int       `json:"segmentCount"`
+	MediaURL         string    `json:"mediaUrl"`
+	CreatedAt        string    `json:"createdAt"`
+	UpdatedAt        string    `json:"updatedAt"`
+	AnalysisStatus   string    `json:"analysisStatus"`
+	OwnerUserID      string    `json:"ownerUserId"`
+	OwnerDisplayName string    `json:"ownerDisplayName"`
+	OwnerEmail       string    `json:"ownerEmail"`
+	Segments         []Segment `json:"segments"`
 }
 
 type Analysis struct {
@@ -291,16 +297,19 @@ type SegmentUpdateRequest struct {
 }
 
 type UploadJob struct {
-	JobID           string `json:"jobId"`
-	Filename        string `json:"filename"`
-	Category        string `json:"category"`
-	ReferenceNumber string `json:"referenceNumber"`
-	Notes           string `json:"notes"`
-	Status          string `json:"status"`
-	CreatedAt       string `json:"createdAt"`
-	SpeakerCount    int    `json:"speakerCount"`
-	SegmentCount    int    `json:"segmentCount"`
-	AnalysisStatus  string `json:"analysisStatus"`
+	JobID            string `json:"jobId"`
+	Filename         string `json:"filename"`
+	Category         string `json:"category"`
+	ReferenceNumber  string `json:"referenceNumber"`
+	Notes            string `json:"notes"`
+	Status           string `json:"status"`
+	CreatedAt        string `json:"createdAt"`
+	SpeakerCount     int    `json:"speakerCount"`
+	SegmentCount     int    `json:"segmentCount"`
+	AnalysisStatus   string `json:"analysisStatus"`
+	OwnerUserID      string `json:"ownerUserId"`
+	OwnerDisplayName string `json:"ownerDisplayName"`
+	OwnerEmail       string `json:"ownerEmail"`
 }
 
 type UploadResponse struct {

@@ -53,6 +53,10 @@ func AnalyseTranscript(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id is required"})
 		return
 	}
+	if _, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 
 	result, analysisErr := runTranscriptAnalysis(jobID)
 	if analysisErr != nil {
@@ -77,6 +81,10 @@ func APIAnalyseTranscript(c *gin.Context) {
 	}
 
 	started := time.Now()
+	if _, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "started", "provider": "analysis"}})
 	result, analysisErr := runTranscriptAnalysis(jobID)
 	if analysisErr != nil {

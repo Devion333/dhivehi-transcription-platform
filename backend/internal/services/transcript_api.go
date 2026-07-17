@@ -33,6 +33,11 @@ type QdrantPoint struct {
 	Payload map[string]interface{} `json:"payload"`
 }
 
+type TranscriptAccessScope struct {
+	UserID  string
+	IsAdmin bool
+}
+
 type qdrantScrollResponse struct {
 	Result struct {
 		Points         []QdrantPoint `json:"points"`
@@ -53,9 +58,9 @@ func NormalizePagination(page, pageSize int) (int, int) {
 	return page, pageSize
 }
 
-func GetAPITranscripts(page, pageSize int, search, status string) (dtos.TranscriptListResponse, error) {
+func GetAPITranscripts(scope TranscriptAccessScope, page, pageSize int, search, status string) (dtos.TranscriptListResponse, error) {
 	page, pageSize = NormalizePagination(page, pageSize)
-	parents, err := ListParentTranscriptPoints()
+	parents, err := ListParentTranscriptPointsForScope(scope)
 	if err != nil {
 		return dtos.TranscriptListResponse{}, err
 	}
@@ -109,7 +114,7 @@ func GetAPITranscripts(page, pageSize int, search, status string) (dtos.Transcri
 	}, nil
 }
 
-func SearchTranscriptText(query string, page, pageSize int, status, category string) (dtos.TranscriptSearchResponse, error) {
+func SearchTranscriptText(scope TranscriptAccessScope, query string, page, pageSize int, status, category string) (dtos.TranscriptSearchResponse, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchQueryRequired, errors.New("search query is required"))
@@ -120,12 +125,24 @@ func SearchTranscriptText(query string, page, pageSize int, status, category str
 	if err != nil {
 		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchUnavailable, err)
 	}
-	parents, err := ListParentTranscriptPoints()
+	parents, err := ListParentTranscriptPointsForScope(scope)
 	if err != nil {
 		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchUnavailable, err)
 	}
+	allowedJobIDs := map[string]struct{}{}
+	for _, parent := range parents {
+		if jobID := getString(parent.Payload, "job_id", ""); jobID != "" {
+			allowedJobIDs[jobID] = struct{}{}
+		}
+	}
+	filteredSegments := make([]QdrantPoint, 0, len(segments))
+	for _, segment := range segments {
+		if _, ok := allowedJobIDs[getString(segment.Payload, "parent_job_id", "")]; ok {
+			filteredSegments = append(filteredSegments, segment)
+		}
+	}
 
-	return BuildTranscriptSearchResponse(query, page, pageSize, status, category, segments, parents), nil
+	return BuildTranscriptSearchResponse(query, page, pageSize, status, category, filteredSegments, parents), nil
 }
 
 func BuildTranscriptSearchResponse(query string, page, pageSize int, status, category string, segments, parents []QdrantPoint) dtos.TranscriptSearchResponse {
@@ -276,8 +293,8 @@ func literalIndex(text, query string) int {
 	return -1
 }
 
-func GetAPITranscriptDetail(jobID string) (dtos.TranscriptDetail, error) {
-	parent, err := GetParentTranscriptPoint(jobID)
+func GetAPITranscriptDetail(scope TranscriptAccessScope, jobID string) (dtos.TranscriptDetail, error) {
+	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
 	if err != nil {
 		return dtos.TranscriptDetail{}, err
 	}
@@ -310,8 +327,8 @@ func GetAPITranscriptDetail(jobID string) (dtos.TranscriptDetail, error) {
 	return detail, nil
 }
 
-func UpdateSegmentTranscript(jobID, segmentID, transcriptText string) (dtos.Segment, error) {
-	parent, err := GetParentTranscriptPoint(jobID)
+func UpdateSegmentTranscript(scope TranscriptAccessScope, jobID, segmentID, transcriptText string) (dtos.Segment, error) {
+	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
 	if err != nil {
 		return dtos.Segment{}, err
 	}
@@ -361,16 +378,16 @@ func findSegmentForUpdate(jobID, segmentID string, segments []QdrantPoint) (*Qdr
 	return nil, nil
 }
 
-func GetStoredAnalysis(jobID string) (dtos.Analysis, error) {
-	parent, err := GetParentTranscriptPoint(jobID)
+func GetStoredAnalysis(scope TranscriptAccessScope, jobID string) (dtos.Analysis, error) {
+	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
 	if err != nil {
 		return dtos.Analysis{}, err
 	}
 	return MapAnalysis(parent.Payload), nil
 }
 
-func GetAPIStats() (dtos.StatsResponse, error) {
-	parents, err := ListParentTranscriptPoints()
+func GetAPIStats(scope TranscriptAccessScope) (dtos.StatsResponse, error) {
+	parents, err := ListParentTranscriptPointsForScope(scope)
 	if err != nil {
 		return dtos.StatsResponse{}, err
 	}
@@ -379,9 +396,19 @@ func GetAPIStats() (dtos.StatsResponse, error) {
 		return dtos.StatsResponse{}, err
 	}
 
+	allowedJobIDs := map[string]struct{}{}
+	for _, parent := range parents {
+		if jobID := getString(parent.Payload, "job_id", ""); jobID != "" {
+			allowedJobIDs[jobID] = struct{}{}
+		}
+	}
 	stats := dtos.StatsResponse{
 		TotalTranscripts: len(parents),
-		TotalSegments:    len(segments),
+	}
+	for _, segment := range segments {
+		if _, ok := allowedJobIDs[getString(segment.Payload, "parent_job_id", "")]; ok {
+			stats.TotalSegments++
+		}
 	}
 	for _, parent := range parents {
 		switch publicParentStatus(getString(parent.Payload, "status", "uploaded")) {
@@ -467,6 +494,27 @@ func ListParentTranscriptPoints() ([]QdrantPoint, error) {
 	})
 }
 
+func ListParentTranscriptPointsForScope(scope TranscriptAccessScope) ([]QdrantPoint, error) {
+	parents, err := ListParentTranscriptPoints()
+	if err != nil {
+		return nil, err
+	}
+	return filterParentTranscriptPointsForScope(scope, parents), nil
+}
+
+func filterParentTranscriptPointsForScope(scope TranscriptAccessScope, parents []QdrantPoint) []QdrantPoint {
+	if scope.IsAdmin {
+		return parents
+	}
+	filtered := make([]QdrantPoint, 0, len(parents))
+	for _, parent := range parents {
+		if parentOwnerUserID(parent.Payload) == scope.UserID && scope.UserID != "" {
+			filtered = append(filtered, parent)
+		}
+	}
+	return filtered
+}
+
 func GetParentTranscriptPoint(jobID string) (QdrantPoint, error) {
 	points, err := scrollOnce(map[string]interface{}{
 		"must": []map[string]interface{}{
@@ -481,6 +529,20 @@ func GetParentTranscriptPoint(jobID string) (QdrantPoint, error) {
 		return QdrantPoint{}, newServiceError(ErrCodeTranscriptNotFound, ErrTranscriptNotFound)
 	}
 	return points[0], nil
+}
+
+func GetAuthorizedParentTranscriptPoint(scope TranscriptAccessScope, jobID string) (QdrantPoint, error) {
+	parent, err := GetParentTranscriptPoint(jobID)
+	if err != nil {
+		return QdrantPoint{}, err
+	}
+	if scope.IsAdmin {
+		return parent, nil
+	}
+	if ownerID := parentOwnerUserID(parent.Payload); ownerID != "" && ownerID == scope.UserID {
+		return parent, nil
+	}
+	return QdrantPoint{}, newServiceError(ErrCodeForbidden, ErrForbidden)
 }
 
 func ListSegmentPointsByParent(jobID string) ([]QdrantPoint, error) {
@@ -604,16 +666,19 @@ func MapParentSummary(payload map[string]interface{}) dtos.TranscriptSummary {
 	createdAt := getString(payload, "timestamp", "")
 	updatedAt := firstString(payload, "updated_at", "transcription_completed_at", "diarization_completed_at", "timestamp")
 	return dtos.TranscriptSummary{
-		JobID:           getString(payload, "job_id", ""),
-		Filename:        getString(payload, "filename", "Unknown"),
-		Category:        getString(payload, "category", "Uncategorized"),
-		ReferenceNumber: getString(payload, "reference_number", "N/A"),
-		Notes:           getString(payload, "notes", ""),
-		Status:          publicParentStatus(getString(payload, "status", "uploaded")),
-		SegmentCount:    parentSegmentCount(payload),
-		CreatedAt:       createdAt,
-		UpdatedAt:       updatedAt,
-		AnalysisStatus:  publicAnalysisStatus(getString(payload, "analysis_status", "not_started")),
+		JobID:            getString(payload, "job_id", ""),
+		Filename:         getString(payload, "filename", "Unknown"),
+		Category:         getString(payload, "category", "Uncategorized"),
+		ReferenceNumber:  getString(payload, "reference_number", "N/A"),
+		Notes:            getString(payload, "notes", ""),
+		Status:           publicParentStatus(getString(payload, "status", "uploaded")),
+		SegmentCount:     parentSegmentCount(payload),
+		CreatedAt:        createdAt,
+		UpdatedAt:        updatedAt,
+		AnalysisStatus:   publicAnalysisStatus(getString(payload, "analysis_status", "not_started")),
+		OwnerUserID:      parentOwnerUserID(payload),
+		OwnerDisplayName: getString(payload, "owner_display_name", ""),
+		OwnerEmail:       getString(payload, "owner_email", ""),
 	}
 }
 
@@ -621,20 +686,27 @@ func MapTranscriptDetail(parent map[string]interface{}, segments []dtos.Segment)
 	createdAt := getString(parent, "timestamp", "")
 	updatedAt := firstString(parent, "updated_at", "transcription_completed_at", "diarization_completed_at", "timestamp")
 	return dtos.TranscriptDetail{
-		JobID:           getString(parent, "job_id", ""),
-		Filename:        getString(parent, "filename", "Unknown"),
-		Category:        getString(parent, "category", "Uncategorized"),
-		ReferenceNumber: getString(parent, "reference_number", "N/A"),
-		Notes:           getString(parent, "notes", ""),
-		Status:          publicParentStatus(getString(parent, "status", "uploaded")),
-		Speakers:        getInt(parent, "speakers", 0),
-		SegmentCount:    parentSegmentCount(parent),
-		MediaURL:        PublicMediaURL(getString(parent, "minio_url", "")),
-		CreatedAt:       createdAt,
-		UpdatedAt:       updatedAt,
-		AnalysisStatus:  publicAnalysisStatus(getString(parent, "analysis_status", "not_started")),
-		Segments:        segments,
+		JobID:            getString(parent, "job_id", ""),
+		Filename:         getString(parent, "filename", "Unknown"),
+		Category:         getString(parent, "category", "Uncategorized"),
+		ReferenceNumber:  getString(parent, "reference_number", "N/A"),
+		Notes:            getString(parent, "notes", ""),
+		Status:           publicParentStatus(getString(parent, "status", "uploaded")),
+		Speakers:         getInt(parent, "speakers", 0),
+		SegmentCount:     parentSegmentCount(parent),
+		MediaURL:         PublicMediaURL(getString(parent, "minio_url", "")),
+		CreatedAt:        createdAt,
+		UpdatedAt:        updatedAt,
+		AnalysisStatus:   publicAnalysisStatus(getString(parent, "analysis_status", "not_started")),
+		OwnerUserID:      parentOwnerUserID(parent),
+		OwnerDisplayName: getString(parent, "owner_display_name", ""),
+		OwnerEmail:       getString(parent, "owner_email", ""),
+		Segments:         segments,
 	}
+}
+
+func parentOwnerUserID(payload map[string]interface{}) string {
+	return getString(payload, "owner_user_id", "")
 }
 
 func MapSegment(parent, payload map[string]interface{}) dtos.Segment {
