@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, FileText, History, Home, LogOut, Menu, Search, UploadCloud, UserCircle, Users } from "lucide-react";
+import { BriefcaseBusiness, FileText, History, Home, LogOut, Menu, Search, ShieldCheck, UploadCloud, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -202,6 +202,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <p className="font-medium">{auth.user.name}</p>
                       <p className="text-xs text-muted-foreground">{auth.user.role}</p>
                     </div>
+                    <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
+                      <Link href="/Account/Security"><ShieldCheck className="h-4 w-4" /> Security</Link>
+                    </Button>
                     <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
                       <LogOut className="h-4 w-4" /> Sign out
                     </Button>
@@ -240,6 +243,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="mt-6 border-t pt-4">
                 <p className="text-sm font-medium">{auth.user.name}</p>
                 <p className="text-xs text-muted-foreground">{auth.user.role}</p>
+                <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
+                  <Link href="/Account/Security"><ShieldCheck className="h-4 w-4" /> Security</Link>
+                </Button>
                 <Button variant="outline" className="mt-3 w-full justify-start gap-2" onClick={handleSignOut}>
                   <LogOut className="h-4 w-4" /> Sign out
                 </Button>

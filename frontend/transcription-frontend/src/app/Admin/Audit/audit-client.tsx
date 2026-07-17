@@ -18,7 +18,7 @@ import type { AuditEventDetail, AuditEventSummary, Pagination } from "@/lib/api/
 import {
   auditActionLabel,
   auditActorLabel,
-  auditCategories,
+  auditActions,
   auditCategoryLabel,
   auditOutcomeLabel,
   auditOutcomes,
@@ -27,6 +27,7 @@ import {
   buildAuditPath,
   formatAuditDate,
   metadataEntries,
+  normalizeAuditAction,
   normalizeAuditCategory,
   normalizeAuditDate,
   normalizeAuditOutcome,
@@ -44,6 +45,7 @@ export function AdminAuditClient() {
   const page = normalizeAuditPage(searchParams.get("page"));
   const search = normalizeAuditSearch(searchParams.get("search"));
   const category = normalizeAuditCategory(searchParams.get("category"));
+  const action = normalizeAuditAction(searchParams.get("action"));
   const outcome = normalizeAuditOutcome(searchParams.get("outcome"));
   const dateFrom = normalizeAuditDate(searchParams.get("dateFrom"));
   const dateTo = normalizeAuditDate(searchParams.get("dateTo"));
@@ -57,12 +59,12 @@ export function AdminAuditClient() {
 
   React.useEffect(() => setSearchDraft(search), [search]);
 
-  const loadKey = `${page}:${search}:${category}:${outcome}:${dateFrom}:${dateTo}:${retryToken}`;
+  const loadKey = `${page}:${search}:${category}:${action}:${outcome}:${dateFrom}:${dateTo}:${retryToken}`;
   React.useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    getAuditEvents({ page, pageSize: auditPageSize, search, category, outcome, dateFrom: toRFC3339Date(dateFrom), dateTo: toRFC3339Date(dateTo, true) }, controller.signal)
+    getAuditEvents({ page, pageSize: auditPageSize, search, category, action: action === "all" ? "" : action, outcome, dateFrom: toRFC3339Date(dateFrom), dateTo: toRFC3339Date(dateTo, true) }, controller.signal)
       .then((response) => setData({ items: response.items, pagination: response.pagination }))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -72,10 +74,10 @@ export function AdminAuditClient() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [loadKey, page, search, category, outcome, dateFrom, dateTo]);
+  }, [loadKey, page, search, category, action, outcome, dateFrom, dateTo]);
 
-  function navigate(next: { page?: number; search?: string; category?: typeof category; outcome?: typeof outcome; dateFrom?: string; dateTo?: string }) {
-    router.push(buildAuditPath({ page, search, category, outcome, dateFrom, dateTo, ...next }));
+  function navigate(next: { page?: number; search?: string; category?: typeof category; action?: typeof action; outcome?: typeof outcome; dateFrom?: string; dateTo?: string }) {
+    router.push(buildAuditPath({ page, search, category, action, outcome, dateFrom, dateTo, ...next }));
   }
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
@@ -96,7 +98,7 @@ export function AdminAuditClient() {
   const pagination = data.pagination;
   const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 0;
-  const hasFilters = Boolean(search || category !== "all" || outcome !== "all" || dateFrom || dateTo);
+  const hasFilters = Boolean(search || action !== "all" || outcome !== "all" || dateFrom || dateTo);
 
   return (
     <PageContainer>
@@ -115,7 +117,7 @@ export function AdminAuditClient() {
                 <Button type="submit" variant="outline" className="shrink-0">Search</Button>
               </div>
             </form>
-            <SelectFilter id="audit-category" label="Action" value={category} values={auditCategories} onChange={(value) => navigate({ page: 1, category: value as typeof category })} />
+            <SelectFilter id="audit-action" label="Action" value={action} values={auditActions} onChange={(value) => navigate({ page: 1, action: value as typeof action })} />
             <SelectFilter id="audit-outcome" label="Outcome" value={outcome} values={auditOutcomes} onChange={(value) => navigate({ page: 1, outcome: value as typeof outcome })} />
             <DateFilter id="audit-from" label="Start date" value={dateFrom} onChange={(value) => navigate({ page: 1, dateFrom: value })} />
             <DateFilter id="audit-to" label="End date" value={dateTo} onChange={(value) => navigate({ page: 1, dateTo: value })} />
@@ -165,7 +167,7 @@ function Detail({ label, value }: { label: string; value?: string }) {
 }
 
 function SelectFilter({ id, label, value, values, onChange }: { id: string; label: string; value: string; values: readonly string[]; onChange: (value: string) => void }) {
-  return <div className="grid min-w-0 gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:min-w-36 xl:w-40">{values.map((item) => <option key={item} value={item}>{item === "all" ? "All" : auditCategoryLabel(item)}</option>)}</select></div>;
+  return <div className="grid min-w-0 gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:min-w-36 xl:w-40">{values.map((item) => <option key={item} value={item}>{item === "all" ? "All" : label === "Action" ? auditActionLabel(item) : auditCategoryLabel(item)}</option>)}</select></div>;
 }
 
 function DateFilter({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {

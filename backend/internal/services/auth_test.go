@@ -3,7 +3,10 @@ package services
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +19,9 @@ func withMockDatabase(t *testing.T) sqlmock.Sqlmock {
 	loginLimiter.Lock()
 	loginLimiter.Buckets = map[string]loginBucket{}
 	loginLimiter.Unlock()
+	passwordChangeLimiter.Lock()
+	passwordChangeLimiter.Buckets = map[string]loginBucket{}
+	passwordChangeLimiter.Unlock()
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
@@ -178,6 +184,109 @@ func TestRevokeSession(t *testing.T) {
 		WithArgs(HashSessionToken("raw-token")).WillReturnResult(sqlmock.NewResult(1, 1))
 	if err := RevokeSession(context.Background(), "raw-token"); err != nil {
 		t.Fatalf("RevokeSession failed: %v", err)
+	}
+}
+
+type passwordHashForNewPassword struct {
+	NewPassword string
+	OldPassword string
+}
+
+func (m passwordHashForNewPassword) Match(value driver.Value) bool {
+	hash, ok := value.(string)
+	return ok && VerifyPassword(m.NewPassword, hash) && !VerifyPassword(m.OldPassword, hash) && !strings.Contains(hash, m.NewPassword) && !strings.Contains(hash, m.OldPassword)
+}
+
+func TestChangeOwnPasswordRejectsIncorrectCurrentPassword(t *testing.T) {
+	mock := withMockDatabase(t)
+	passwordHash, _ := HashPassword("current-password-1")
+	now := time.Now()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1 FOR UPDATE`)).
+		WithArgs("user-id").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).
+			AddRow("user-id", "User", "user@example.com", passwordHash, "user", true, now, now, sql.NullTime{}))
+	mock.ExpectRollback()
+
+	err := ChangeOwnPassword(context.Background(), "user-id", "wrong-password", "new-password-1", "current-token")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeInvalidCurrentPassword {
+		t.Fatalf("expected invalid current password, got %#v", err)
+	}
+}
+
+func TestChangeOwnPasswordRejectsWeakNewPassword(t *testing.T) {
+	err := ChangeOwnPassword(context.Background(), "user-id", "current-password-1", "short", "current-token")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodePasswordPolicyFailed {
+		t.Fatalf("expected policy error, got %#v", err)
+	}
+}
+
+func TestChangeOwnPasswordRejectsUnchangedPassword(t *testing.T) {
+	mock := withMockDatabase(t)
+	passwordHash, _ := HashPassword("current-password-1")
+	now := time.Now()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1 FOR UPDATE`)).
+		WithArgs("user-id").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).
+			AddRow("user-id", "User", "user@example.com", passwordHash, "user", true, now, now, sql.NullTime{}))
+	mock.ExpectRollback()
+
+	err := ChangeOwnPassword(context.Background(), "user-id", "current-password-1", "current-password-1", "current-token")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodePasswordUnchanged {
+		t.Fatalf("expected unchanged error, got %#v", err)
+	}
+}
+
+func TestChangeOwnPasswordUpdatesPasswordAndRevokesOtherSessions(t *testing.T) {
+	mock := withMockDatabase(t)
+	passwordHash, _ := HashPassword("current-password-1")
+	now := time.Now()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1 FOR UPDATE`)).
+		WithArgs("user-id").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).
+			AddRow("user-id", "User", "user@example.com", passwordHash, "user", true, now, now, sql.NullTime{}))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`)).
+		WithArgs(passwordHashForNewPassword{NewPassword: "new-password-1", OldPassword: "current-password-1"}, "user-id").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND token_hash <> $2 AND revoked_at IS NULL`)).
+		WithArgs("user-id", HashSessionToken("current-token")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	if err := ChangeOwnPassword(context.Background(), "user-id", "current-password-1", "new-password-1", "current-token"); err != nil {
+		t.Fatalf("ChangeOwnPassword failed: %v", err)
+	}
+}
+
+func TestChangeOwnPasswordRateLimit(t *testing.T) {
+	RedisClient = nil
+	passwordChangeLimiter.Lock()
+	passwordChangeLimiter.Buckets = map[string]loginBucket{}
+	passwordChangeLimiter.Unlock()
+	for i := 0; i < passwordChangeAttemptLimit; i++ {
+		recordFailedPasswordChangeAttempt(context.Background(), "user-id")
+	}
+	err := ChangeOwnPassword(context.Background(), "user-id", "current-password-1", "new-password-1", "current-token")
+	if err == nil {
+		t.Fatal("expected rate limit error")
+	}
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeRateLimited {
+		t.Fatalf("expected rate limit error, got %#v", err)
 	}
 }
 

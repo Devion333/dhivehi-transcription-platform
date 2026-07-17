@@ -29,6 +29,7 @@ function LoginForm() {
   const [error, setError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const returnTo = safeReturnPath(searchParams.get("returnTo"));
+  const reason = searchParams.get("reason");
 
   React.useEffect(() => {
     if (auth.status === "authenticated") router.replace(returnTo);
@@ -85,6 +86,7 @@ function LoginForm() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={submitting} />
             </div>
+            {reason === "password-changed" && <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Password changed. Sign in with your new password.</p>}
             {auth.status === "error" && <p className="text-sm text-muted-foreground">Unable to verify an existing session. You can still sign in.</p>}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button className="w-full" type="submit" disabled={submitting}>{submitting ? "Signing in" : "Sign in"}</Button>

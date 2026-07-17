@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
+	"strings"
 	"time"
 
 	"transcript_app/backend/internal/dtos"
@@ -60,6 +62,37 @@ func APIMe(c *gin.Context) {
 	c.JSON(http.StatusOK, dtos.AuthUserResponse{User: user})
 }
 
+func APIChangePassword(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		writeUnauthenticated(c)
+		return
+	}
+	var request dtos.ChangePasswordRequest
+	if !decodeAuthJSON(c, &request, "Password change request is invalid") {
+		auditPasswordChangeFailure(c, user, services.ErrCodeBadRequest)
+		return
+	}
+	if strings.TrimSpace(request.CurrentPassword) == "" || strings.TrimSpace(request.NewPassword) == "" || strings.TrimSpace(request.ConfirmPassword) == "" {
+		auditPasswordChangeFailure(c, user, services.ErrCodeBadRequest)
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "All password fields are required", nil)
+		return
+	}
+	if request.NewPassword != request.ConfirmPassword {
+		auditPasswordChangeFailure(c, user, services.ErrCodePasswordMismatch)
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodePasswordMismatch, "Password confirmation does not match", nil)
+		return
+	}
+	token, _ := c.Cookie(services.SessionCookieConfig().Name)
+	if err := services.ChangeOwnPassword(c.Request.Context(), user.ID, request.CurrentPassword, request.NewPassword, token); err != nil {
+		auditPasswordChangeFailure(c, user, passwordChangeFailureCode(err))
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "password_change_succeeded", Category: "authentication", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"otherSessionsRevoked": true, "currentSessionPreserved": true}})
+	c.JSON(http.StatusOK, dtos.ChangePasswordResponse{Message: "Password changed successfully", ReauthenticationRequired: false})
+}
+
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := c.Cookie(services.SessionCookieConfig().Name)
@@ -103,6 +136,38 @@ func CurrentUser(c *gin.Context) (dtos.AuthUser, bool) {
 	}
 	user, ok := value.(dtos.AuthUser)
 	return user, ok
+}
+
+func decodeAuthJSON(c *gin.Context, target interface{}, message string) bool {
+	mediaType, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		writeAPIError(c, http.StatusUnsupportedMediaType, services.ErrCodeBadRequest, "Content-Type must be application/json", nil)
+		return false
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, authJSONMaxBytes)
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, message, nil)
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, message, nil)
+		return false
+	}
+	return true
+}
+
+func passwordChangeFailureCode(err error) string {
+	var serviceErr *services.ServiceError
+	if errors.As(err, &serviceErr) {
+		return serviceErr.Code
+	}
+	return services.ErrCodeInternal
+}
+
+func auditPasswordChangeFailure(c *gin.Context, user dtos.AuthUser, reason string) {
+	auditRequestEventWithActor(c, &user, services.AuditEventInput{Action: "password_change_failed", Category: "authentication", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"reasonCode": reason}})
 }
 
 func setSessionCookie(c *gin.Context, token string) {

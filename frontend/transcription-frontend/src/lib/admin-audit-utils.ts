@@ -30,6 +30,9 @@ const actionLabels: Record<string, string> = {
   "export.pdf_failed": "PDF export failed",
 };
 
+export const auditActions = ["all", ...Object.keys(actionLabels)] as const;
+export type AuditActionFilter = (typeof auditActions)[number];
+
 export function normalizeAuditPage(value: string | null) {
   const page = Number.parseInt(value ?? "1", 10);
   return Number.isFinite(page) && page > 0 ? page : 1;
@@ -47,6 +50,10 @@ export function normalizeAuditOutcome(value: string | null): AuditOutcomeFilter 
   return auditOutcomes.includes(value as AuditOutcomeFilter) ? value as AuditOutcomeFilter : "all";
 }
 
+export function normalizeAuditAction(value: string | null): AuditActionFilter {
+  return auditActions.includes(value as AuditActionFilter) ? value as AuditActionFilter : "all";
+}
+
 export function normalizeAuditDate(value: string | null) {
   if (!value) return "";
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
@@ -57,11 +64,12 @@ export function toRFC3339Date(value: string, endOfDay = false) {
   return `${value}T${endOfDay ? "23:59:59" : "00:00:00"}Z`;
 }
 
-export function buildAuditPath({ page = 1, search = "", category = "all", outcome = "all", dateFrom = "", dateTo = "" }: { page?: number; search?: string; category?: AuditCategoryFilter; outcome?: AuditOutcomeFilter; dateFrom?: string; dateTo?: string }) {
+export function buildAuditPath({ page = 1, search = "", category = "all", action = "all", outcome = "all", dateFrom = "", dateTo = "" }: { page?: number; search?: string; category?: AuditCategoryFilter; action?: AuditActionFilter; outcome?: AuditOutcomeFilter; dateFrom?: string; dateTo?: string }) {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
   if (search.trim()) params.set("search", search.trim());
   if (category !== "all") params.set("category", category);
+  if (action !== "all") params.set("action", action);
   if (outcome !== "all") params.set("outcome", outcome);
   if (dateFrom) params.set("dateFrom", dateFrom);
   if (dateTo) params.set("dateTo", dateTo);

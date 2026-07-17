@@ -276,6 +276,11 @@ func revokeAllSessionsForUser(ctx context.Context, execer sessionRevoker, userID
 	return err
 }
 
+func revokeOtherSessionsForUser(ctx context.Context, execer sessionRevoker, userID, currentTokenHash string) error {
+	_, err := execer.ExecContext(ctx, `UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND token_hash <> $2 AND revoked_at IS NULL`, userID, currentTokenHash)
+	return err
+}
+
 func normalizeAdminUserFilters(filters AdminUserFilters) AdminUserFilters {
 	if filters.Page < 1 {
 		filters.Page = 1

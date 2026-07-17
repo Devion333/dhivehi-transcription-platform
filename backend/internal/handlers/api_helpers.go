@@ -42,6 +42,16 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Role is invalid", nil)
 		case services.ErrCodeWeakPassword:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Password does not meet policy", nil)
+		case services.ErrCodeInvalidCurrentPassword:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Current password is incorrect", nil)
+		case services.ErrCodePasswordMismatch:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Password confirmation does not match", nil)
+		case services.ErrCodePasswordPolicyFailed:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Password does not meet policy", nil)
+		case services.ErrCodePasswordUnchanged:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "New password must be different from current password", nil)
+		case services.ErrCodeRateLimited:
+			writeAPIError(c, http.StatusTooManyRequests, serviceErr.Code, "Too many password change attempts. Try again later.", nil)
 		case services.ErrCodeUserNotFound:
 			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "User was not found", nil)
 		case services.ErrCodeCannotDeactivateSelf:

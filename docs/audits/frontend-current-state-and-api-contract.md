@@ -192,6 +192,7 @@ Endpoint list:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/uploads` | Accept media upload and metadata, write MinIO, create parent Qdrant point, enqueue conversion, return created job summary. |
+| POST | `/api/auth/change-password` | Authenticated self-service password change for the current user; revokes other sessions and preserves current session. |
 | GET | `/api/transcripts` | Return paginated parent transcript jobs only, with search/status/newest-first support. |
 | GET | `/api/transcripts/{jobId}` | Return parent metadata, ordered segments, media access path, processing status, speaker data, and analysis summary status. |
 | PATCH | `/api/transcripts/{jobId}/segments/{segmentId}` | Update editable segment fields, initially only `transcript_text`, after validating ownership. |
@@ -199,6 +200,23 @@ Endpoint list:
 | GET | `/api/transcripts/{jobId}/analysis` | Return stored analysis without rerunning analysis worker. |
 | GET | `/api/stats` | Optional dashboard endpoint for counts and total duration. |
 | GET | `/api/health` | Optional backend readiness endpoint for frontend/developer diagnostics. |
+
+Password change request:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `currentPassword` | string | yes | Existing password for authenticated user. |
+| `newPassword` | string | yes | Must satisfy backend password policy and differ from current password. |
+| `confirmPassword` | string | yes | Must exactly match `newPassword`. |
+
+Password change response:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `message` | string | Success message. |
+| `reauthenticationRequired` | boolean | Current implementation returns `false`; current session is preserved while other sessions are revoked. |
+
+Password change errors use the standard API error envelope and may return `INVALID_CURRENT_PASSWORD`, `PASSWORD_CONFIRMATION_MISMATCH`, `PASSWORD_POLICY_FAILED`, `PASSWORD_UNCHANGED`, `TOO_MANY_LOGIN_ATTEMPTS`, `BAD_REQUEST`, or `UNAUTHENTICATED`.
 
 Upload request:
 

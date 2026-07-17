@@ -24,14 +24,16 @@ import (
 )
 
 const (
-	UserRoleUser       = "user"
-	UserRoleAdmin      = "admin"
-	MinPasswordLength  = 10
-	defaultCookieName  = "transcript_session"
-	defaultSessionLife = 12 * time.Hour
-	loginAttemptLimit  = 5
-	loginAttemptWindow = 15 * time.Minute
-	lastSeenInterval   = 5 * time.Minute
+	UserRoleUser                = "user"
+	UserRoleAdmin               = "admin"
+	MinPasswordLength           = 10
+	defaultCookieName           = "transcript_session"
+	defaultSessionLife          = 12 * time.Hour
+	loginAttemptLimit           = 5
+	loginAttemptWindow          = 15 * time.Minute
+	passwordChangeAttemptLimit  = 5
+	passwordChangeAttemptWindow = 15 * time.Minute
+	lastSeenInterval            = 5 * time.Minute
 )
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
@@ -243,10 +245,70 @@ func Login(ctx context.Context, email, password, remoteAddr string) (dtos.AuthUs
 	return SafeUserDTO(user), token, nil
 }
 
+func ChangeOwnPassword(ctx context.Context, userID, currentPassword, newPassword, currentSessionToken string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return newServiceError(ErrCodeUnauthenticated, errors.New("missing user"))
+	}
+	if isPasswordChangeRateLimited(ctx, userID) {
+		return newServiceError(ErrCodeRateLimited, errors.New("too many password change attempts"))
+	}
+	if err := ValidatePasswordStrength(newPassword); err != nil {
+		return newServiceError(ErrCodePasswordPolicyFailed, err)
+	}
+
+	tx, err := Database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	user, err := getAuthUserForUpdate(ctx, tx, userID)
+	if err != nil {
+		return err
+	}
+	if !user.IsActive {
+		return newServiceError(ErrCodeInactiveUser, errors.New("inactive user"))
+	}
+	if !VerifyPassword(currentPassword, user.PasswordHash) {
+		recordFailedPasswordChangeAttempt(ctx, userID)
+		return newServiceError(ErrCodeInvalidCurrentPassword, errors.New("invalid current password"))
+	}
+	if VerifyPassword(newPassword, user.PasswordHash) {
+		recordFailedPasswordChangeAttempt(ctx, userID)
+		return newServiceError(ErrCodePasswordUnchanged, errors.New("new password must be different"))
+	}
+	passwordHash, err := HashPassword(newPassword)
+	if err != nil {
+		return newServiceError(ErrCodePasswordPolicyFailed, err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, passwordHash, userID); err != nil {
+		return err
+	}
+	if err := revokeOtherSessionsForUser(ctx, tx, userID, HashSessionToken(currentSessionToken)); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	clearPasswordChangeAttempts(ctx, userID)
+	return nil
+}
+
 func GetUserByEmail(ctx context.Context, email string) (AuthUserRecord, error) {
 	row := Database.QueryRowContext(ctx, `SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE email = $1`, NormalizeEmail(email))
 	var user AuthUserRecord
 	err := row.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.Role, &user.IsActive, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt)
+	return user, err
+}
+
+func getAuthUserForUpdate(ctx context.Context, tx *sql.Tx, userID string) (AuthUserRecord, error) {
+	row := tx.QueryRowContext(ctx, `SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1 FOR UPDATE`, userID)
+	var user AuthUserRecord
+	err := row.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.Role, &user.IsActive, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AuthUserRecord{}, newServiceError(ErrCodeUserNotFound, errors.New("user not found"))
+	}
 	return user, err
 }
 
@@ -328,6 +390,11 @@ var loginLimiter = struct {
 	Buckets map[string]loginBucket
 }{Buckets: map[string]loginBucket{}}
 
+var passwordChangeLimiter = struct {
+	sync.Mutex
+	Buckets map[string]loginBucket
+}{Buckets: map[string]loginBucket{}}
+
 func loginAttemptKey(remoteAddr, email string) string {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil || host == "" {
@@ -373,6 +440,74 @@ func clearLoginAttempts(ctx context.Context, remoteAddr, email string) {
 	loginLimiter.Lock()
 	delete(loginLimiter.Buckets, key)
 	loginLimiter.Unlock()
+}
+
+func passwordChangeAttemptKey(userID string) string {
+	return "password_change_attempt:" + HashAuditIdentifier(userID)
+}
+
+func isPasswordChangeRateLimited(ctx context.Context, userID string) bool {
+	key := passwordChangeAttemptKey(userID)
+	if RedisClient != nil {
+		count, err := RedisClient.Get(ctx, key).Int()
+		if err == nil {
+			return count >= passwordChangeAttemptLimit
+		}
+		if err != redis.Nil {
+			return isLocalPasswordChangeRateLimited(key)
+		}
+		return false
+	}
+	return isLocalPasswordChangeRateLimited(key)
+}
+
+func recordFailedPasswordChangeAttempt(ctx context.Context, userID string) {
+	key := passwordChangeAttemptKey(userID)
+	if RedisClient != nil {
+		count, err := RedisClient.Incr(ctx, key).Result()
+		if err == nil {
+			if count == 1 {
+				_ = RedisClient.Expire(ctx, key, passwordChangeAttemptWindow).Err()
+			}
+			return
+		}
+	}
+	recordLocalFailedPasswordChangeAttempt(key)
+}
+
+func clearPasswordChangeAttempts(ctx context.Context, userID string) {
+	key := passwordChangeAttemptKey(userID)
+	if RedisClient != nil {
+		_ = RedisClient.Del(ctx, key).Err()
+	}
+	passwordChangeLimiter.Lock()
+	delete(passwordChangeLimiter.Buckets, key)
+	passwordChangeLimiter.Unlock()
+}
+
+func isLocalPasswordChangeRateLimited(key string) bool {
+	now := time.Now().UTC()
+	passwordChangeLimiter.Lock()
+	defer passwordChangeLimiter.Unlock()
+	bucket := passwordChangeLimiter.Buckets[key]
+	if now.After(bucket.ExpiresAt) {
+		delete(passwordChangeLimiter.Buckets, key)
+		return false
+	}
+	return bucket.Count >= passwordChangeAttemptLimit
+}
+
+func recordLocalFailedPasswordChangeAttempt(key string) {
+	now := time.Now().UTC()
+	passwordChangeLimiter.Lock()
+	defer passwordChangeLimiter.Unlock()
+	bucket := passwordChangeLimiter.Buckets[key]
+	if now.After(bucket.ExpiresAt) {
+		passwordChangeLimiter.Buckets[key] = loginBucket{Count: 1, ExpiresAt: now.Add(passwordChangeAttemptWindow)}
+		return
+	}
+	bucket.Count++
+	passwordChangeLimiter.Buckets[key] = bucket
 }
 
 func isLocalLoginRateLimited(key string) bool {

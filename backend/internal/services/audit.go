@@ -86,6 +86,8 @@ var actionCategories = map[string]string{
 	"auth.login_succeeded":       "authentication",
 	"auth.login_failed":          "authentication",
 	"auth.logout":                "authentication",
+	"password_change_succeeded":  "authentication",
+	"password_change_failed":     "authentication",
 	"admin.user_created":         "user_management",
 	"admin.user_updated":         "user_management",
 	"admin.user_activated":       "user_management",
@@ -107,6 +109,8 @@ var actionCategories = map[string]string{
 
 var auditMetadataAllowlist = map[string]map[string]struct{}{
 	"auth.login_failed":          keys("loginIdentifierHash"),
+	"password_change_succeeded":  keys("otherSessionsRevoked", "currentSessionPreserved"),
+	"password_change_failed":     keys("reasonCode"),
 	"admin.user_created":         keys("targetUserId", "targetRole"),
 	"admin.user_updated":         keys("targetUserId", "changedFields", "previousRole", "newRole"),
 	"admin.user_activated":       keys("targetUserId", "previousActiveState", "newActiveState"),
@@ -135,6 +139,9 @@ func keys(values ...string) map[string]struct{} {
 }
 
 func RecordAuditEvent(ctx context.Context, input AuditEventInput) error {
+	if Database == nil {
+		return newServiceError(ErrCodeInternal, errors.New("database is not initialized"))
+	}
 	if err := validateAuditEvent(input); err != nil {
 		return err
 	}
