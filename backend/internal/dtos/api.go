@@ -283,6 +283,16 @@ type TranscriptDetail struct {
 	Segments         []Segment         `json:"segments"`
 }
 
+type TranscriptStatusResponse struct {
+	JobID          string  `json:"jobId"`
+	Status         string  `json:"status"`
+	Stage          string  `json:"stage"`
+	IsTerminal     bool    `json:"isTerminal"`
+	UpdatedAt      string  `json:"updatedAt"`
+	FailureCode    *string `json:"failureCode"`
+	FailureMessage *string `json:"failureMessage"`
+}
+
 type SpeakerRenameRequest struct {
 	SpeakerKey  string `json:"speakerKey"`
 	DisplayName string `json:"displayName"`

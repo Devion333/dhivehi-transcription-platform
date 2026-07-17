@@ -113,6 +113,21 @@ func APIGetTranscript(c *gin.Context) {
 	c.JSON(http.StatusOK, detail)
 }
 
+func APIGetTranscriptStatus(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	if jobID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+
+	status, err := services.GetAPITranscriptStatus(transcriptAccessScope(c), jobID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}
+
 func APIUpdateSegment(c *gin.Context) {
 	jobID := strings.TrimSpace(c.Param("jobId"))
 	segmentID := strings.TrimSpace(c.Param("segmentId"))

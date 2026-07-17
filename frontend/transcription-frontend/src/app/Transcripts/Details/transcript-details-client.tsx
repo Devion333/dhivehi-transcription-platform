@@ -13,11 +13,13 @@ import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { deleteTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
-import type { TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment } from "@/lib/api/types";
+import type { TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
+import { transcriptStatusLabel } from "@/lib/transcript-status";
 import {
   formatDetailDate,
   formatDuration,
@@ -53,6 +55,7 @@ export function TranscriptDetailsClient() {
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const stopAtRef = React.useRef<number | null>(null);
   const [detail, setDetail] = React.useState<TranscriptDetail | null>(null);
+  const [liveStatus, setLiveStatus] = React.useState<TranscriptStatusResponse | null>(null);
   const [loading, setLoading] = React.useState(Boolean(jobId));
   const [error, setError] = React.useState<string | null>(null);
   const [retryToken, setRetryToken] = React.useState(0);
@@ -74,6 +77,7 @@ export function TranscriptDetailsClient() {
 	const [deleteError, setDeleteError] = React.useState<string | null>(null);
 	const [exportOpen, setExportOpen] = React.useState(false);
   const [exportAnalysis, setExportAnalysis] = React.useState<TranscriptAnalysis | null>(null);
+  const reloadedReadyRef = React.useRef(false);
 
   React.useEffect(() => {
     if (!jobId) return;
@@ -84,6 +88,8 @@ export function TranscriptDetailsClient() {
       .then((response) => {
         const ordered = { ...response, segments: sortSegments(response.segments) };
         setDetail(ordered);
+        setLiveStatus(null);
+        reloadedReadyRef.current = false;
         setEdits(Object.fromEntries(ordered.segments.map((segment) => [segment.id, initialEditState(segment.transcriptText)])));
         setAudioReady(false);
         setAudioError(null);
@@ -104,6 +110,21 @@ export function TranscriptDetailsClient() {
       });
     return () => controller.abort();
   }, [jobId, retryToken]);
+
+  useTranscriptStatusPolling({
+    jobId,
+    enabled: Boolean(detail && isProcessingStatus(liveStatus?.status ?? detail.status)),
+    initialTerminal: liveStatus?.isTerminal ?? false,
+    onStatus: (status) => {
+      const previousStatus = liveStatus?.status ?? detail?.status ?? "";
+      setLiveStatus(status);
+      setDetail((current) => current ? { ...current, status: status.status, updatedAt: status.updatedAt || current.updatedAt } : current);
+      if (!reloadedReadyRef.current && isProcessingStatus(previousStatus) && (status.status === "transcribed" || status.status === "complete")) {
+        reloadedReadyRef.current = true;
+        setRetryToken((value) => value + 1);
+      }
+    },
+  });
 
   React.useEffect(() => {
     const audio = audioRef.current;
@@ -180,6 +201,8 @@ export function TranscriptDetailsClient() {
 
   const analysisHref = `/Transcripts/Analysis?job_id=${encodeURIComponent(detail.jobId)}`;
   const isAdmin = auth.user?.role === "admin";
+  const currentStatus = liveStatus?.status ?? detail.status;
+  const transcriptReady = !isProcessingStatus(currentStatus) && currentStatus !== "failed";
   const speakers = uniqueSpeakers(detail.segments);
   const activeSegment = detail.segments.find((segment) => segment.id === activeSegmentId);
   const activeSpeakerLabel = activeSegment ? getSpeakerDisplayName(activeSegment.speaker, detail.speakerNames) : "";
@@ -306,8 +329,12 @@ export function TranscriptDetailsClient() {
         actions={
           <>
             <BackToList />
-            <Button type="button" variant="outline" onClick={() => setExportOpen(true)} disabled={detail.segments.length === 0}><FileDown className="h-4 w-4" /> Export PDF</Button>
-            <Button asChild variant="outline"><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {detail.analysisStatus === "complete" ? "View analysis" : "Analyse"}</Link></Button>
+            <Button type="button" variant="outline" onClick={() => setExportOpen(true)} disabled={!transcriptReady || detail.segments.length === 0}><FileDown className="h-4 w-4" /> Export PDF</Button>
+            {transcriptReady ? (
+              <Button asChild variant="outline"><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {detail.analysisStatus === "complete" ? "View analysis" : "Analyse"}</Link></Button>
+            ) : (
+              <Button type="button" variant="outline" disabled><BarChart3 className="h-4 w-4" /> Analyse</Button>
+            )}
             <Button type="button" variant="outline" onClick={() => setRetryToken((value) => value + 1)}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
           </>
         }
@@ -333,7 +360,7 @@ export function TranscriptDetailsClient() {
 
       <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
 		<aside className="space-y-4">
-			<MetadataCard detail={detail} isAdmin={isAdmin} />
+			<MetadataCard detail={detail} status={currentStatus} isAdmin={isAdmin} />
 			{isAdmin && (
 				<TranscriptDeletionCard
 					detail={detail}
@@ -362,11 +389,16 @@ export function TranscriptDetailsClient() {
               onReset={(speakerKey) => saveSpeakerName(speakerKey, speakerKey)}
             />
           )}
-          {isProcessingStatus(detail.status) && (
+          {isProcessingStatus(currentStatus) && (
             <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
               <CardContent className="p-4 text-sm text-amber-900 dark:text-amber-200">
-                Transcript is still processing.
+                Transcript is still processing: {transcriptStatusLabel(currentStatus)}.
               </CardContent>
+            </Card>
+          )}
+          {liveStatus?.status === "failed" && liveStatus.failureMessage && (
+            <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40">
+              <CardContent className="p-4 text-sm text-red-900 dark:text-red-200">{liveStatus.failureMessage}</CardContent>
             </Card>
           )}
           <div className="flex items-center justify-between gap-3">
@@ -387,6 +419,7 @@ export function TranscriptDetailsClient() {
                   active={activeSegmentId === segment.id}
                   edit={edits[segment.id] ?? initialEditState(segment.transcriptText)}
                   audioAvailable={Boolean(detail.mediaUrl) && !audioError}
+                  editable={transcriptReady}
                   onPlay={() => playSegment(segment)}
                   onEdit={() => startEdit(segment)}
                   onCancel={() => cancelEdit(segment)}
@@ -499,12 +532,12 @@ function BackToList() {
   return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 
-function MetadataCard({ detail, isAdmin }: { detail: TranscriptDetail; isAdmin: boolean }) {
+function MetadataCard({ detail, status, isAdmin }: { detail: TranscriptDetail; status: string; isAdmin: boolean }) {
   return (
     <Card>
       <CardHeader><CardTitle>Metadata</CardTitle></CardHeader>
       <CardContent className="space-y-4 text-sm">
-        <div className="flex flex-wrap gap-2"><StatusBadge status={detail.status} /><StatusBadge status={detail.analysisStatus} /></div>
+        <div className="flex flex-wrap gap-2"><StatusBadge status={status} /><StatusBadge status={detail.analysisStatus} /></div>
         <Meta label="Reference" value={safeValue(detail.referenceNumber, "No reference")} />
         <Meta label="Category" value={safeValue(detail.category, "Uncategorized")} />
         <Meta label="Speakers" value={String(detail.speakers || 0)} />
@@ -642,12 +675,13 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
   );
 }
 
-function SegmentCard({ segment, speakerNames, active, edit, audioAvailable, onPlay, onEdit, onCancel, onSave, onDraft }: {
+function SegmentCard({ segment, speakerNames, active, edit, audioAvailable, editable, onPlay, onEdit, onCancel, onSave, onDraft }: {
   segment: TranscriptSegment;
   speakerNames: Record<string, string>;
   active: boolean;
   edit: SegmentEditState;
   audioAvailable: boolean;
+  editable: boolean;
   onPlay: () => void;
   onEdit: () => void;
   onCancel: () => void;
@@ -682,7 +716,7 @@ function SegmentCard({ segment, speakerNames, active, edit, audioAvailable, onPl
               <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={edit.saving}><X className="h-4 w-4" /> Cancel</Button>
             </>
           ) : (
-            <Button type="button" variant="ghost" size="sm" onClick={onEdit}><Edit3 className="h-4 w-4" /> Edit text</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={onEdit} disabled={!editable}><Edit3 className="h-4 w-4" /> Edit text</Button>
           )}
         </div>
       </CardContent>

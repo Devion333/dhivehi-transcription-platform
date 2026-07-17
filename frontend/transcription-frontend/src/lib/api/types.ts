@@ -1,11 +1,13 @@
 export type TranscriptStatus =
   | "uploaded"
+  | "queued_conversion"
   | "processing"
   | "converting"
   | "diarizing"
   | "transcribing"
   | "diarized"
   | "transcribed"
+  | "analysing"
   | "completed"
   | "complete"
   | "conversion_failed"
@@ -304,6 +306,16 @@ export interface TranscriptDetail {
   ownerEmail: string;
   speakerNames: Record<string, string>;
   segments: TranscriptSegment[];
+}
+
+export interface TranscriptStatusResponse {
+  jobId: string;
+  status: TranscriptStatus;
+  stage: string;
+  isTerminal: boolean;
+  updatedAt: string;
+  failureCode: string | null;
+  failureMessage: string | null;
 }
 
 export interface SpeakerRenameResponse {

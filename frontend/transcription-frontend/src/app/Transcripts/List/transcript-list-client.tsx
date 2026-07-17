@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Pagination, TranscriptSummary } from "@/lib/api/types";
+import { isProcessingTranscriptStatus } from "@/lib/transcript-status";
 import {
   buildTranscriptListPath,
   fallbackText,
@@ -73,6 +74,47 @@ export function TranscriptListClient() {
 
     return () => controller.abort();
   }, [loadKey, page, search, status]);
+
+  React.useEffect(() => {
+    if (loading || error || !data.items.some((item) => isProcessingTranscriptStatus(item.status))) return;
+
+    let disposed = false;
+    let inFlight = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let controller: AbortController | null = null;
+
+    async function refresh() {
+      if (disposed || inFlight) return;
+      if (document.visibilityState === "hidden") {
+        schedule();
+        return;
+      }
+      inFlight = true;
+      controller = new AbortController();
+      try {
+        const response = await getTranscripts({ page, pageSize: transcriptPageSize, search, status }, controller.signal);
+        if (!disposed) setData({ items: response.items, pagination: response.pagination });
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) setError(err instanceof Error ? err.message : "Failed to refresh transcripts");
+      } finally {
+        inFlight = false;
+        controller = null;
+        if (!disposed) schedule();
+      }
+    }
+
+    function schedule() {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(refresh, 3000);
+    }
+
+    schedule();
+    return () => {
+      disposed = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      controller?.abort();
+    };
+  }, [data.items, error, loading, page, search, status]);
 
   function navigate(next: { page?: number; search?: string; status?: string }) {
     router.push(buildTranscriptListPath({ page, search, status, ...next }));
