@@ -307,10 +307,30 @@ export interface TranscriptDetail {
 }
 
 export interface SpeakerRenameResponse {
-  speakerKey: string;
-  displayName: string;
-  speakerNames: Record<string, string>;
-  reset: boolean;
+	speakerKey: string;
+	displayName: string;
+	speakerNames: Record<string, string>;
+	reset: boolean;
+}
+
+export interface TranscriptDeletionPreview {
+  jobId: string;
+  filename: string;
+  owner: { displayName: string; email: string };
+  segmentCount: number;
+  mediaObjects: number;
+  status: string;
+  canDelete: boolean;
+  blockingReason: string | null;
+}
+
+export interface TranscriptDeletionResponse {
+  jobId: string;
+  deleted: boolean;
+  segmentCount: number;
+  mediaObjectCount: number;
+  cleanupCategories: string[];
+  partialCleanupCategories?: string[];
 }
 
 export interface TranscriptAnalysis {

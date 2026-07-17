@@ -197,6 +197,8 @@ Endpoint list:
 | GET | `/api/transcripts/{jobId}` | Return parent metadata, ordered segments, media access path, processing status, speaker data, and analysis summary status. |
 | PATCH | `/api/transcripts/{jobId}/speakers` | Persist a display name mapping for a generated speaker key on the parent transcript payload. |
 | PATCH | `/api/transcripts/{jobId}/segments/{segmentId}` | Update editable segment fields, initially only `transcript_text`, after validating ownership. |
+| GET | `/api/admin/transcripts/{jobId}/deletion-preview` | Admin-only safe preview for transcript deletion, including counts and blocking state. |
+| DELETE | `/api/admin/transcripts/{jobId}` | Admin-only confirmed deletion of transcript Qdrant points, referenced media objects, and safe job-scoped queue metadata. |
 | POST | `/api/transcripts/{jobId}/analyse` | Run analysis for transcribed transcript and persist result. |
 | GET | `/api/transcripts/{jobId}/analysis` | Return stored analysis without rerunning analysis worker. |
 | GET | `/api/stats` | Optional dashboard endpoint for counts and total duration. |
@@ -236,6 +238,27 @@ Speaker rename response:
 | `reset` | boolean | `true` when the mapping was removed and rendering should fall back to the generated label. |
 
 Speaker names are stored as `speaker_names` on the parent transcript payload. Segment payload `speaker` values remain unchanged.
+
+Admin transcript deletion preview response:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `jobId` | string | Transcript job ID. |
+| `filename` | string | Parent transcript filename. |
+| `owner` | object | Safe owner display name and email when present. |
+| `segmentCount` | number | Number of segment points found for the transcript. |
+| `mediaObjects` | number | Count of validated referenced media objects. |
+| `status` | string | Public/admin transcript status. |
+| `canDelete` | boolean | `false` when transcript is processing or queued/processing. |
+| `blockingReason` | string/null | `TRANSCRIPT_PROCESSING` when deletion is blocked. |
+
+Admin transcript delete request:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `confirmation` | string | yes | Must exactly equal the `jobId`; mismatches return `DELETE_CONFIRMATION_MISMATCH`. |
+
+Deletion removes referenced MinIO objects, Qdrant segments, Qdrant parent, and narrow job-scoped queued/failed Redis metadata. Partial failures return `TRANSCRIPT_DELETION_PARTIAL` with safe cleanup category names only.
 
 Upload request:
 

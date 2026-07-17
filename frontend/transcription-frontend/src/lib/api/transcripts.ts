@@ -1,5 +1,5 @@
 import { request } from "./client";
-import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDetail, TranscriptListResponse, TranscriptSegment } from "./types";
+import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptSegment } from "./types";
 
 export type TranscriptListParams = {
   page?: number;
@@ -70,5 +70,22 @@ export function updateSpeakerName(jobId: string, speakerKey: string, displayName
     signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ speakerKey, displayName }),
+  });
+}
+
+export function getTranscriptDeletionPreview(jobId: string, signal?: AbortSignal) {
+  const trimmed = jobId.trim();
+  if (!trimmed) throw new Error("A transcript job ID is required");
+  return request<TranscriptDeletionPreview>(`/api/admin/transcripts/${encodeURIComponent(trimmed)}/deletion-preview`, { signal });
+}
+
+export function deleteTranscript(jobId: string, confirmation: string, signal?: AbortSignal) {
+  const trimmed = jobId.trim();
+  if (!trimmed) throw new Error("A transcript job ID is required");
+  return request<TranscriptDeletionResponse>(`/api/admin/transcripts/${encodeURIComponent(trimmed)}`, {
+    method: "DELETE",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmation }),
   });
 }

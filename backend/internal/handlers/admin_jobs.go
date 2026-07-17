@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -81,6 +83,71 @@ func APIAdminRetryJob(c *gin.Context) {
 	}
 	auditRequestEvent(c, services.AuditEventInput{Action: "admin.job_retry_succeeded", Category: "job_management", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: retryAuditMetadata(jobID, job.CurrentStage, before.Status, job.Status, before.RetryCount, before.FailureCode)})
 	c.JSON(http.StatusOK, dtos.AdminJobRetryResponse{Job: job})
+}
+
+func APIAdminTranscriptDeletionPreview(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	if jobID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+	preview, err := services.GetTranscriptDeletionPreview(c.Request.Context(), jobID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "transcript_deletion_previewed", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"jobId": jobID, "segmentCount": preview.SegmentCount, "mediaObjectCount": preview.MediaObjects}})
+	c.JSON(http.StatusOK, preview)
+}
+
+func APIAdminDeleteTranscript(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	if jobID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+	var request dtos.TranscriptDeletionRequest
+	if !decodeDeletionJSON(c, &request) {
+		return
+	}
+	result, err := services.DeleteAdminTranscript(c.Request.Context(), jobID, request.Confirmation)
+	if err != nil {
+		var partial *services.TranscriptDeletionPartialError
+		if errors.As(err, &partial) {
+			auditRequestEvent(c, services.AuditEventInput{Action: "transcript_deletion_failed", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"jobId": jobID, "segmentCount": partial.Response.SegmentCount, "mediaObjectCount": partial.Response.MediaObjectCount, "failureCode": services.ErrCodeTranscriptDeletionPartial, "partialCleanupCategories": partial.Response.PartialCleanupCategories}})
+			writeAPIError(c, http.StatusConflict, services.ErrCodeTranscriptDeletionPartial, "Transcript deletion partially completed", partial.Response)
+			return
+		}
+		failureCode := deletionFailureCode(err)
+		auditRequestEvent(c, services.AuditEventInput{Action: "transcript_deletion_failed", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"jobId": jobID, "failureCode": failureCode}})
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "transcript_deletion_succeeded", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"jobId": jobID, "segmentCount": result.SegmentCount, "mediaObjectCount": result.MediaObjectCount}})
+	c.JSON(http.StatusOK, result)
+}
+
+func decodeDeletionJSON(c *gin.Context, target interface{}) bool {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32<<10)
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Request body must be valid JSON", nil)
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Request body must contain a single JSON object", nil)
+		return false
+	}
+	return true
+}
+
+func deletionFailureCode(err error) string {
+	var serviceErr *services.ServiceError
+	if errors.As(err, &serviceErr) {
+		return serviceErr.Code
+	}
+	return services.ErrCodeInternal
 }
 
 func retryAnalysisJob(c *gin.Context, jobID string, before dtos.AdminJobDetail) (dtos.AdminJobDetail, error) {
