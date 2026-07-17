@@ -27,6 +27,8 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Segment does not belong to transcript", nil)
 		case services.ErrCodeBadRequest:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Request is invalid", nil)
+		case services.ErrCodeForbidden:
+			writeAPIError(c, http.StatusForbidden, serviceErr.Code, "You do not have permission to access this transcript", nil)
 		case services.ErrCodeSearchQueryRequired:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Search query is required", nil)
 		case services.ErrCodeSearchUnavailable:

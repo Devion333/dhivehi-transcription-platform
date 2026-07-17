@@ -1,12 +1,7 @@
 package services
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 )
 
 // TranscriptListItem represents a transcript in the list
@@ -26,74 +21,13 @@ type TranscriptListItem struct {
 
 // GetAllTranscripts fetches all parent transcripts from Qdrant
 // GetAllTranscripts fetches all parent transcripts from Qdrant
-func GetAllTranscripts() ([]TranscriptListItem, error) {
-	qdrantHost := os.Getenv("QDRANT_HOST")
-	if qdrantHost == "" {
-		qdrantHost = "http://transcript_qdrant:6333"
-	}
-
-	collection := "file_metadata"
-
-	// Use scroll API to get all points
-	url := fmt.Sprintf("%s/collections/%s/points/scroll", qdrantHost, collection)
-
-	requestBody := map[string]interface{}{
-		"filter": map[string]interface{}{
-			"must": []map[string]interface{}{
-				{
-					"key": "type",
-					"match": map[string]string{
-						"value": "parent",
-					},
-				},
-			},
-		},
-		"limit":        100,
-		"with_payload": true,
-		"with_vector":  false,
-	}
-
-	data, err := json.Marshal(requestBody)
+func GetAllTranscripts(scope TranscriptAccessScope) ([]TranscriptListItem, error) {
+	points, err := ListParentTranscriptPointsForScope(scope)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %v", err)
+		return nil, err
 	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to reach Qdrant API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("qdrant API error: %s — Response: %s", resp.Status, string(bodyBytes))
-	}
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-
-	var qdrantResponse struct {
-		Result struct {
-			Points []struct {
-				ID      interface{}            `json:"id"`
-				Payload map[string]interface{} `json:"payload"`
-			} `json:"points"`
-		} `json:"result"`
-	}
-
-	if err := json.Unmarshal(bodyBytes, &qdrantResponse); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
-	}
-
-	var transcripts []TranscriptListItem
-
-	for _, point := range qdrantResponse.Result.Points {
+	transcripts := make([]TranscriptListItem, 0, len(points))
+	for _, point := range points {
 		payload := point.Payload
 
 		// Helper function to safely get string values
@@ -149,8 +83,8 @@ func GetAllTranscripts() ([]TranscriptListItem, error) {
 }
 
 // GetTranscriptsByStatus filters transcripts by status
-func GetTranscriptsByStatus(status string) ([]TranscriptListItem, error) {
-	transcripts, err := GetAllTranscripts()
+func GetTranscriptsByStatus(scope TranscriptAccessScope, status string) ([]TranscriptListItem, error) {
+	transcripts, err := GetAllTranscripts(scope)
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +104,8 @@ func GetTranscriptsByStatus(status string) ([]TranscriptListItem, error) {
 }
 
 // GetTranscriptStats returns statistics about transcripts
-func GetTranscriptStats() (map[string]interface{}, error) {
-	transcripts, err := GetAllTranscripts()
+func GetTranscriptStats(scope TranscriptAccessScope) (map[string]interface{}, error) {
+	transcripts, err := GetAllTranscripts(scope)
 	if err != nil {
 		return nil, err
 	}

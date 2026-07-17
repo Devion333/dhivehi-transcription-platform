@@ -56,6 +56,10 @@ func APIAuditPDFExport(c *gin.Context) {
 		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "format is invalid", nil)
 		return
 	}
+	if _, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	auditRequestEvent(c, services.AuditEventInput{Action: action, Category: "export", ResourceType: "transcript", ResourceID: jobID, Outcome: outcome, Metadata: map[string]interface{}{"jobId": jobID, "format": format, "includeAnalysis": request.IncludeAnalysis}})
 	c.JSON(http.StatusOK, dtos.AuthMessageResponse{Message: "Audit recorded"})
 }

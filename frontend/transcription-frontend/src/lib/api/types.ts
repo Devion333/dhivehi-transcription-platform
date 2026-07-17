@@ -259,6 +259,9 @@ export interface TranscriptSummary {
   updatedAt: string;
   segmentCount: number;
   analysisStatus: AnalysisStatus;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  ownerEmail: string;
 }
 
 export interface TranscriptSegment {
@@ -285,6 +288,9 @@ export interface TranscriptDetail {
   createdAt: string;
   updatedAt: string;
   analysisStatus: AnalysisStatus;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  ownerEmail: string;
   segments: TranscriptSegment[];
 }
 

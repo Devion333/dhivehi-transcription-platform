@@ -9,7 +9,7 @@ import (
 
 // GetStatsHandler handles GET /api/stats
 func GetStatsHandler(w http.ResponseWriter, r *http.Request) {
-	stats, err := services.GetTranscriptStats()
+	stats, err := services.GetTranscriptStats(services.TranscriptAccessScope{})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get stats: %v", err), http.StatusInternalServerError)
 		return
@@ -21,7 +21,7 @@ func GetStatsHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetAllTranscriptsHandler handles GET /api/transcripts
 func GetAllTranscriptsHandler(w http.ResponseWriter, r *http.Request) {
-	transcripts, err := services.GetAllTranscripts()
+	transcripts, err := services.GetAllTranscripts(services.TranscriptAccessScope{})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get transcripts: %v", err), http.StatusInternalServerError)
 		return
@@ -35,7 +35,7 @@ func GetAllTranscriptsHandler(w http.ResponseWriter, r *http.Request) {
 func GetTranscriptsByStatusHandler(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 
-	transcripts, err := services.GetTranscriptsByStatus(status)
+	transcripts, err := services.GetTranscriptsByStatus(services.TranscriptAccessScope{}, status)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get transcripts: %v", err), http.StatusInternalServerError)
 		return

@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
 import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +37,7 @@ type SegmentEditState = {
 };
 
 export function TranscriptDetailsClient() {
+  const auth = useAuth();
   const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -157,6 +159,7 @@ export function TranscriptDetailsClient() {
   }
 
   const analysisHref = `/Transcripts/Analysis?job_id=${encodeURIComponent(detail.jobId)}`;
+  const isAdmin = auth.user?.role === "admin";
 
   async function togglePlayback() {
     const audio = audioRef.current;
@@ -262,7 +265,7 @@ export function TranscriptDetailsClient() {
 
       <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <MetadataCard detail={detail} />
+          <MetadataCard detail={detail} isAdmin={isAdmin} />
         </aside>
 
         <section className="min-w-0 space-y-4">
@@ -327,7 +330,7 @@ function BackToList() {
   return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 
-function MetadataCard({ detail }: { detail: TranscriptDetail }) {
+function MetadataCard({ detail, isAdmin }: { detail: TranscriptDetail; isAdmin: boolean }) {
   return (
     <Card>
       <CardHeader><CardTitle>Metadata</CardTitle></CardHeader>
@@ -339,10 +342,15 @@ function MetadataCard({ detail }: { detail: TranscriptDetail }) {
         <Meta label="Segments" value={String(detail.segmentCount)} />
         <Meta label="Created" value={formatDetailDate(detail.createdAt)} />
         <Meta label="Updated" value={formatDetailDate(detail.updatedAt)} />
+        {isAdmin && <Meta label="Owner" value={ownerLabel(detail)} />}
         <div><p className="text-muted-foreground">Notes</p><p className="mt-1 whitespace-pre-wrap">{safeValue(detail.notes, "No notes")}</p></div>
       </CardContent>
     </Card>
   );
+}
+
+function ownerLabel(detail: Pick<TranscriptDetail, "ownerDisplayName" | "ownerEmail" | "ownerUserId">) {
+  return detail.ownerDisplayName || detail.ownerEmail || detail.ownerUserId || "Legacy ownerless";
 }
 
 function Meta({ label, value }: { label: string; value: string }) {
