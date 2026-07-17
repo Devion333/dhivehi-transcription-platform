@@ -32,6 +32,46 @@ func TestWriteAPIError(t *testing.T) {
 	}
 }
 
+func TestAPIUpdateSpeakerNameRejectsUnknownJSONFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.PATCH("/api/transcripts/:jobId/speakers", func(c *gin.Context) {
+		c.Set(authUserContextKey, dtos.AuthUser{ID: "owner", Role: services.UserRoleUser})
+	}, APIUpdateSpeakerName)
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/transcripts/job/speakers", strings.NewReader(`{"speakerKey":"SPEAKER_00","displayName":"Officer Ahmed","ownerUserId":"other"}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", recorder.Code)
+	}
+}
+
+func TestSpeakerRenameAuditMetadataAllowlistExcludesDisplayName(t *testing.T) {
+	metadata, err := services.SanitizeAuditMetadata("speaker_rename_succeeded", map[string]interface{}{"jobId": "job", "speakerKey": "SPEAKER_00", "displayName": "Officer Ahmed"})
+	if err != nil {
+		t.Fatalf("unexpected audit sanitize error: %v", err)
+	}
+	if _, ok := metadata["displayName"]; ok {
+		t.Fatalf("display name should not be stored in audit metadata: %+v", metadata)
+	}
+	if metadata["jobId"] != "job" || metadata["speakerKey"] != "SPEAKER_00" {
+		t.Fatalf("expected safe metadata keys, got %+v", metadata)
+	}
+}
+
+func TestAnalysisTranscriptLinesUseMappedSpeakerNames(t *testing.T) {
+	lines := buildAnalysisTranscriptLines([]services.SegmentPoint{
+		{Payload: services.SegmentPayload{Speaker: "SPEAKER_00", TranscriptText: "hello"}},
+		{Payload: services.SegmentPayload{Speaker: "SPEAKER_01", TranscriptText: "world"}},
+	}, map[string]string{"SPEAKER_00": "Officer Ahmed"})
+	if len(lines) != 2 || lines[0] != "Officer Ahmed: hello" || lines[1] != "SPEAKER_01: world" {
+		t.Fatalf("unexpected analysis lines: %+v", lines)
+	}
+}
+
 func TestAPISearchTranscriptsRequiresQuery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

@@ -302,7 +302,15 @@ export interface TranscriptDetail {
   ownerUserId: string;
   ownerDisplayName: string;
   ownerEmail: string;
+  speakerNames: Record<string, string>;
   segments: TranscriptSegment[];
+}
+
+export interface SpeakerRenameResponse {
+  speakerKey: string;
+  displayName: string;
+  speakerNames: Record<string, string>;
+  reset: boolean;
 }
 
 export interface TranscriptAnalysis {

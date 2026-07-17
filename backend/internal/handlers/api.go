@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -149,6 +150,31 @@ func APIUpdateSegment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"segment": segment})
 }
 
+func APIUpdateSpeakerName(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	if jobID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+	var request dtos.SpeakerRenameRequest
+	if !decodeStrictAPIJSON(c, &request) {
+		auditRequestEvent(c, services.AuditEventInput{Action: "speaker_rename_failed", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"jobId": jobID, "speakerKey": strings.TrimSpace(request.SpeakerKey)}})
+		return
+	}
+	result, err := services.UpdateSpeakerName(transcriptAccessScope(c), jobID, request.SpeakerKey, request.DisplayName)
+	if err != nil {
+		auditRequestEvent(c, services.AuditEventInput{Action: "speaker_rename_failed", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"jobId": jobID, "speakerKey": strings.TrimSpace(request.SpeakerKey)}})
+		writeServiceError(c, err)
+		return
+	}
+	action := "speaker_rename_succeeded"
+	if result.Reset {
+		action = "speaker_name_reset"
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: action, Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"jobId": jobID, "speakerKey": result.SpeakerKey}})
+	c.JSON(http.StatusOK, result)
+}
+
 func APIGetAnalysis(c *gin.Context) {
 	jobID := strings.TrimSpace(c.Param("jobId"))
 	if jobID == "" {
@@ -190,6 +216,21 @@ func LegacyTranscriptStats(c *gin.Context) {
 }
 
 var _ = dtos.APIError{}
+
+func decodeStrictAPIJSON(c *gin.Context, target interface{}) bool {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32<<10)
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Request body must be valid JSON", nil)
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Request body must contain a single JSON object", nil)
+		return false
+	}
+	return true
+}
 
 func transcriptAccessScope(c *gin.Context) services.TranscriptAccessScope {
 	user, ok := CurrentUser(c)

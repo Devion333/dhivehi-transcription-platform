@@ -62,6 +62,7 @@ func main() {
 			protected.GET("/search/transcripts", handlers.APISearchTranscripts)
 			protected.GET("/transcripts", handlers.APIListTranscripts)
 			protected.GET("/transcripts/:jobId", handlers.APIGetTranscript)
+			protected.PATCH("/transcripts/:jobId/speakers", handlers.APIUpdateSpeakerName)
 			protected.PATCH("/transcripts/:jobId/segments/:segmentId", handlers.APIUpdateSegment)
 			protected.GET("/transcripts/:jobId/analysis", handlers.APIGetAnalysis)
 			protected.POST("/transcripts/:jobId/analyse", handlers.APIAnalyseTranscript)

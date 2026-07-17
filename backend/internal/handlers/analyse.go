@@ -53,12 +53,13 @@ func AnalyseTranscript(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id is required"})
 		return
 	}
-	if _, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID); err != nil {
+	parent, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID)
+	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
 
-	result, analysisErr := runTranscriptAnalysis(jobID)
+	result, analysisErr := runTranscriptAnalysis(jobID, services.MapSpeakerNames(parent.Payload))
 	if analysisErr != nil {
 		c.JSON(analysisErr.status, gin.H{"error": analysisErr.message})
 		return
@@ -81,12 +82,13 @@ func APIAnalyseTranscript(c *gin.Context) {
 	}
 
 	started := time.Now()
-	if _, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID); err != nil {
+	parent, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID)
+	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
 	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "started", "provider": "analysis"}})
-	result, analysisErr := runTranscriptAnalysis(jobID)
+	result, analysisErr := runTranscriptAnalysis(jobID, services.MapSpeakerNames(parent.Payload))
 	if analysisErr != nil {
 		auditRequestEvent(c, services.AuditEventInput{Action: "analysis.failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"analysisStatus": "failed", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
 		writeAPIError(c, analysisErr.status, analysisErr.code, analysisErr.message, nil)
@@ -100,7 +102,7 @@ func APIAnalyseTranscript(c *gin.Context) {
 	})
 }
 
-func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError) {
+func runTranscriptAnalysis(jobID string, speakerNames map[string]string) (AnalysisResult, *analysisHandlerError) {
 
 	segments, err := services.ScrollSegmentsByParent(jobID)
 	if err != nil {
@@ -116,14 +118,7 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 		return segments[i].Payload.SegmentIndex < segments[j].Payload.SegmentIndex
 	})
 
-	var transcriptLines []string
-	for _, seg := range segments {
-		text := strings.TrimSpace(seg.Payload.TranscriptText)
-		if text == "" || text == "Transcription pending..." {
-			continue
-		}
-		transcriptLines = append(transcriptLines, fmt.Sprintf("%s: %s", seg.Payload.Speaker, text))
-	}
+	transcriptLines := buildAnalysisTranscriptLines(segments, speakerNames)
 
 	if len(transcriptLines) == 0 {
 		return AnalysisResult{}, &analysisHandlerError{status: http.StatusBadRequest, code: services.ErrCodeBadRequest, message: "no transcribed text found in segments"}
@@ -189,6 +184,18 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 	}()
 
 	return result, nil
+}
+
+func buildAnalysisTranscriptLines(segments []services.SegmentPoint, speakerNames map[string]string) []string {
+	var transcriptLines []string
+	for _, seg := range segments {
+		text := strings.TrimSpace(seg.Payload.TranscriptText)
+		if text == "" || text == "Transcription pending..." {
+			continue
+		}
+		transcriptLines = append(transcriptLines, fmt.Sprintf("%s: %s", services.SpeakerDisplayName(seg.Payload.Speaker, speakerNames), text))
+	}
+	return transcriptLines
 }
 
 func mapAnalysisResult(result AnalysisResult) dtos.Analysis {

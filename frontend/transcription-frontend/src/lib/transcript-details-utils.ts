@@ -25,6 +25,12 @@ export function speakerLabel(speaker: string) {
   return `Speaker ${Number(match[1]) + 1}`;
 }
 
+export function getSpeakerDisplayName(speakerKey: string, speakerNames?: Record<string, string> | null) {
+  const mapped = speakerNames?.[speakerKey]?.trim();
+  if (mapped) return mapped;
+  return speakerKey.trim() || "Unknown speaker";
+}
+
 export function isProbablyDhivehi(text: string) {
   return /[\u0780-\u07BF]/.test(text);
 }

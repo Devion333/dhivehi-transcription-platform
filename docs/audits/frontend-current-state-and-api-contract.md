@@ -195,6 +195,7 @@ Endpoint list:
 | POST | `/api/auth/change-password` | Authenticated self-service password change for the current user; revokes other sessions and preserves current session. |
 | GET | `/api/transcripts` | Return paginated parent transcript jobs only, with search/status/newest-first support. |
 | GET | `/api/transcripts/{jobId}` | Return parent metadata, ordered segments, media access path, processing status, speaker data, and analysis summary status. |
+| PATCH | `/api/transcripts/{jobId}/speakers` | Persist a display name mapping for a generated speaker key on the parent transcript payload. |
 | PATCH | `/api/transcripts/{jobId}/segments/{segmentId}` | Update editable segment fields, initially only `transcript_text`, after validating ownership. |
 | POST | `/api/transcripts/{jobId}/analyse` | Run analysis for transcribed transcript and persist result. |
 | GET | `/api/transcripts/{jobId}/analysis` | Return stored analysis without rerunning analysis worker. |
@@ -217,6 +218,24 @@ Password change response:
 | `reauthenticationRequired` | boolean | Current implementation returns `false`; current session is preserved while other sessions are revoked. |
 
 Password change errors use the standard API error envelope and may return `INVALID_CURRENT_PASSWORD`, `PASSWORD_CONFIRMATION_MISMATCH`, `PASSWORD_POLICY_FAILED`, `PASSWORD_UNCHANGED`, `TOO_MANY_LOGIN_ATTEMPTS`, `BAD_REQUEST`, or `UNAUTHENTICATED`.
+
+Speaker rename request:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `speakerKey` | string | yes | Generated stable speaker key, such as `SPEAKER_00`; must exist on the transcript's segments. |
+| `displayName` | string | yes | Trimmed display label, 1-80 characters, no control characters. Set equal to `speakerKey` to reset. |
+
+Speaker rename response:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `speakerKey` | string | Stable generated key that was updated. |
+| `displayName` | string | Normalized display name after update, or generated key after reset. |
+| `speakerNames` | object | Full parent transcript speaker mapping after update. |
+| `reset` | boolean | `true` when the mapping was removed and rendering should fall back to the generated label. |
+
+Speaker names are stored as `speaker_names` on the parent transcript payload. Segment payload `speaker` values remain unchanged.
 
 Upload request:
 

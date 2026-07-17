@@ -13,17 +13,19 @@ import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getTranscript, getTranscriptAnalysis, updateSegment } from "@/lib/api/transcripts";
+import { getTranscript, getTranscriptAnalysis, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
+import { ApiError } from "@/lib/api/client";
 import type { TranscriptAnalysis, TranscriptDetail, TranscriptSegment } from "@/lib/api/types";
 import {
   formatDetailDate,
   formatDuration,
   formatTimestamp,
+  getSpeakerDisplayName,
   isProcessingStatus,
   safeValue,
   sortSegments,
-  speakerLabel,
   transcriptTextProps,
 } from "@/lib/transcript-details-utils";
 import { cn } from "@/lib/utils";
@@ -33,6 +35,13 @@ type SegmentEditState = {
   draft: string;
   saving: boolean;
   saved: boolean;
+  error: string | null;
+};
+
+type SpeakerEditState = {
+  speakerKey: string;
+  draft: string;
+  saving: boolean;
   error: string | null;
 };
 
@@ -56,6 +65,7 @@ export function TranscriptDetailsClient() {
   const [playbackRate, setPlaybackRate] = React.useState(1);
   const [activeSegmentId, setActiveSegmentId] = React.useState<string | null>(null);
   const [edits, setEdits] = React.useState<Record<string, SegmentEditState>>({});
+  const [speakerEdit, setSpeakerEdit] = React.useState<SpeakerEditState | null>(null);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [exportAnalysis, setExportAnalysis] = React.useState<TranscriptAnalysis | null>(null);
 
@@ -74,6 +84,7 @@ export function TranscriptDetailsClient() {
         setCurrentTime(0);
         setDuration(0);
         setActiveSegmentId(null);
+        setSpeakerEdit(null);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -160,6 +171,9 @@ export function TranscriptDetailsClient() {
 
   const analysisHref = `/Transcripts/Analysis?job_id=${encodeURIComponent(detail.jobId)}`;
   const isAdmin = auth.user?.role === "admin";
+  const speakers = uniqueSpeakers(detail.segments);
+  const activeSegment = detail.segments.find((segment) => segment.id === activeSegmentId);
+  const activeSpeakerLabel = activeSegment ? getSpeakerDisplayName(activeSegment.speaker, detail.speakerNames) : "";
 
   async function togglePlayback() {
     const audio = audioRef.current;
@@ -232,6 +246,23 @@ export function TranscriptDetailsClient() {
     }
   }
 
+  async function saveSpeakerName(speakerKey: string, displayName: string) {
+    if (!detail || speakerEdit?.saving) return;
+    const validationError = validateSpeakerDisplayName(displayName);
+    if (validationError) {
+      setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: validationError });
+      return;
+    }
+    setSpeakerEdit({ speakerKey, draft: displayName, saving: true, error: null });
+    try {
+      const response = await updateSpeakerName(detail.jobId, speakerKey, displayName);
+      setDetail((current) => current ? { ...current, speakerNames: response.speakerNames } : current);
+      setSpeakerEdit(null);
+    } catch (err) {
+      setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: speakerRenameError(err) });
+    }
+  }
+
   return (
     <PageContainer>
       <PageHeader
@@ -255,6 +286,7 @@ export function TranscriptDetailsClient() {
         duration={duration}
         volume={volume}
         playbackRate={playbackRate}
+        activeSpeakerLabel={activeSpeakerLabel}
         onToggle={togglePlayback}
         onSeek={seek}
         onSkip={skip}
@@ -269,6 +301,18 @@ export function TranscriptDetailsClient() {
         </aside>
 
         <section className="min-w-0 space-y-4">
+          {speakers.length > 0 && (
+            <SpeakerManagementCard
+              speakers={speakers}
+              speakerNames={detail.speakerNames}
+              edit={speakerEdit}
+              onEdit={(speakerKey) => setSpeakerEdit({ speakerKey, draft: getSpeakerDisplayName(speakerKey, detail.speakerNames), saving: false, error: null })}
+              onCancel={() => setSpeakerEdit(null)}
+              onDraft={(draft) => setSpeakerEdit((current) => current ? { ...current, draft, error: null } : current)}
+              onSave={(speakerKey, displayName) => saveSpeakerName(speakerKey, displayName)}
+              onReset={(speakerKey) => saveSpeakerName(speakerKey, speakerKey)}
+            />
+          )}
           {isProcessingStatus(detail.status) && (
             <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
               <CardContent className="p-4 text-sm text-amber-900 dark:text-amber-200">
@@ -290,6 +334,7 @@ export function TranscriptDetailsClient() {
                 <SegmentCard
                   key={segment.id}
                   segment={segment}
+                  speakerNames={detail.speakerNames}
                   active={activeSegmentId === segment.id}
                   edit={edits[segment.id] ?? initialEditState(segment.transcriptText)}
                   audioAvailable={Boolean(detail.mediaUrl) && !audioError}
@@ -326,6 +371,81 @@ function initialEditState(text: string): SegmentEditState {
   return { editing: false, draft: text, saving: false, saved: false, error: null };
 }
 
+function uniqueSpeakers(segments: TranscriptSegment[]) {
+  return Array.from(new Set(segments.map((segment) => segment.speaker).filter(Boolean))).sort();
+}
+
+function SpeakerManagementCard({ speakers, speakerNames, edit, onEdit, onCancel, onDraft, onSave, onReset }: {
+  speakers: string[];
+  speakerNames: Record<string, string>;
+  edit: SpeakerEditState | null;
+  onEdit: (speakerKey: string) => void;
+  onCancel: () => void;
+  onDraft: (draft: string) => void;
+  onSave: (speakerKey: string, displayName: string) => void;
+  onReset: (speakerKey: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader><CardTitle>Speakers</CardTitle></CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {speakers.map((speakerKey) => {
+          const editing = edit?.speakerKey === speakerKey;
+          const displayName = getSpeakerDisplayName(speakerKey, speakerNames);
+          return (
+            <div key={speakerKey} className="rounded-lg border p-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">Generated label: {speakerKey}</p>
+                </div>
+                {!editing && <Button type="button" variant="outline" size="sm" onClick={() => onEdit(speakerKey)}>Edit</Button>}
+              </div>
+              {editing && (
+                <div className="mt-3 space-y-2">
+                  <Input value={edit.draft} onChange={(event) => onDraft(event.target.value)} disabled={edit.saving} maxLength={80} aria-label={`Display name for ${speakerKey}`} />
+                  {edit.error && <p className="text-sm text-destructive">{edit.error}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" onClick={() => onSave(speakerKey, edit.draft)} disabled={edit.saving}>{edit.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onReset(speakerKey)} disabled={edit.saving}>Reset to generated label</Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={edit.saving}><X className="h-4 w-4" /> Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function speakerRenameError(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === "INVALID_SPEAKER_NAME") return "Use 1-80 characters and avoid control characters.";
+    if (error.code === "INVALID_SPEAKER_KEY") return "This speaker label is no longer available.";
+    if (error.status === 403) return "You do not have permission to rename speakers for this transcript.";
+    return error.message;
+  }
+  return "Speaker name could not be saved.";
+}
+
+function validateSpeakerDisplayName(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "Speaker name is required.";
+  if ([...trimmed].length > 80) return "Use 80 characters or fewer.";
+  if (hasControlCharacters(trimmed)) return "Control characters are not allowed.";
+  return "";
+}
+
+
+function hasControlCharacters(value: string) {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
+}
+
 function BackToList() {
   return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
@@ -357,7 +477,7 @@ function Meta({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-4 border-b pb-2 last:border-b-0"><span className="text-muted-foreground">{label}</span><span className="text-right font-medium">{value}</span></div>;
 }
 
-function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, duration, volume, playbackRate, onToggle, onSeek, onSkip, onVolume, onToggleMute, onRate }: {
+function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, duration, volume, playbackRate, activeSpeakerLabel, onToggle, onSeek, onSkip, onVolume, onToggleMute, onRate }: {
   mediaUrl: string;
   playing: boolean;
   audioReady: boolean;
@@ -366,6 +486,7 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
   duration: number;
   volume: number;
   playbackRate: number;
+  activeSpeakerLabel: string;
   onToggle: () => void;
   onSeek: (value: number) => void;
   onSkip: (seconds: number) => void;
@@ -384,6 +505,7 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
       <CardHeader className="pb-3"><CardTitle>Audio</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         {!mediaUrl ? <p className="text-sm text-muted-foreground">Media unavailable</p> : audioError ? <p className="text-sm text-destructive">{audioError}</p> : null}
+        {activeSpeakerLabel && <p className="text-sm text-muted-foreground">Current speaker: <span className="font-medium text-foreground">{activeSpeakerLabel}</span></p>}
         <div className="rounded-xl border bg-muted/20 p-3">
           <div className="grid gap-3 md:grid-cols-[auto_auto_auto_auto_minmax(120px,1fr)_auto_auto_auto] md:items-center">
             <div className="flex items-center gap-2 md:contents">
@@ -410,8 +532,9 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
   );
 }
 
-function SegmentCard({ segment, active, edit, audioAvailable, onPlay, onEdit, onCancel, onSave, onDraft }: {
+function SegmentCard({ segment, speakerNames, active, edit, audioAvailable, onPlay, onEdit, onCancel, onSave, onDraft }: {
   segment: TranscriptSegment;
+  speakerNames: Record<string, string>;
   active: boolean;
   edit: SegmentEditState;
   audioAvailable: boolean;
@@ -427,7 +550,7 @@ function SegmentCard({ segment, active, edit, audioAvailable, onPlay, onEdit, on
       <CardHeader className="pb-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle className="text-base">{speakerLabel(segment.speaker)}</CardTitle>
+            <CardTitle className="text-base">{getSpeakerDisplayName(segment.speaker, speakerNames)}</CardTitle>
             <p className="text-sm text-muted-foreground">{formatTimestamp(segment.startTime)} - {formatTimestamp(segment.endTime)} ({formatDuration(segment.startTime, segment.endTime)}) - {segment.speaker}</p>
           </div>
           <div className="flex flex-wrap gap-2"><StatusBadge status={segment.status} /></div>
