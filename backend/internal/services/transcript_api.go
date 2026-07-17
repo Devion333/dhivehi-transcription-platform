@@ -434,6 +434,13 @@ func CheckMinIOReady(ctx context.Context) error {
 	return err
 }
 
+func CheckDatabaseReady(ctx context.Context) error {
+	if Database == nil {
+		return fmt.Errorf("database is not initialized")
+	}
+	return Database.PingContext(ctx)
+}
+
 func EnsureTranscriptTextIndex() error {
 	requestBody := map[string]interface{}{
 		"field_name":   "transcript_text",

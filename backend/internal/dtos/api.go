@@ -10,6 +10,184 @@ type APIError struct {
 	Details interface{} `json:"details"`
 }
 
+type AuthUser struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type AuthUserResponse struct {
+	User AuthUser `json:"user"`
+}
+
+type AuthMessageResponse struct {
+	Message string `json:"message"`
+}
+
+type AdminUserSummary struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Email       string  `json:"email"`
+	Role        string  `json:"role"`
+	IsActive    bool    `json:"isActive"`
+	CreatedAt   string  `json:"createdAt"`
+	UpdatedAt   string  `json:"updatedAt"`
+	LastLoginAt *string `json:"lastLoginAt"`
+}
+
+type AdminUserDetail = AdminUserSummary
+
+type AdminUserListResponse struct {
+	Items      []AdminUserSummary `json:"items"`
+	Pagination Pagination         `json:"pagination"`
+}
+
+type AdminUserResponse struct {
+	User AdminUserDetail `json:"user"`
+}
+
+type AdminCreateUserRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+	Password string `json:"password"`
+}
+
+type AdminUpdateUserRequest struct {
+	Name *string `json:"name"`
+	Role *string `json:"role"`
+}
+
+type AdminResetPasswordRequest struct {
+	NewPassword string `json:"newPassword"`
+}
+
+type AuditActor struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+type AuditEventSummary struct {
+	ID           string      `json:"id"`
+	CreatedAt    string      `json:"createdAt"`
+	Actor        *AuditActor `json:"actor"`
+	Action       string      `json:"action"`
+	Category     string      `json:"category"`
+	Outcome      string      `json:"outcome"`
+	ResourceType string      `json:"resourceType"`
+	ResourceID   string      `json:"resourceId"`
+	IPAddress    string      `json:"ipAddress"`
+}
+
+type AuditEventDetail struct {
+	AuditEventSummary
+	UserAgent string                 `json:"userAgent"`
+	Metadata  map[string]interface{} `json:"metadata"`
+}
+
+type AuditListResponse struct {
+	Items      []AuditEventSummary `json:"items"`
+	Pagination Pagination          `json:"pagination"`
+}
+
+type AuditEventResponse struct {
+	Event AuditEventDetail `json:"event"`
+}
+
+type PDFExportAuditRequest struct {
+	JobID           string `json:"jobId"`
+	Format          string `json:"format"`
+	IncludeAnalysis bool   `json:"includeAnalysis"`
+	Outcome         string `json:"outcome"`
+}
+
+type AdminJobSummary struct {
+	JobID           string `json:"jobId"`
+	Filename        string `json:"filename"`
+	ReferenceNumber string `json:"referenceNumber"`
+	Category        string `json:"category"`
+	Status          string `json:"status"`
+	CurrentStage    string `json:"currentStage"`
+	SegmentCount    int    `json:"segmentCount"`
+	AnalysisStatus  string `json:"analysisStatus"`
+	CreatedAt       string `json:"createdAt"`
+	UpdatedAt       string `json:"updatedAt"`
+	FailureCode     string `json:"failureCode"`
+	FailureMessage  string `json:"failureMessage"`
+	Retryable       bool   `json:"retryable"`
+}
+
+type PipelineStage struct {
+	Name           string `json:"name"`
+	Status         string `json:"status"`
+	StartedAt      string `json:"startedAt"`
+	CompletedAt    string `json:"completedAt"`
+	RetryCount     int    `json:"retryCount"`
+	FailureMessage string `json:"failureMessage"`
+}
+
+type JobQueueState struct {
+	Queued     bool `json:"queued"`
+	Processing bool `json:"processing"`
+	Failed     bool `json:"failed"`
+}
+
+type AdminJobDetail struct {
+	AdminJobSummary
+	Notes             string          `json:"notes"`
+	RequestedSpeakers int             `json:"requestedSpeakers"`
+	MediaAvailable    bool            `json:"mediaAvailable"`
+	PipelineStages    []PipelineStage `json:"pipelineStages"`
+	QueueState        JobQueueState   `json:"queueState"`
+	RetryCount        int             `json:"retryCount"`
+}
+
+type AdminJobListResponse struct {
+	Items      []AdminJobSummary `json:"items"`
+	Pagination Pagination        `json:"pagination"`
+}
+
+type AdminJobResponse struct {
+	Job AdminJobDetail `json:"job"`
+}
+
+type AdminJobRetryRequest struct {
+	Stage string `json:"stage"`
+}
+
+type AdminJobRetryResponse struct {
+	Job AdminJobSummary `json:"job"`
+}
+
+type QueueCounts struct {
+	Queued     int `json:"queued"`
+	Processing int `json:"processing"`
+	Failed     int `json:"failed"`
+}
+
+type WorkerHealthSummary struct {
+	Status          string  `json:"status"`
+	Instances       int     `json:"instances"`
+	LastHeartbeatAt *string `json:"lastHeartbeatAt"`
+}
+
+type AdminJobHealthResponse struct {
+	Backend string                         `json:"backend"`
+	Redis   string                         `json:"redis"`
+	Qdrant  string                         `json:"qdrant"`
+	Minio   string                         `json:"minio"`
+	Queues  map[string]QueueCounts         `json:"queues"`
+	Workers map[string]WorkerHealthSummary `json:"workers"`
+}
+
 type Pagination struct {
 	Page        int  `json:"page"`
 	PageSize    int  `json:"pageSize"`

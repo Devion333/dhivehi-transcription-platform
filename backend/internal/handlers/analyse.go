@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"transcript_app/backend/internal/dtos"
 	"transcript_app/backend/internal/services"
@@ -75,12 +76,16 @@ func APIAnalyseTranscript(c *gin.Context) {
 		return
 	}
 
+	started := time.Now()
+	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "started", "provider": "analysis"}})
 	result, analysisErr := runTranscriptAnalysis(jobID)
 	if analysisErr != nil {
+		auditRequestEvent(c, services.AuditEventInput{Action: "analysis.failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"analysisStatus": "failed", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
 		writeAPIError(c, analysisErr.status, analysisErr.code, analysisErr.message, nil)
 		return
 	}
 
+	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.completed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "complete", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
 	c.JSON(http.StatusOK, dtos.AnalysisTriggerResponse{
 		Analysis: mapAnalysisResult(result),
 		Message:  "Analysis completed",
@@ -92,7 +97,7 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 	segments, err := services.ScrollSegmentsByParent(jobID)
 	if err != nil {
 		log.Printf("Failed to fetch segments for %s: %v", jobID, err)
-		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeInternal, message: fmt.Sprintf("failed to fetch segments: %v", err), err: err}
+		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeInternal, message: "Failed to fetch transcript segments", err: err}
 	}
 
 	if len(segments) == 0 {
@@ -128,7 +133,7 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 	resp, err := http.Post("http://analysis:7861/run/predict", "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
 		log.Printf("Failed to call analysis service for %s: %v", jobID, err)
-		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: fmt.Sprintf("analysis service unavailable: %v", err), err: err}
+		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: "Analysis service is unavailable", err: err}
 	}
 	defer resp.Body.Close()
 
@@ -139,8 +144,8 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 	}
 
 	if resp.StatusCode >= 300 {
-		log.Printf("Analysis service returned error %d for %s: %s", resp.StatusCode, jobID, string(respBody))
-		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: fmt.Sprintf("analysis service error: %s", string(respBody))}
+		log.Printf("Analysis service returned error %d for %s", resp.StatusCode, jobID)
+		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: "Analysis service returned an error"}
 	}
 
 	var analysisResp AnalysisResponse
@@ -155,7 +160,7 @@ func runTranscriptAnalysis(jobID string) (AnalysisResult, *analysisHandlerError)
 
 	var result AnalysisResult
 	if err := json.Unmarshal([]byte(analysisResp.Data[0]), &result); err != nil {
-		log.Printf("Failed to parse analysis JSON result for %s: %v - raw: %s", jobID, err, analysisResp.Data[0])
+		log.Printf("Failed to parse analysis JSON result for %s: %v", jobID, err)
 		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: "failed to parse analysis result", err: err}
 	}
 

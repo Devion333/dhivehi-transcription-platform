@@ -12,9 +12,18 @@ export class ApiError extends Error {
   }
 }
 
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
+
+export function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BACKEND_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Accept": "application/json",
       ...init?.headers,
@@ -34,7 +43,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const apiClient = {
-  getStats: () => request<StatsResponse>("/api/stats"),
-  listTranscripts: (page = 1, pageSize = 10) =>
-    request<TranscriptListResponse>(`/api/transcripts?page=${page}&pageSize=${pageSize}`),
+  getStats: (signal?: AbortSignal) => request<StatsResponse>("/api/stats", { signal }),
+  listTranscripts: (page = 1, pageSize = 10, signal?: AbortSignal) =>
+    request<TranscriptListResponse>(`/api/transcripts?page=${page}&pageSize=${pageSize}`, { signal }),
 };

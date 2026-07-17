@@ -6,6 +6,7 @@ import requests
 import redis
 from datetime import datetime
 from pyannote.audio import Pipeline
+from worker_heartbeat import start_heartbeat
 
 # =========================
 # Environment & Setup
@@ -26,6 +27,7 @@ print("✅ Pyannote diarization model loaded successfully.")
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+start_heartbeat(r, "diarization", modelName="pyannote/speaker-diarization-3.1")
 
 # Redis queue names
 DIARIZATION_QUEUE = "diarization_queue"

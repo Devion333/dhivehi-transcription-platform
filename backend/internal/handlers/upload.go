@@ -57,6 +57,7 @@ func UploadFile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "transcript.uploaded", Category: "transcript", ResourceType: "transcript", ResourceID: result.FileID, Outcome: services.AuditOutcomeSuccess, Metadata: uploadAuditMetadata(result)})
 
 	c.JSON(http.StatusOK, gin.H{
 		"file_id":          result.FileID,
@@ -90,6 +91,7 @@ func APIUploadFile(c *gin.Context) {
 		return
 	}
 
+	auditRequestEvent(c, services.AuditEventInput{Action: "transcript.uploaded", Category: "transcript", ResourceType: "transcript", ResourceID: result.FileID, Outcome: services.AuditOutcomeSuccess, Metadata: uploadAuditMetadata(result)})
 	c.JSON(http.StatusCreated, mapAPIUploadResponse(result))
 }
 
@@ -220,4 +222,14 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func uploadAuditMetadata(result uploadResult) map[string]interface{} {
+	return map[string]interface{}{
+		"jobId":             result.FileID,
+		"filename":          result.Filename,
+		"category":          result.Category,
+		"referenceNumber":   result.ReferenceNumber,
+		"requestedSpeakers": parseSpeakerCount(result.Speakers),
+	}
 }

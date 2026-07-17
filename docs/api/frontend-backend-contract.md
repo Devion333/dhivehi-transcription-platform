@@ -2,9 +2,9 @@
 
 Date: 2026-07-15
 
-Status: implemented for backend read/update/upload/analysis/search support. Implemented in this stage: `POST /api/uploads`, `GET /api/health`, `GET /api/stats`, `GET /api/transcripts`, `GET /api/search/transcripts`, `GET /api/transcripts/{jobId}`, `PATCH /api/transcripts/{jobId}/segments/{segmentId}`, `GET /api/transcripts/{jobId}/analysis`, and `POST /api/transcripts/{jobId}/analyse`.
+Status: implemented for backend auth, read/update/upload/analysis/search support. Implemented endpoints include auth (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`), `POST /api/uploads`, `GET /api/health`, `GET /api/stats`, `GET /api/transcripts`, `GET /api/search/transcripts`, `GET /api/transcripts/{jobId}`, `PATCH /api/transcripts/{jobId}/segments/{segmentId}`, `GET /api/transcripts/{jobId}/analysis`, and `POST /api/transcripts/{jobId}/analyse`.
 
-Current legacy routes preserved: `POST /upload` and `POST /transcripts/:job_id/analyse`.
+Current legacy routes preserved and protected by the same authentication middleware: `POST /upload`, `GET /transcripts`, `GET /transcripts/stats`, and `POST /transcripts/:job_id/analyse`.
 
 Base URL: `/api`
 
@@ -14,6 +14,23 @@ JSON style: camelCase for frontend-facing request and response bodies.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| POST | `/api/auth/login` | Create a server-managed session cookie from valid credentials. |
+| POST | `/api/auth/logout` | Revoke the current session and clear the session cookie. |
+| GET | `/api/auth/me` | Return the current authenticated user. |
+| GET | `/api/admin/users` | Admin-only user list with pagination and filters. |
+| POST | `/api/admin/users` | Admin-only user creation. |
+| GET | `/api/admin/users/{userId}` | Admin-only user detail. |
+| PATCH | `/api/admin/users/{userId}` | Admin-only name/role update. |
+| POST | `/api/admin/users/{userId}/activate` | Admin-only account activation. |
+| POST | `/api/admin/users/{userId}/deactivate` | Admin-only account deactivation and session revocation. |
+| POST | `/api/admin/users/{userId}/reset-password` | Admin-only password reset and session revocation. |
+| GET | `/api/admin/audit` | Admin-only audit event list with filters and pagination. |
+| GET | `/api/admin/audit/{eventId}` | Admin-only audit event detail. |
+| GET | `/api/admin/jobs` | Admin-only system job list with filters and pagination. |
+| GET | `/api/admin/jobs/{jobId}` | Admin-only job detail with pipeline and queue state. |
+| POST | `/api/admin/jobs/{jobId}/retry` | Admin-only controlled retry for supported failed stages. |
+| GET | `/api/admin/jobs/health` | Admin-only safe dependency and queue health summary. |
+| POST | `/api/audit/pdf-export` | Authenticated controlled PDF export audit recording endpoint. |
 | POST | `/api/uploads` | Upload media using the existing upload flow and return a frontend-friendly job envelope. |
 | GET | `/api/transcripts` | List parent transcript jobs with pagination/filtering. |
 | GET | `/api/search/transcripts` | Literal transcript segment text search with parent context. |
@@ -37,6 +54,38 @@ JSON style: camelCase for frontend-facing request and response bodies.
 ```
 
 Common error codes: `bad_request`, `not_found`, `conflict`, `validation_error`, `upstream_unavailable`, `internal_error`.
+
+Auth error codes are uppercase in the implemented auth handlers: `UNAUTHENTICATED`, `FORBIDDEN`, `TOO_MANY_LOGIN_ATTEMPTS`. Unauthenticated protected requests return `401`; role failures return `403`.
+
+## Authentication
+
+Public backend endpoints:
+
+| Method | Path |
+| --- | --- |
+| GET | `/api/health` |
+| POST | `/api/auth/login` |
+
+All other Go backend workflow endpoints require authentication, including transcript, search, stats, upload, analysis, and preserved legacy routes.
+
+Sessions use an opaque server-generated token. The browser receives only an HttpOnly cookie named `transcript_session` by default. The backend stores only the SHA-256 hash of the token in PostgreSQL. Session cookies use `Path=/`, `SameSite=Lax`, `HttpOnly=true`, and `Secure=false` locally unless `SESSION_SECURE=true`.
+
+CORS is credentialed and must use an explicit origin. The local default is `FRONTEND_ORIGIN=http://localhost:3000`; wildcard origins are not valid with credentials.
+
+Roles currently supported: `user` and `admin`. Existing transcript workflow endpoints are accessible to both roles. `/api/admin/*` routes require an authenticated `admin` user in the Go backend.
+
+### AuthUser
+
+```json
+{
+  "id": "9bd45010-9d75-48eb-b46d-05839d636d6f",
+  "name": "Runtime Validation Admin",
+  "email": "admin.local@example.com",
+  "role": "admin"
+}
+```
+
+Password hashes and session tokens are never returned in DTOs.
 
 ## Pagination Format
 
@@ -212,9 +261,450 @@ Analysis statuses:
 }
 ```
 
+## POST /api/auth/login
+
+Request:
+
+```json
+{
+  "email": "admin.local@example.com",
+  "password": "correct horse battery staple"
+}
+```
+
+Success: `200 OK`
+
+The response sets the `transcript_session` HttpOnly cookie and returns the safe user DTO.
+
+```json
+{
+  "user": {
+    "id": "9bd45010-9d75-48eb-b46d-05839d636d6f",
+    "name": "Runtime Validation Admin",
+    "email": "admin.local@example.com",
+    "role": "admin"
+  }
+}
+```
+
+Errors:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `400` | `BAD_REQUEST` | Request body is not valid JSON. |
+| `401` | `UNAUTHENTICATED` | Invalid email/password or inactive user. |
+| `429` | `TOO_MANY_LOGIN_ATTEMPTS` | Too many failed attempts for the same IP/email window. |
+
+Failed login attempts are limited to 5 per normalized identifier and IP within 15 minutes. Successful login clears the relevant counter. Redis is used when available, with a local fail-open fallback if Redis is unavailable.
+
+State-changing browser requests must come from the configured frontend origin. The backend validates `Origin` or, when `Origin` is absent, `Referer` for `POST`, `PATCH`, and future `DELETE` requests. Non-browser/internal requests without either header remain allowed.
+
+## POST /api/auth/logout
+
+Authentication: required.
+
+Success: `200 OK`
+
+The backend revokes the stored session row and clears the session cookie.
+
+```json
+{
+  "message": "Signed out"
+}
+```
+
+## GET /api/auth/me
+
+Authentication: required.
+
+Success: `200 OK`
+
+```json
+{
+  "user": {
+    "id": "9bd45010-9d75-48eb-b46d-05839d636d6f",
+    "name": "Runtime Validation Admin",
+    "email": "admin.local@example.com",
+    "role": "admin"
+  }
+}
+```
+
+Unauthenticated response: `401 UNAUTHENTICATED`.
+
+## Admin User DTOs
+
+### AdminUserSummary
+
+```json
+{
+  "id": "22222222-2222-2222-2222-222222222222",
+  "name": "Analyst Name",
+  "email": "analyst@example.com",
+  "role": "user",
+  "isActive": true,
+  "createdAt": "2026-07-15T00:00:00Z",
+  "updatedAt": "2026-07-15T00:00:00Z",
+  "lastLoginAt": null
+}
+```
+
+`AdminUserDetail` currently contains the same fields as `AdminUserSummary`. Admin user DTOs never include password hashes, passwords, session tokens, or session token hashes.
+
+## GET /api/admin/users
+
+Authentication: required, role `admin`.
+
+Query parameters:
+
+| Query | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | `1` | Invalid or less-than-one values normalize to `1`. |
+| `pageSize` | integer | `20` | Maximum `100`. |
+| `search` | string | empty | Matches `name` and `email`. |
+| `role` | string | empty/all | `user` or `admin`. |
+| `status` | string | empty/all | `active` or `inactive`. |
+
+Success: `200 OK`
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 0,
+    "totalPages": 0,
+    "hasNextPage": false
+  }
+}
+```
+
+Ordering is deterministic: newest `createdAt` first, then stable `id` fallback.
+
+## POST /api/admin/users
+
+Authentication: required, role `admin`.
+
+Request:
+
+```json
+{
+  "name": "Analyst Name",
+  "email": "analyst@example.com",
+  "role": "user",
+  "password": "temporary password"
+}
+```
+
+Success: `201 Created`
+
+Returns `{ "user": AdminUserDetail }`. New users are active by default. Email is normalized and unique. Passwords use the existing Argon2id hashing policy and are never returned.
+
+Common errors: `INVALID_USER_INPUT`, `EMAIL_ALREADY_EXISTS`, `INVALID_ROLE`, `WEAK_PASSWORD`.
+
+## GET /api/admin/users/{userId}
+
+Authentication: required, role `admin`.
+
+Success: `200 OK`
+
+Returns `{ "user": AdminUserDetail }`. Missing or invalid IDs return `USER_NOT_FOUND`.
+
+## PATCH /api/admin/users/{userId}
+
+Authentication: required, role `admin`.
+
+Request fields are limited to `name` and `role`; unknown fields are rejected. Email, activation, and password cannot be changed through this endpoint.
+
+```json
+{
+  "name": "Updated Name",
+  "role": "admin"
+}
+```
+
+Success: `200 OK`
+
+Returns `{ "user": AdminUserDetail }` with `updatedAt` changed. Backend safeguards reject demoting the last active administrator with `LAST_ACTIVE_ADMIN`.
+
+## POST /api/admin/users/{userId}/activate
+
+Authentication: required, role `admin`.
+
+Sets `isActive=true`, updates `updatedAt`, and returns `{ "user": AdminUserDetail }`.
+
+## POST /api/admin/users/{userId}/deactivate
+
+Authentication: required, role `admin`.
+
+Sets `isActive=false`, updates `updatedAt`, revokes all active sessions for the target user, and returns `{ "user": AdminUserDetail }`.
+
+Safeguards: administrators cannot deactivate their own current account, and the last active administrator cannot be deactivated. Deactivated users cannot authenticate and existing sessions stop working immediately.
+
+Common errors: `CANNOT_DEACTIVATE_SELF`, `LAST_ACTIVE_ADMIN`, `USER_NOT_FOUND`.
+
+## POST /api/admin/users/{userId}/reset-password
+
+Authentication: required, role `admin`.
+
+Request:
+
+```json
+{
+  "newPassword": "new temporary password"
+}
+```
+
+Success: `200 OK`
+
+```json
+{
+  "message": "Password updated"
+}
+```
+
+The password is hashed with the existing Argon2id implementation and all active sessions for the target user are revoked. Self-reset is allowed and revokes the current session, requiring sign-in again.
+
+## Audit DTOs
+
+### AuditEventSummary
+
+```json
+{
+  "id": "33333333-3333-3333-3333-333333333333",
+  "createdAt": "2026-07-15T00:00:00Z",
+  "actor": {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "name": "Admin",
+    "email": "admin@example.com",
+    "role": "admin"
+  },
+  "action": "admin.user_created",
+  "category": "user_management",
+  "outcome": "success",
+  "resourceType": "user",
+  "resourceId": "22222222-2222-2222-2222-222222222222",
+  "ipAddress": "127.0.0.1"
+}
+```
+
+For unauthenticated failed-login events, `actor` is `null`.
+
+### AuditEventDetail
+
+Adds:
+
+```json
+{
+  "userAgent": "Mozilla/5.0 ...",
+  "metadata": {
+    "targetUserId": "22222222-2222-2222-2222-222222222222",
+    "targetRole": "user"
+  }
+}
+```
+
+Metadata is action-specific and allowlisted. Passwords, session tokens, cookies, authorization headers, transcript text, search queries, analysis text, provider responses, API keys, database connection strings, Qdrant payloads, and MinIO credentials must not be present.
+
+Job-management audit category: `job_management`. Actions: `admin.job_retry_requested`, `admin.job_retry_succeeded`, `admin.job_retry_failed`. Metadata is limited to `jobId`, `stage`, `previousStatus`, `newStatus`, `retryCount`, and `failureCode`.
+
+## GET /api/admin/audit
+
+Authentication: required, role `admin`.
+
+Query parameters:
+
+| Query | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | `1` | Invalid or less-than-one values normalize to `1`. |
+| `pageSize` | integer | `50` | Maximum `100`. |
+| `search` | string | empty | Matches actor name, actor email, action, and resource ID. |
+| `category` | string | empty/all | `authentication`, `user_management`, `transcript`, `analysis`, `search`, `export`. |
+| `action` | string | empty/all | Must be a known audit action. |
+| `outcome` | string | empty/all | `success` or `failure`. |
+| `actorUserId` | UUID | empty/all | Exact actor ID match. |
+| `resourceType` | string | empty/all | Exact resource type match. |
+| `resourceId` | string | empty/all | Exact resource ID match. |
+| `dateFrom` | RFC3339 | empty | Inclusive lower bound. |
+| `dateTo` | RFC3339 | empty | Inclusive upper bound. |
+
+Success: `200 OK`
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "pageSize": 50,
+    "total": 0,
+    "totalPages": 0,
+    "hasNextPage": false
+  }
+}
+```
+
+Ordering is newest first: `createdAt DESC`, then stable event ID fallback.
+
+Audit APIs are read-only. There is no browser-accessible audit deletion, edit, clear, or retention-cleanup endpoint.
+
+## GET /api/admin/audit/{eventId}
+
+Authentication: required, role `admin`.
+
+Success: `200 OK`
+
+Returns `{ "event": AuditEventDetail }`. Missing or invalid IDs return `AUDIT_EVENT_NOT_FOUND`.
+
+Audit retention is handled only by explicit backend maintenance command execution, not by this API surface.
+
+## Admin Job DTOs
+
+### AdminJobSummary
+
+```json
+{
+  "jobId": "7b7d4b3e-0000-0000-0000-000000000000",
+  "filename": "recording.wav",
+  "referenceNumber": "REF-001",
+  "category": "meeting",
+  "status": "transcription_failed",
+  "currentStage": "transcription",
+  "segmentCount": 4,
+  "analysisStatus": "not_started",
+  "createdAt": "2026-07-15T00:00:00Z",
+  "updatedAt": "2026-07-15T00:10:00Z",
+  "failureCode": "TRANSCRIPTION_FAILED",
+  "failureMessage": "model transcription failed",
+  "retryable": true
+}
+```
+
+### AdminJobDetail
+
+Adds safe operational fields:
+
+```json
+{
+  "notes": "Initial upload note",
+  "requestedSpeakers": 2,
+  "mediaAvailable": true,
+  "retryCount": 1,
+  "queueState": { "queued": false, "processing": false, "failed": true },
+  "pipelineStages": [
+    { "name": "conversion", "status": "complete", "startedAt": "", "completedAt": "", "retryCount": 0, "failureMessage": "" },
+    { "name": "diarization", "status": "complete", "startedAt": "", "completedAt": "2026-07-15T00:05:00Z", "retryCount": 0, "failureMessage": "" },
+    { "name": "transcription", "status": "failed", "startedAt": "", "completedAt": "", "retryCount": 0, "failureMessage": "model transcription failed" }
+  ]
+}
+```
+
+Admin job DTOs never return raw Redis payloads, worker URLs, MinIO credentials, Qdrant numeric IDs, stack traces, provider responses, model tokens, or transcript text.
+
+## GET /api/admin/jobs
+
+Authentication: required, role `admin`.
+
+Query parameters:
+
+| Query | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | `1` | Invalid or less-than-one values normalize to `1`. |
+| `pageSize` | integer | `20` | Maximum `100`. |
+| `search` | string | empty | Matches filename, reference number, category, and job ID. |
+| `status` | string | empty/all | Canonical job status, including stage-specific failures. |
+| `stage` | string | empty/all | `conversion`, `diarization`, `transcription`, or `analysis`. |
+| `failedOnly` | boolean | `false` | Limits to failed canonical statuses. |
+| `dateFrom` | RFC3339 | empty | Inclusive created-at lower bound. |
+| `dateTo` | RFC3339 | empty | Inclusive created-at upper bound. |
+
+Ordering is `updatedAt DESC`, `createdAt DESC`, then `jobId` fallback.
+
+## GET /api/admin/jobs/{jobId}
+
+Authentication: required, role `admin`.
+
+Success returns `{ "job": AdminJobDetail }`. Missing parents return `404 JOB_NOT_FOUND`. GET requests do not mutate job or queue state.
+
+## POST /api/admin/jobs/{jobId}/retry
+
+Authentication: required, role `admin`.
+
+Optional request:
+
+```json
+{ "stage": "transcription" }
+```
+
+If omitted, the backend derives the stage from current failed state. The browser cannot supply queue names or payloads.
+
+Retryable stages: `conversion_failed`, `diarization_failed`, failed transcription segments or `transcription_failed`, and `analysis_failed`/analysis status `failed`.
+
+Conflict errors include `JOB_NOT_FAILED`, `JOB_NOT_RETRYABLE`, `JOB_ALREADY_QUEUED`, `JOB_RETRY_LIMIT_REACHED`, `JOB_QUEUE_UNAVAILABLE`, and `WORKER_UNAVAILABLE`.
+
+Conversion, diarization, and transcription retry enqueue reconstructed existing worker payloads through focused backend code. Analysis retry calls the existing synchronous analysis flow and does not publish to Redis.
+
+## GET /api/admin/jobs/health
+
+Authentication: required, role `admin`.
+
+Returns safe dependency and queue counts:
+
+```json
+{
+  "backend": "healthy",
+  "redis": "healthy",
+  "qdrant": "healthy",
+  "minio": "healthy",
+  "queues": {
+    "conversion": { "queued": 0, "processing": 0, "failed": 0 },
+    "diarization": { "queued": 0, "processing": 0, "failed": 0 },
+    "transcription": { "queued": 0, "processing": 0, "failed": 0 }
+  },
+  "workers": {
+    "conversion": { "status": "available", "instances": 1, "lastHeartbeatAt": "2026-07-16T12:00:00Z" },
+    "diarization": { "status": "available", "instances": 1, "lastHeartbeatAt": "2026-07-16T12:00:00Z" },
+    "transcription": { "status": "available", "instances": 1, "lastHeartbeatAt": "2026-07-16T12:00:00Z" },
+    "analysis": { "status": "unknown", "instances": 0, "lastHeartbeatAt": null }
+  }
+}
+```
+
+Worker `status` is one of `available`, `unavailable`, or `unknown`. Backend reads Redis heartbeat keys shaped as `worker_heartbeat:<workerType>:<instanceId>` via per-type Redis sets, not `KEYS *`. A missing fresh heartbeat for an expected worker is `unavailable`; Redis read failure or non-expected workers are `unknown`. Internal service URLs are not returned.
+
+## POST /api/audit/pdf-export
+
+Authentication: required.
+
+This endpoint is only for the Next.js PDF export route to record export events. It is not a public generic audit-ingestion API.
+
+Request:
+
+```json
+{
+  "jobId": "7b7d4b3e-0000-0000-0000-000000000000",
+  "format": "segmented",
+  "includeAnalysis": true,
+  "outcome": "success"
+}
+```
+
+Rules:
+
+| Field | Rule |
+| --- | --- |
+| `jobId` | Required transcript/job ID. |
+| `format` | Must be `segmented` or `paragraph`. |
+| `includeAnalysis` | Boolean only. |
+| `outcome` | Must be `success` or `failure`; maps to `export.pdf_generated` or `export.pdf_failed`. |
+
+Arbitrary action names and arbitrary metadata are rejected or ignored.
+
 ## POST /api/uploads
 
 Implementation status: implemented as a compatibility alias that reuses the existing upload flow. The existing `POST /upload` route is preserved for legacy compatibility.
+
+Authentication: required.
 
 Request: `multipart/form-data`
 
@@ -258,6 +748,8 @@ Rules:
 | Secrets | Do not return MinIO credentials or local temp paths. |
 
 ## GET /api/transcripts
+
+Authentication: required.
 
 Query parameters:
 
@@ -307,6 +799,8 @@ Rules:
 
 ## GET /api/transcripts/{jobId}
 
+Authentication: required.
+
 Success: `200 OK`
 
 Returns `TranscriptDetail`.
@@ -321,6 +815,8 @@ Rules:
 | Qdrant internals | Do not return vectors or numeric point IDs. |
 
 ## GET /api/search/transcripts
+
+Authentication: required.
 
 Query parameters:
 
@@ -356,6 +852,8 @@ Rules:
 | Index | Backend startup attempts to ensure a Qdrant text payload index on `transcript_text`; current search does not depend on the index for correctness. |
 
 ## PATCH /api/transcripts/{jobId}/segments/{segmentId}
+
+Authentication: required.
 
 Request:
 
@@ -394,6 +892,8 @@ Update rules:
 
 ## POST /api/transcripts/{jobId}/analyse
 
+Authentication: required.
+
 Implementation status: implemented as an API alias that reuses the existing analysis flow. The existing `POST /transcripts/:job_id/analyse` route is preserved for legacy compatibility.
 
 Request: no body initially.
@@ -431,6 +931,8 @@ Rules:
 | Upstream | Current compatibility behavior uses the existing analysis service URL `http://analysis:7861/run/predict`. A later hardening stage should make this configurable and timeout-protected. |
 
 ## GET /api/transcripts/{jobId}/analysis
+
+Authentication: required.
 
 Success with stored analysis: `200 OK`
 
@@ -472,6 +974,8 @@ Rule: this endpoint must never call the analysis worker.
 
 ## GET /api/stats
 
+Authentication: required.
+
 Success: `200 OK`
 
 ```json
@@ -504,7 +1008,8 @@ Success: `200 OK`
   "dependencies": {
     "qdrant": "ok",
     "redis": "ok",
-    "minio": "ok"
+    "minio": "ok",
+    "database": "ok"
   }
 }
 ```
@@ -565,7 +1070,7 @@ This keeps stored internal URLs such as `http://minio:9000/uploads/...` in Qdran
 
 Route: `POST /api/export-pdf` in the Next.js frontend app.
 
-This is not a Go backend endpoint. The frontend gathers transcript and stored analysis through the typed backend API first, then posts a structured export payload to the Next.js route. The route must not call Qdrant, MinIO, Redis, workers, or the analysis service.
+This is not a Go backend endpoint. The frontend gathers transcript and stored analysis through the typed backend API first, then posts a structured export payload to the Next.js route. The route validates authentication by forwarding the incoming cookie to Go backend `GET /api/auth/me`. The route must not call Qdrant, MinIO, Redis, workers, or the analysis service.
 
 ```json
 {
@@ -611,4 +1116,5 @@ Validation rules:
 | Format | Must be `segmented` or `paragraph`. |
 | Segments | Each segment must include `id`, numeric `segmentIndex`, numeric timestamps, and string `transcriptText`. |
 | Analysis | If `includeAnalysis=true`, supplied analysis must have `status=complete` and at least one usable analysis field. |
+| Authentication | Missing or invalid session returns `401 UNAUTHENTICATED` before PDF generation. |
 | Response | Success returns `200 application/pdf`; failures return `{ error: { code, message, details } }`. |

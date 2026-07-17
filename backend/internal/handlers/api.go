@@ -19,11 +19,16 @@ func APIHealth(c *gin.Context) {
 	defer cancel()
 
 	dependencies := map[string]string{
-		"qdrant": "ok",
-		"redis":  "ok",
-		"minio":  "ok",
+		"database": "ok",
+		"qdrant":   "ok",
+		"redis":    "ok",
+		"minio":    "ok",
 	}
 	ready := true
+	if err := services.CheckDatabaseReady(ctx); err != nil {
+		dependencies["database"] = "unavailable"
+		ready = false
+	}
 	if err := services.CheckQdrantReady(); err != nil {
 		dependencies["qdrant"] = "unavailable"
 		ready = false
@@ -87,6 +92,7 @@ func APISearchTranscripts(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "search.executed", Category: "search", Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"queryLength": len([]rune(query)), "page": page, "pageSize": pageSize, "statusFilter": c.Query("status"), "categoryFilter": c.Query("category"), "resultCount": len(result.Items)}})
 	c.JSON(http.StatusOK, result)
 }
 
@@ -102,6 +108,7 @@ func APIGetTranscript(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "transcript.viewed", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"jobId": jobID}})
 	c.JSON(http.StatusOK, detail)
 }
 
@@ -138,6 +145,7 @@ func APIUpdateSegment(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "transcript.segment_updated", Category: "transcript", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"jobId": jobID, "segmentId": segmentID, "segmentIndex": segment.SegmentIndex, "changedFields": []string{"transcriptText"}}})
 	c.JSON(http.StatusOK, gin.H{"segment": segment})
 }
 

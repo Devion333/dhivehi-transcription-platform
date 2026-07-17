@@ -1,14 +1,5 @@
-import { Suspense } from "react";
-
-import { LoadingState } from "@/components/app/states";
-import { TranscriptListClient } from "./transcript-list-client";
-
-export const dynamic = "force-dynamic";
+import { redirect } from "next/navigation";
 
 export default function TranscriptListPage() {
-  return (
-    <Suspense fallback={<LoadingState label="Loading transcript list" />}>
-      <TranscriptListClient />
-    </Suspense>
-  );
+  redirect("/Transcripts");
 }

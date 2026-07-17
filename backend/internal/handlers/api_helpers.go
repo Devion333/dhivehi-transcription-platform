@@ -32,6 +32,40 @@ func writeServiceError(c *gin.Context, err error) {
 		case services.ErrCodeSearchUnavailable:
 			log.Printf("search service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, serviceErr.Code, "Search is unavailable", nil)
+		case services.ErrCodeInvalidUserInput:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "User input is invalid", nil)
+		case services.ErrCodeEmailExists:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Email already exists", nil)
+		case services.ErrCodeInvalidRole:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Role is invalid", nil)
+		case services.ErrCodeWeakPassword:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Password does not meet policy", nil)
+		case services.ErrCodeUserNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "User was not found", nil)
+		case services.ErrCodeCannotDeactivateSelf:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "You cannot deactivate your own account", nil)
+		case services.ErrCodeLastActiveAdmin:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "At least one active administrator is required", nil)
+		case services.ErrCodeAuditNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Audit event was not found", nil)
+		case services.ErrCodeInvalidAuditFilter:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit filter is invalid", nil)
+		case services.ErrCodeInvalidAuditEvent:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit event is invalid", nil)
+		case services.ErrCodeJobNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Job was not found", nil)
+		case services.ErrCodeJobNotFailed:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job is not failed", nil)
+		case services.ErrCodeJobNotRetryable:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job cannot be retried", nil)
+		case services.ErrCodeJobAlreadyQueued:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job is already queued or processing", nil)
+		case services.ErrCodeJobRetryLimitReached:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Job retry limit has been reached", nil)
+		case services.ErrCodeJobQueueUnavailable:
+			writeAPIError(c, http.StatusServiceUnavailable, serviceErr.Code, "Job queue is unavailable", nil)
+		case services.ErrCodeWorkerUnavailable:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Worker is unavailable", nil)
 		case services.ErrCodeUpstream:
 			log.Printf("upstream service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "A backend dependency failed", nil)

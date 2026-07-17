@@ -147,4 +147,85 @@
     font-family: var(--font-faruma), var(--font-geist-sans), system-ui, sans-serif;
     line-height: 1.9;
   }
+
+  .range-control {
+    --range-progress: 0%;
+    --range-track-height: 4px;
+    --range-thumb-size: 12px;
+    width: 100%;
+    height: 28px;
+    appearance: none;
+    cursor: pointer;
+    background: transparent;
+  }
+
+  .range-control:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .range-control:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+    border-radius: 999px;
+  }
+
+  .range-control::-webkit-slider-runnable-track {
+    height: var(--range-track-height);
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--primary) 0 var(--range-progress), var(--muted) var(--range-progress) 100%);
+  }
+
+  .range-control::-webkit-slider-thumb {
+    width: var(--range-thumb-size);
+    height: var(--range-thumb-size);
+    margin-top: calc((var(--range-track-height) - var(--range-thumb-size)) / 2);
+    appearance: none;
+    border: 2px solid var(--background);
+    border-radius: 999px;
+    background: var(--primary);
+    box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 20%, transparent);
+    transition: height 120ms ease, width 120ms ease, margin-top 120ms ease;
+  }
+
+  .range-control:hover::-webkit-slider-thumb,
+  .range-control:focus-visible::-webkit-slider-thumb {
+    width: calc(var(--range-thumb-size) + 4px);
+    height: calc(var(--range-thumb-size) + 4px);
+    margin-top: calc((var(--range-track-height) - var(--range-thumb-size) - 4px) / 2);
+  }
+
+  .range-control::-moz-range-track {
+    height: var(--range-track-height);
+    border-radius: 999px;
+    background: var(--muted);
+  }
+
+  .range-control::-moz-range-progress {
+    height: var(--range-track-height);
+    border-radius: 999px;
+    background: var(--primary);
+  }
+
+  .range-control::-moz-range-thumb {
+    width: var(--range-thumb-size);
+    height: var(--range-thumb-size);
+    border: 2px solid var(--background);
+    border-radius: 999px;
+    background: var(--primary);
+    box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 20%, transparent);
+    transition: height 120ms ease, width 120ms ease;
+  }
+
+  .range-control:hover::-moz-range-thumb,
+  .range-control:focus-visible::-moz-range-thumb {
+    width: calc(var(--range-thumb-size) + 4px);
+    height: calc(var(--range-thumb-size) + 4px);
+  }
+
+  .range-control-volume {
+    --range-track-height: 3px;
+    --range-thumb-size: 10px;
+    width: 88px;
+  }
 }

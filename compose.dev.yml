@@ -1,0 +1,176 @@
+# Lightweight dev stack — no GPU-heavy ML services.
+# Use this while developing on a low-power machine:
+#   docker compose -f compose.dev.yml up
+#
+# Real ML services (gradio_convert, gradio_diarization, gradio_transcription)
+# are replaced by mock_workers/ which produce fake but schema-correct output
+# so the Go backend's orchestration logic can be exercised for real.
+
+services:
+
+  minio:
+    image: minio/minio:latest
+    container_name: transcript_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - app_network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7
+    container_name: transcript_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: transcript_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-transcript_app}
+      POSTGRES_USER: ${POSTGRES_USER:-transcript}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-transcript_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  backend:
+    build: ./backend
+    container_name: transcript_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "minio"
+      MINIO_SECRET_KEY: "minio123"
+      MINIO_PUBLIC_URL: "http://localhost:9000"
+      QDRANT_HOST: "http://qdrant:6333"
+      DATABASE_URL: ${DATABASE_URL:-postgres://transcript:transcript_dev_password@postgres:5432/transcript_app?sslmode=disable}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-transcript_session}
+      SESSION_LIFETIME: ${SESSION_LIFETIME:-12h}
+      SESSION_SECURE: ${SESSION_SECURE:-false}
+      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      EXPECTED_WORKERS: ${EXPECTED_WORKERS:-conversion,diarization,transcription,analysis}
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+    depends_on:
+      - minio
+      - qdrant
+      - redis
+      - postgres
+    networks:
+      - app_network
+
+  mock_convert:
+    build: ./mock_workers
+    container_name: transcript_mock_convert
+    command: ["python", "-u", "mock_convert.py"]
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - minio
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: "minio:9000"
+      WORKER_INSTANCE_ID: mock_convert
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+    networks:
+      - app_network
+
+  mock_diarization:
+    build: ./mock_workers
+    container_name: transcript_mock_diarization
+    command: ["python", "-u", "mock_diarization.py"]
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - qdrant
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QDRANT_HOST: http://qdrant:6333
+      QDRANT_COLLECTION: file_metadata
+      WORKER_INSTANCE_ID: mock_diarization
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+    networks:
+      - app_network
+
+  mock_transcription:
+    build: ./mock_workers
+    container_name: transcript_mock_transcription
+    command: ["python", "-u", "mock_transcription.py"]
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - qdrant
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QDRANT_HOST: http://qdrant:6333
+      QDRANT_COLLECTION: file_metadata
+      WORKER_INSTANCE_ID: mock_transcription
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+    networks:
+      - app_network
+
+  analysis:
+    build: ./gradio/analysis
+    container_name: transcript_analysis
+    restart: unless-stopped
+    ports:
+      - "7861:7861"
+    env_file:
+      - .env
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      WORKER_INSTANCE_ID: analysis
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  minio_data:
+  qdrant_data:
+  postgres_data:
