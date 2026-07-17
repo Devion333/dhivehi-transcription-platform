@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, BarChart3, Check, Edit3, FileDown, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Volume1, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, Check, Edit3, FileDown, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Trash2, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { PageContainer } from "@/components/app/page-container";
@@ -15,9 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getTranscript, getTranscriptAnalysis, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
+import { deleteTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
-import type { TranscriptAnalysis, TranscriptDetail, TranscriptSegment } from "@/lib/api/types";
+import type { TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment } from "@/lib/api/types";
 import {
   formatDetailDate,
   formatDuration,
@@ -46,8 +46,9 @@ type SpeakerEditState = {
 };
 
 export function TranscriptDetailsClient() {
-  const auth = useAuth();
-  const searchParams = useSearchParams();
+	const auth = useAuth();
+	const router = useRouter();
+	const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const stopAtRef = React.useRef<number | null>(null);
@@ -65,8 +66,13 @@ export function TranscriptDetailsClient() {
   const [playbackRate, setPlaybackRate] = React.useState(1);
   const [activeSegmentId, setActiveSegmentId] = React.useState<string | null>(null);
   const [edits, setEdits] = React.useState<Record<string, SegmentEditState>>({});
-  const [speakerEdit, setSpeakerEdit] = React.useState<SpeakerEditState | null>(null);
-  const [exportOpen, setExportOpen] = React.useState(false);
+	const [speakerEdit, setSpeakerEdit] = React.useState<SpeakerEditState | null>(null);
+	const [deletePreview, setDeletePreview] = React.useState<TranscriptDeletionPreview | null>(null);
+	const [deleteLoading, setDeleteLoading] = React.useState(false);
+	const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
+	const [deleteConfirmation, setDeleteConfirmation] = React.useState("");
+	const [deleteError, setDeleteError] = React.useState<string | null>(null);
+	const [exportOpen, setExportOpen] = React.useState(false);
   const [exportAnalysis, setExportAnalysis] = React.useState<TranscriptAnalysis | null>(null);
 
   React.useEffect(() => {
@@ -83,9 +89,12 @@ export function TranscriptDetailsClient() {
         setAudioError(null);
         setCurrentTime(0);
         setDuration(0);
-        setActiveSegmentId(null);
-        setSpeakerEdit(null);
-      })
+				setActiveSegmentId(null);
+				setSpeakerEdit(null);
+				setDeletePreview(null);
+				setDeleteConfirmation("");
+				setDeleteError(null);
+			})
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Failed to load transcript");
@@ -246,22 +255,49 @@ export function TranscriptDetailsClient() {
     }
   }
 
-  async function saveSpeakerName(speakerKey: string, displayName: string) {
-    if (!detail || speakerEdit?.saving) return;
-    const validationError = validateSpeakerDisplayName(displayName);
-    if (validationError) {
-      setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: validationError });
-      return;
-    }
-    setSpeakerEdit({ speakerKey, draft: displayName, saving: true, error: null });
-    try {
-      const response = await updateSpeakerName(detail.jobId, speakerKey, displayName);
-      setDetail((current) => current ? { ...current, speakerNames: response.speakerNames } : current);
-      setSpeakerEdit(null);
-    } catch (err) {
-      setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: speakerRenameError(err) });
-    }
-  }
+	async function saveSpeakerName(speakerKey: string, displayName: string) {
+		if (!detail || speakerEdit?.saving) return;
+		const validationError = validateSpeakerDisplayName(displayName);
+		if (validationError) {
+			setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: validationError });
+			return;
+		}
+		setSpeakerEdit({ speakerKey, draft: displayName, saving: true, error: null });
+		try {
+			const response = await updateSpeakerName(detail.jobId, speakerKey, displayName);
+			setDetail((current) => current ? { ...current, speakerNames: response.speakerNames } : current);
+			setSpeakerEdit(null);
+		} catch (err) {
+			setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: speakerRenameError(err) });
+		}
+	}
+
+	async function loadDeletionPreview() {
+		if (!detail || deleteLoading) return;
+		setDeleteLoading(true);
+		setDeleteError(null);
+		try {
+			setDeletePreview(await getTranscriptDeletionPreview(detail.jobId));
+		} catch (err) {
+			setDeleteError(deletionErrorMessage(err));
+		} finally {
+			setDeleteLoading(false);
+		}
+	}
+
+	async function confirmDelete() {
+		if (!detail || deleteSubmitting || deleteConfirmation !== detail.jobId) return;
+		setDeleteSubmitting(true);
+		setDeleteError(null);
+		try {
+			await deleteTranscript(detail.jobId, deleteConfirmation);
+			router.replace("/Transcripts");
+		} catch (err) {
+			setDeleteError(deletionErrorMessage(err));
+		} finally {
+			setDeleteSubmitting(false);
+		}
+	}
 
   return (
     <PageContainer>
@@ -296,9 +332,22 @@ export function TranscriptDetailsClient() {
       />
 
       <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="space-y-4">
-          <MetadataCard detail={detail} isAdmin={isAdmin} />
-        </aside>
+		<aside className="space-y-4">
+			<MetadataCard detail={detail} isAdmin={isAdmin} />
+			{isAdmin && (
+				<TranscriptDeletionCard
+					detail={detail}
+					preview={deletePreview}
+					loading={deleteLoading}
+					submitting={deleteSubmitting}
+					confirmation={deleteConfirmation}
+					error={deleteError}
+					onPreview={loadDeletionPreview}
+					onConfirmation={setDeleteConfirmation}
+					onDelete={confirmDelete}
+				/>
+			)}
+		</aside>
 
         <section className="min-w-0 space-y-4">
           {speakers.length > 0 && (
@@ -467,6 +516,67 @@ function MetadataCard({ detail, isAdmin }: { detail: TranscriptDetail; isAdmin: 
       </CardContent>
     </Card>
   );
+}
+
+function TranscriptDeletionCard({ detail, preview, loading, submitting, confirmation, error, onPreview, onConfirmation, onDelete }: {
+  detail: TranscriptDetail;
+  preview: TranscriptDeletionPreview | null;
+  loading: boolean;
+  submitting: boolean;
+  confirmation: string;
+  error: string | null;
+  onPreview: () => void;
+  onConfirmation: (value: string) => void;
+  onDelete: () => void;
+}) {
+  const owner = preview?.owner.displayName || preview?.owner.email || "Unknown owner";
+  const blocked = preview && !preview.canDelete;
+  return (
+    <Card className="border-destructive/30">
+      <CardHeader><CardTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-5 w-5" /> Danger zone</CardTitle></CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <p className="text-muted-foreground">Delete this transcript and its related media and transcript records. This action is permanent.</p>
+        {!preview ? (
+          <Button type="button" variant="outline" onClick={onPreview} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Preview deletion</Button>
+        ) : (
+          <div className="space-y-4">
+            <dl className="space-y-2 rounded-lg border p-3">
+              <PreviewRow label="Filename" value={preview.filename || detail.filename} />
+              <PreviewRow label="Owner" value={owner} />
+              <PreviewRow label="Segments" value={String(preview.segmentCount)} />
+              <PreviewRow label="Media objects" value={String(preview.mediaObjects)} />
+              <PreviewRow label="Status" value={preview.status} />
+            </dl>
+            {blocked && <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">Deletion unavailable: {preview.blockingReason === "TRANSCRIPT_PROCESSING" ? "transcript is currently processing" : preview.blockingReason}</p>}
+            {!blocked && (
+              <div className="space-y-2">
+                <label htmlFor="delete-confirmation" className="font-medium">Type <span className="font-mono">{detail.jobId}</span> to confirm</label>
+                <Input id="delete-confirmation" value={confirmation} onChange={(event) => onConfirmation(event.target.value)} disabled={submitting} autoComplete="off" />
+                <Button type="button" variant="destructive" onClick={onDelete} disabled={submitting || confirmation !== detail.jobId}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete transcript</Button>
+              </div>
+            )}
+          </div>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PreviewRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex justify-between gap-4"><dt className="text-muted-foreground">{label}</dt><dd className="text-right font-medium break-all">{value}</dd></div>;
+}
+
+function deletionErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === "TRANSCRIPT_DELETION_PARTIAL") return "Deletion partially completed. Some cleanup categories failed safely; retry deletion or check backend dependencies.";
+    if (error.code === "DELETE_CONFIRMATION_MISMATCH") return "The confirmation value does not match the job ID.";
+    if (error.code === "TRANSCRIPT_PROCESSING") return "This transcript is currently processing and cannot be deleted.";
+    if (error.code === "UNSAFE_MEDIA_REFERENCE") return "Deletion is blocked because this transcript has unsafe media references.";
+    if (error.status === 403) return "Only administrators can delete transcripts.";
+    return error.message;
+  }
+  return "Transcript deletion failed.";
 }
 
 function ownerLabel(detail: Pick<TranscriptDetail, "ownerDisplayName" | "ownerEmail" | "ownerUserId">) {

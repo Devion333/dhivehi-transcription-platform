@@ -28,7 +28,7 @@ func main() {
 			c.Writer.Header().Set("Vary", "Origin")
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -83,6 +83,8 @@ func main() {
 			admin.GET("/audit/:eventId", handlers.APIAdminGetAuditEvent)
 			admin.GET("/jobs", handlers.APIAdminListJobs)
 			admin.GET("/jobs/health", handlers.APIAdminJobHealth)
+			admin.GET("/transcripts/:jobId/deletion-preview", handlers.APIAdminTranscriptDeletionPreview)
+			admin.DELETE("/transcripts/:jobId", handlers.APIAdminDeleteTranscript)
 			admin.GET("/jobs/:jobId", handlers.APIAdminGetJob)
 			admin.POST("/jobs/:jobId/retry", handlers.APIAdminRetryJob)
 		}

@@ -54,6 +54,12 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Speaker key is invalid", nil)
 		case services.ErrCodeInvalidSpeakerName:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Speaker name is invalid", nil)
+		case services.ErrCodeDeleteConfirmationMismatch:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Delete confirmation does not match", nil)
+		case services.ErrCodeTranscriptProcessing:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Transcript is currently processing", nil)
+		case services.ErrCodeUnsafeMediaReference:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Transcript has unsafe media references", nil)
 		case services.ErrCodeRateLimited:
 			writeAPIError(c, http.StatusTooManyRequests, serviceErr.Code, "Too many password change attempts. Try again later.", nil)
 		case services.ErrCodeUserNotFound:

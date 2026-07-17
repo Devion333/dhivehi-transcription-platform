@@ -178,6 +178,35 @@ type AdminJobRetryResponse struct {
 	Job AdminJobSummary `json:"job"`
 }
 
+type TranscriptDeletionOwner struct {
+	DisplayName string `json:"displayName"`
+	Email       string `json:"email"`
+}
+
+type TranscriptDeletionPreview struct {
+	JobID          string                  `json:"jobId"`
+	Filename       string                  `json:"filename"`
+	Owner          TranscriptDeletionOwner `json:"owner"`
+	SegmentCount   int                     `json:"segmentCount"`
+	MediaObjects   int                     `json:"mediaObjects"`
+	Status         string                  `json:"status"`
+	CanDelete      bool                    `json:"canDelete"`
+	BlockingReason *string                 `json:"blockingReason"`
+}
+
+type TranscriptDeletionRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+type TranscriptDeletionResponse struct {
+	JobID                    string   `json:"jobId"`
+	Deleted                  bool     `json:"deleted"`
+	SegmentCount             int      `json:"segmentCount"`
+	MediaObjectCount         int      `json:"mediaObjectCount"`
+	CleanupCategories        []string `json:"cleanupCategories"`
+	PartialCleanupCategories []string `json:"partialCleanupCategories,omitempty"`
+}
+
 type QueueCounts struct {
 	Queued     int `json:"queued"`
 	Processing int `json:"processing"`
