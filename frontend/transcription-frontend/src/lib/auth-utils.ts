@@ -1,4 +1,4 @@
-const protectedRoutes = ["/", "/Transcripts", "/Search", "/Admin"];
+const protectedRoutes = ["/", "/Upload", "/Transcripts", "/Search", "/Admin"];
 
 export function isPublicRoute(pathname: string) {
   return pathname === "/Login";

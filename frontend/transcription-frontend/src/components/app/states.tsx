@@ -1,4 +1,5 @@
 import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,13 +15,14 @@ export function LoadingState({ label = "Loading..." }: { label?: string }) {
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description?: string }) {
+export function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   return (
     <Card>
       <CardContent className="flex flex-col items-center justify-center p-6 text-center">
         <Inbox className="mb-2 h-8 w-8 text-muted-foreground" />
         <h2 className="text-lg font-semibold">{title}</h2>
         {description && <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>}
+        {action && <div className="mt-4">{action}</div>}
       </CardContent>
     </Card>
   );

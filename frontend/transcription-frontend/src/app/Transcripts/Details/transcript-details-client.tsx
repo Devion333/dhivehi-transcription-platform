@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BarChart3, Check, Edit3, FileDown, Loader2, Pause, Play, RefreshCcw, Save, Volume2, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, Edit3, FileDown, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -50,6 +50,7 @@ export function TranscriptDetailsClient() {
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
   const [volume, setVolume] = React.useState(1);
+  const [previousVolume, setPreviousVolume] = React.useState(1);
   const [playbackRate, setPlaybackRate] = React.useState(1);
   const [activeSegmentId, setActiveSegmentId] = React.useState<string | null>(null);
   const [edits, setEdits] = React.useState<Record<string, SegmentEditState>>({});
@@ -176,10 +177,32 @@ export function TranscriptDetailsClient() {
   function seek(next: number) {
     const audio = audioRef.current;
     if (!audio) return;
-    audio.currentTime = next;
-    setCurrentTime(next);
+    const bounded = Math.max(0, Math.min(next, duration || next));
+    audio.currentTime = bounded;
+    setCurrentTime(bounded);
     stopAtRef.current = null;
     setActiveSegmentId(null);
+  }
+
+  function skip(seconds: number) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    seek(audio.currentTime + seconds);
+  }
+
+  function changeVolume(next: number) {
+    const bounded = Math.max(0, Math.min(next, 1));
+    if (bounded > 0) setPreviousVolume(bounded);
+    setVolume(bounded);
+  }
+
+  function toggleMute() {
+    if (volume > 0) {
+      setPreviousVolume(volume);
+      setVolume(0);
+    } else {
+      setVolume(previousVolume > 0 ? previousVolume : 1);
+    }
   }
 
   function startEdit(segment: TranscriptSegment) {
@@ -220,26 +243,29 @@ export function TranscriptDetailsClient() {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <AudioCard
+        mediaUrl={detail.mediaUrl}
+        playing={playing}
+        audioReady={audioReady}
+        audioError={audioError}
+        currentTime={currentTime}
+        duration={duration}
+        volume={volume}
+        playbackRate={playbackRate}
+        onToggle={togglePlayback}
+        onSeek={seek}
+        onSkip={skip}
+        onVolume={changeVolume}
+        onToggleMute={toggleMute}
+        onRate={setPlaybackRate}
+      />
+
+      <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <MetadataCard detail={detail} />
-          <AudioCard
-            mediaUrl={detail.mediaUrl}
-            playing={playing}
-            audioReady={audioReady}
-            audioError={audioError}
-            currentTime={currentTime}
-            duration={duration}
-            volume={volume}
-            playbackRate={playbackRate}
-            onToggle={togglePlayback}
-            onSeek={seek}
-            onVolume={setVolume}
-            onRate={setPlaybackRate}
-          />
         </aside>
 
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           {isProcessingStatus(detail.status) && (
             <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
               <CardContent className="p-4 text-sm text-amber-900 dark:text-amber-200">
@@ -298,7 +324,7 @@ function initialEditState(text: string): SegmentEditState {
 }
 
 function BackToList() {
-  return <Button asChild variant="outline"><Link href="/Transcripts/List"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
+  return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 
 function MetadataCard({ detail }: { detail: TranscriptDetail }) {
@@ -323,7 +349,7 @@ function Meta({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-4 border-b pb-2 last:border-b-0"><span className="text-muted-foreground">{label}</span><span className="text-right font-medium">{value}</span></div>;
 }
 
-function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, duration, volume, playbackRate, onToggle, onSeek, onVolume, onRate }: {
+function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, duration, volume, playbackRate, onToggle, onSeek, onSkip, onVolume, onToggleMute, onRate }: {
   mediaUrl: string;
   playing: boolean;
   audioReady: boolean;
@@ -334,22 +360,42 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
   playbackRate: number;
   onToggle: () => void;
   onSeek: (value: number) => void;
+  onSkip: (seconds: number) => void;
   onVolume: (value: number) => void;
+  onToggleMute: () => void;
   onRate: (value: number) => void;
 }) {
+  const disabled = !mediaUrl || Boolean(audioError);
+  const seekDisabled = disabled || !audioReady;
+  const seekProgress = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+  const volumeProgress = Math.min(100, Math.max(0, volume * 100));
+  const VolumeIcon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
+
   return (
     <Card>
-      <CardHeader><CardTitle>Audio</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
+      <CardHeader className="pb-3"><CardTitle>Audio</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
         {!mediaUrl ? <p className="text-sm text-muted-foreground">Media unavailable</p> : audioError ? <p className="text-sm text-destructive">{audioError}</p> : null}
-        <div className="flex items-center gap-3">
-          <Button type="button" size="icon" onClick={onToggle} disabled={!mediaUrl || Boolean(audioError)} aria-label={playing ? "Pause audio" : "Play audio"}>{playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}</Button>
-          <div className="flex-1 text-sm text-muted-foreground">{formatTimestamp(currentTime)} / {audioReady ? formatTimestamp(duration) : "0:00"}</div>
-        </div>
-        <input aria-label="Seek audio" type="range" min={0} max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => onSeek(Number(event.target.value))} disabled={!mediaUrl || !audioReady || Boolean(audioError)} className="w-full" />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm"><span className="flex items-center gap-2 text-muted-foreground"><Volume2 className="h-4 w-4" /> Volume</span><input type="range" min={0} max={1} step="0.05" value={volume} onChange={(event) => onVolume(Number(event.target.value))} /></label>
-          <label className="grid gap-1 text-sm"><span className="text-muted-foreground">Playback rate</span><select value={playbackRate} onChange={(event) => onRate(Number(event.target.value))} className="h-9 rounded-md border border-input bg-background px-3 text-sm"><option value={0.75}>0.75x</option><option value={1}>1x</option><option value={1.25}>1.25x</option><option value={1.5}>1.5x</option></select></label>
+        <div className="rounded-xl border bg-muted/20 p-3">
+          <div className="grid gap-3 md:grid-cols-[auto_auto_auto_auto_minmax(120px,1fr)_auto_auto_auto] md:items-center">
+            <div className="flex items-center gap-2 md:contents">
+              <Button type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={() => onSkip(-10)} disabled={seekDisabled} aria-label="Rewind 10 seconds"><RotateCcw className="h-4 w-4" /></Button>
+              <Button type="button" size="icon" className="h-11 w-11 rounded-full shadow-sm" onClick={onToggle} disabled={disabled} aria-label={playing ? "Pause audio" : "Play audio"}>{playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}</Button>
+              <Button type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={() => onSkip(10)} disabled={seekDisabled} aria-label="Forward 10 seconds"><RotateCw className="h-4 w-4" /></Button>
+            </div>
+            <select value={playbackRate} onChange={(event) => onRate(Number(event.target.value))} aria-label="Playback speed" className="ml-auto h-8 w-16 rounded-md border border-input bg-background px-2 text-sm tabular-nums shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:order-last md:ml-0"><option value={0.75}>0.75x</option><option value={1}>1x</option><option value={1.25}>1.25x</option><option value={1.5}>1.5x</option></select>
+            <span className="hidden text-xs text-muted-foreground tabular-nums md:block">{formatTimestamp(currentTime)}</span>
+            <input aria-label="Seek audio" type="range" min={0} max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => onSeek(Number(event.target.value))} disabled={seekDisabled} className="range-control range-control-seek col-span-full md:col-span-1" style={{ "--range-progress": `${seekProgress}%` } as React.CSSProperties} />
+            <div className="col-span-full flex items-center gap-3 md:contents">
+              <span className="text-xs text-muted-foreground tabular-nums md:hidden">{formatTimestamp(currentTime)}</span>
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums md:ml-0">{audioReady ? formatTimestamp(duration) : "0:00"}</span>
+            </div>
+            <div className="hidden items-center gap-2 md:flex">
+              <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-full" onClick={onToggleMute} disabled={disabled} aria-label={volume === 0 ? "Unmute audio" : "Mute audio"}><VolumeIcon className="h-4 w-4" /></Button>
+              <input aria-label="Volume" type="range" min={0} max={1} step="0.05" value={volume} onChange={(event) => onVolume(Number(event.target.value))} disabled={disabled} className="range-control range-control-volume" style={{ "--range-progress": `${volumeProgress}%` } as React.CSSProperties} />
+            </div>
+            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-full md:hidden" onClick={onToggleMute} disabled={disabled} aria-label={volume === 0 ? "Unmute audio" : "Mute audio"}><VolumeIcon className="h-4 w-4" /></Button>
+          </div>
         </div>
       </CardContent>
     </Card>

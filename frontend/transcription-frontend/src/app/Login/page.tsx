@@ -31,8 +31,8 @@ function LoginForm() {
   const returnTo = safeReturnPath(searchParams.get("returnTo"));
 
   React.useEffect(() => {
-    if (!auth.isLoading && auth.isAuthenticated) router.replace(returnTo);
-  }, [auth.isAuthenticated, auth.isLoading, returnTo, router]);
+    if (auth.status === "authenticated") router.replace(returnTo);
+  }, [auth.status, returnTo, router]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,6 +60,10 @@ function LoginForm() {
     }
   }
 
+  if (auth.status === "checking") {
+    return <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10 text-sm text-muted-foreground">Checking session</main>;
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
       <Card className="w-full max-w-sm">
@@ -81,6 +85,7 @@ function LoginForm() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={submitting} />
             </div>
+            {auth.status === "error" && <p className="text-sm text-muted-foreground">Unable to verify an existing session. You can still sign in.</p>}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button className="w-full" type="submit" disabled={submitting}>{submitting ? "Signing in" : "Sign in"}</Button>
           </form>

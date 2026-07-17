@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Plus, Search, Shield, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoreHorizontal, Plus, Search, Shield, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -128,20 +128,20 @@ export function AdminUsersClient() {
 
       <Card className="mb-5">
         <CardContent className="p-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto] lg:items-end">
-            <form onSubmit={submitSearch} className="grid gap-2">
+          <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_auto_auto_auto] xl:items-end">
+            <form onSubmit={submitSearch} className="grid min-w-0 gap-2 sm:col-span-2 xl:col-span-1">
               <label htmlFor="admin-user-search" className="text-sm font-medium">Search</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
+              <div className="flex w-full min-w-0 gap-2">
+                <div className="relative min-w-0 flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input id="admin-user-search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Name or email" className="pl-9" />
+                  <Input id="admin-user-search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Name or email" className="w-full pl-9" />
                 </div>
-                <Button type="submit" variant="outline">Search</Button>
+                <Button type="submit" variant="outline" className="shrink-0">Search</Button>
               </div>
             </form>
             <FilterSelect id="admin-role-filter" label="Role" value={role} values={adminRoleFilters} onChange={(value) => navigate({ page: 1, role: value as typeof role })} />
             <FilterSelect id="admin-status-filter" label="Status" value={status} values={adminStatusFilters} onChange={(value) => navigate({ page: 1, status: value as typeof status })} />
-            <Button type="button" variant="ghost" onClick={clearFilters} disabled={!hasFilters}><X className="h-4 w-4" /> Clear</Button>
+            <Button type="button" variant="ghost" onClick={clearFilters} disabled={!hasFilters} className="min-w-0 w-full shrink-0 sm:w-auto"><X className="h-4 w-4" /> Reset</Button>
           </div>
           <p className="mt-3 text-sm text-muted-foreground">{loading ? "Refreshing" : resultSummary(total, hasFilters)}</p>
         </CardContent>
@@ -182,9 +182,9 @@ export function AdminUsersClient() {
 
 function FilterSelect({ id, label, value, values, onChange }: { id: string; label: string; value: string; values: readonly string[]; onChange: (value: string) => void }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 gap-2">
       <label htmlFor={id} className="text-sm font-medium">{label}</label>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+      <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:min-w-36 xl:w-40">
         {values.map((item) => <option key={item} value={item}>{item === "all" ? "All" : item[0].toUpperCase() + item.slice(1)}</option>)}
       </select>
     </div>
@@ -194,12 +194,12 @@ function FilterSelect({ id, label, value, values, onChange }: { id: string; labe
 function UserTable({ items, currentUserId, onEdit, onReset, onActivate, onDeactivate }: UserActionsProps) {
   return (
     <Card className="hidden overflow-hidden lg:block">
-      <table className="w-full text-sm">
+      <table className="w-full table-fixed text-sm">
         <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-          <tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Last login</th><th className="px-4 py-3">Created</th><th className="px-4 py-3 text-right">Actions</th></tr>
+          <tr><th className="w-[22%] px-4 py-3">Name</th><th className="w-[30%] px-4 py-3">Email</th><th className="w-[12%] px-4 py-3">Role</th><th className="w-[12%] px-4 py-3">Status</th><th className="w-[16%] px-4 py-3">Last login</th><th className="w-[8%] px-4 py-3 text-right">Actions</th></tr>
         </thead>
         <tbody className="divide-y">
-          {items.map((user) => <tr key={user.id} className="bg-card"><td className="px-4 py-4 font-medium">{user.name}</td><td className="px-4 py-4 text-muted-foreground">{user.email}</td><td className="px-4 py-4"><RoleBadge role={user.role} /></td><td className="px-4 py-4"><StatusBadge active={user.isActive} /></td><td className="px-4 py-4 text-muted-foreground">{formatAdminDate(user.lastLoginAt)}</td><td className="px-4 py-4 text-muted-foreground">{formatAdminDate(user.createdAt)}</td><td className="px-4 py-4"><ActionButtons user={user} currentUserId={currentUserId} onEdit={onEdit} onReset={onReset} onActivate={onActivate} onDeactivate={onDeactivate} /></td></tr>)}
+          {items.map((user) => <tr key={user.id} className="bg-card"><td className="min-w-0 px-4 py-4 font-medium"><div className="truncate" title={user.name}>{user.name}</div></td><td className="min-w-0 px-4 py-4 text-muted-foreground"><div className="truncate" title={user.email}>{user.email}</div></td><td className="px-4 py-4"><RoleBadge role={user.role} /></td><td className="px-4 py-4"><StatusBadge active={user.isActive} /></td><td className="px-4 py-4 text-muted-foreground">{formatAdminDate(user.lastLoginAt)}</td><td className="px-4 py-4"><ActionButtons user={user} currentUserId={currentUserId} onEdit={onEdit} onReset={onReset} onActivate={onActivate} onDeactivate={onDeactivate} /></td></tr>)}
         </tbody>
       </table>
     </Card>
@@ -213,7 +213,8 @@ function UserCards(props: UserActionsProps) {
 type UserActionsProps = { items: AdminUserSummary[]; currentUserId?: string; onEdit: (user: AdminUserSummary) => void; onReset: (user: AdminUserSummary) => void; onActivate: (user: AdminUserSummary) => void; onDeactivate: (user: AdminUserSummary) => void };
 
 function ActionButtons({ user, currentUserId, onEdit, onReset, onActivate, onDeactivate, mobile }: Omit<UserActionsProps, "items"> & { user: AdminUserSummary; mobile?: boolean }) {
-  return <div className={mobile ? "grid grid-cols-2 gap-2" : "flex justify-end gap-2"}><Button size="sm" variant="outline" onClick={() => onEdit(user)}>Edit</Button><Button size="sm" variant="outline" onClick={() => onReset(user)}>Reset password</Button>{user.isActive ? <Button size="sm" variant="outline" disabled={!canDeactivateUser(user, currentUserId)} onClick={() => onDeactivate(user)}>Deactivate</Button> : <Button size="sm" variant="outline" onClick={() => onActivate(user)}>Activate</Button>}</div>;
+  if (mobile) return <div className="grid grid-cols-2 gap-2"><Button size="sm" variant="outline" onClick={() => onEdit(user)}>Edit</Button><Button size="sm" variant="outline" onClick={() => onReset(user)}>Reset password</Button>{user.isActive ? <Button size="sm" variant="outline" disabled={!canDeactivateUser(user, currentUserId)} onClick={() => onDeactivate(user)}>Deactivate</Button> : <Button size="sm" variant="outline" onClick={() => onActivate(user)}>Activate</Button>}</div>;
+  return <details className="relative flex justify-end"><summary className="ml-auto flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Actions for ${user.name}`}><MoreHorizontal className="h-4 w-4" /></summary><div className="absolute right-0 top-9 z-20 grid w-44 gap-1 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"><Button size="sm" variant="ghost" className="justify-start" onClick={() => onEdit(user)}>Edit</Button><Button size="sm" variant="ghost" className="justify-start" onClick={() => onReset(user)}>Reset password</Button>{user.isActive ? <Button size="sm" variant="ghost" className="justify-start" disabled={!canDeactivateUser(user, currentUserId)} onClick={() => onDeactivate(user)}>Deactivate</Button> : <Button size="sm" variant="ghost" className="justify-start" onClick={() => onActivate(user)}>Activate</Button>}</div></details>;
 }
 
 function RoleBadge({ role }: { role: AuthRole }) {
@@ -255,7 +256,7 @@ function EditUserDialog({ user, currentUserId, refreshCurrentUser, onClose, onUp
     event.preventDefault(); setSaving(true); setError(null);
     try { const response = await updateAdminUser(user.id, { name, role }); if (user.id === currentUserId) await refreshCurrentUser(); onUpdated(response.user); } catch (err) { setError(adminErrorMessage(err)); } finally { setSaving(false); }
   }
-  return <Modal title="Edit user" onClose={onClose}><form onSubmit={submit} className="space-y-4"><Field label="Email"><Input value={user.email} readOnly /></Field><Field label="Name"><Input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></Field><RoleSelect value={role} onChange={setRole} />{error && <p className="text-sm text-destructive">{error}</p>}<DialogActions onClose={onClose} saving={saving} submitLabel="Save" /></form></Modal>;
+  return <Modal title="Edit user" onClose={onClose}><form onSubmit={submit} className="space-y-4"><Field label="Email"><Input value={user.email} readOnly /></Field><Field label="Created"><Input value={formatAdminDate(user.createdAt)} readOnly /></Field><Field label="Name"><Input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></Field><RoleSelect value={role} onChange={setRole} />{error && <p className="text-sm text-destructive">{error}</p>}<DialogActions onClose={onClose} saving={saving} submitLabel="Save" /></form></Modal>;
 }
 
 function ResetPasswordDialog({ user, currentUserId, onClose, onReset }: { user: AdminUserSummary; currentUserId?: string; onClose: () => void; onReset: () => void }) {

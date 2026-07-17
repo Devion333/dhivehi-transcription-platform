@@ -37,7 +37,7 @@ export function buildTranscriptListPath({
   if (search.trim()) params.set("search", search.trim());
   if (status && status !== "all") params.set("status", status);
   const query = params.toString();
-  return `/Transcripts/List${query ? `?${query}` : ""}`;
+  return `/Transcripts${query ? `?${query}` : ""}`;
 }
 
 export function transcriptDetailPath(jobId: string) {

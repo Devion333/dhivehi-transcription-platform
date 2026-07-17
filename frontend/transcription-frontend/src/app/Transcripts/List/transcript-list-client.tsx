@@ -99,7 +99,7 @@ export function TranscriptListClient() {
     <PageContainer>
       <PageHeader
         title="Transcripts"
-        actions={<Button asChild><Link href="/Transcripts"><UploadCloud className="h-4 w-4" /> Upload</Link></Button>}
+        actions={<Button asChild><Link href="/Upload"><UploadCloud className="h-4 w-4" /> Upload</Link></Button>}
       />
 
       <Card className="mb-5">
@@ -153,7 +153,7 @@ export function TranscriptListClient() {
         hasFilters ? (
           <EmptyState title="No matching transcripts" description="Clear filters to view all transcripts." />
         ) : (
-          <EmptyState title="No transcripts yet" description="Upload a file to get started." />
+          <EmptyState title="No transcripts yet" description="Upload a file to get started." action={<Button asChild><Link href="/Upload"><UploadCloud className="h-4 w-4" /> Upload</Link></Button>} />
         )
       )}
       {!loading && !error && data.items.length > 0 && (
@@ -185,31 +185,32 @@ export function TranscriptListClient() {
 function TranscriptTable({ items }: { items: TranscriptSummary[] }) {
   return (
     <Card className="hidden overflow-hidden lg:block">
-      <table className="w-full text-sm">
+      <table className="w-full table-fixed text-sm">
         <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="px-4 py-3 font-medium">Filename</th>
-            <th className="px-4 py-3 font-medium">Reference</th>
-            <th className="px-4 py-3 font-medium">Category</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium">Segments</th>
-            <th className="px-4 py-3 font-medium">Analysis</th>
-            <th className="px-4 py-3 font-medium">Created</th>
-            <th className="px-4 py-3 text-right font-medium">Action</th>
+            <th className="w-[34%] px-4 py-3 font-medium">Filename</th>
+            <th className="w-[16%] px-4 py-3 font-medium">Reference</th>
+            <th className="hidden w-[12%] px-4 py-3 font-medium xl:table-cell">Category</th>
+            <th className="w-[13%] px-4 py-3 font-medium">Status</th>
+            <th className="w-[10%] px-4 py-3 font-medium">Segments</th>
+            <th className="hidden w-[12%] px-4 py-3 font-medium 2xl:table-cell">Analysis</th>
+            <th className="w-[14%] px-4 py-3 font-medium">Created</th>
+            <th className="w-[9%] px-4 py-3 text-right font-medium">Action</th>
           </tr>
         </thead>
         <tbody className="divide-y">
           {items.map((item) => (
             <tr key={item.jobId} className="bg-card">
-              <td className="max-w-[280px] px-4 py-4">
-                <Link className="font-medium hover:underline" href={transcriptDetailPath(item.jobId)}>{item.filename}</Link>
-                {item.notes && <p className="mt-1 truncate text-xs text-muted-foreground">{item.notes}</p>}
+              <td className="min-w-0 px-4 py-4">
+                <Link className="block truncate font-medium hover:underline" href={transcriptDetailPath(item.jobId)} title={item.filename}>{item.filename}</Link>
+                <p className="mt-1 truncate text-xs text-muted-foreground xl:hidden">{fallbackText(item.category, "Uncategorized")}</p>
+                {item.notes && <p className="mt-1 truncate text-xs text-muted-foreground" title={item.notes}>{item.notes}</p>}
               </td>
-              <td className="px-4 py-4 text-muted-foreground">{fallbackText(item.referenceNumber, "No reference")}</td>
-              <td className="px-4 py-4 text-muted-foreground">{fallbackText(item.category, "Uncategorized")}</td>
+              <td className="min-w-0 px-4 py-4 text-muted-foreground"><div className="truncate" title={fallbackText(item.referenceNumber, "No reference")}>{fallbackText(item.referenceNumber, "No reference")}</div></td>
+              <td className="hidden px-4 py-4 text-muted-foreground xl:table-cell"><div className="truncate" title={fallbackText(item.category, "Uncategorized")}>{fallbackText(item.category, "Uncategorized")}</div></td>
               <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
               <td className="px-4 py-4 text-muted-foreground">{segmentCountLabel(item.segmentCount)}</td>
-              <td className="px-4 py-4"><StatusBadge status={item.analysisStatus} /></td>
+              <td className="hidden px-4 py-4 2xl:table-cell"><StatusBadge status={item.analysisStatus} /></td>
               <td className="px-4 py-4 text-muted-foreground">{formatTranscriptDate(item.createdAt)}</td>
               <td className="px-4 py-4 text-right"><Button asChild size="sm" variant="outline"><Link href={transcriptDetailPath(item.jobId)}>View</Link></Button></td>
             </tr>

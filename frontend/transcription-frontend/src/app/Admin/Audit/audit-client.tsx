@@ -94,6 +94,7 @@ export function AdminAuditClient() {
   }
 
   const pagination = data.pagination;
+  const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 0;
   const hasFilters = Boolean(search || category !== "all" || outcome !== "all" || dateFrom || dateTo);
 
@@ -103,23 +104,24 @@ export function AdminAuditClient() {
 
       <Card className="mb-5">
         <CardContent className="p-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_170px_150px_160px_160px_auto] lg:items-end">
-            <form onSubmit={submitSearch} className="grid gap-2">
+          <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_repeat(5,auto)] xl:items-end">
+            <form onSubmit={submitSearch} className="grid min-w-0 gap-2 sm:col-span-2 xl:col-span-1">
               <label htmlFor="audit-search" className="text-sm font-medium">Search</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
+              <div className="flex w-full min-w-0 gap-2">
+                <div className="relative min-w-0 flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input id="audit-search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Actor, action, resource" className="pl-9" />
+                  <Input id="audit-search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Actor, action, resource" className="w-full pl-9" />
                 </div>
-                <Button type="submit" variant="outline">Search</Button>
+                <Button type="submit" variant="outline" className="shrink-0">Search</Button>
               </div>
             </form>
-            <SelectFilter id="audit-category" label="Category" value={category} values={auditCategories} onChange={(value) => navigate({ page: 1, category: value as typeof category })} />
+            <SelectFilter id="audit-category" label="Action" value={category} values={auditCategories} onChange={(value) => navigate({ page: 1, category: value as typeof category })} />
             <SelectFilter id="audit-outcome" label="Outcome" value={outcome} values={auditOutcomes} onChange={(value) => navigate({ page: 1, outcome: value as typeof outcome })} />
-            <DateFilter id="audit-from" label="From" value={dateFrom} onChange={(value) => navigate({ page: 1, dateFrom: value })} />
-            <DateFilter id="audit-to" label="To" value={dateTo} onChange={(value) => navigate({ page: 1, dateTo: value })} />
-            <Button type="button" variant="ghost" onClick={() => router.push(pathname)} disabled={!hasFilters}><X className="h-4 w-4" /> Clear</Button>
+            <DateFilter id="audit-from" label="Start date" value={dateFrom} onChange={(value) => navigate({ page: 1, dateFrom: value })} />
+            <DateFilter id="audit-to" label="End date" value={dateTo} onChange={(value) => navigate({ page: 1, dateTo: value })} />
+            <Button type="button" variant="ghost" onClick={() => router.push(pathname)} disabled={!hasFilters} className="min-w-0 w-full shrink-0 sm:w-auto"><X className="h-4 w-4" /> Reset</Button>
           </div>
+          <p className="mt-3 text-sm text-muted-foreground">{loading ? "Refreshing" : `Showing ${total.toLocaleString()} audit ${total === 1 ? "event" : "events"}`}</p>
         </CardContent>
       </Card>
 
@@ -145,7 +147,7 @@ export function AdminAuditClient() {
 }
 
 function AuditTable({ items, onDetail }: { items: AuditEventSummary[]; onDetail: (event: AuditEventSummary) => void }) {
-  return <Card className="hidden overflow-hidden lg:block"><table className="w-full text-sm"><thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Time</th><th className="px-4 py-3">Actor</th><th className="px-4 py-3">Action</th><th className="px-4 py-3">Resource</th><th className="px-4 py-3">Outcome</th><th className="px-4 py-3">IP</th><th className="px-4 py-3 text-right">Details</th></tr></thead><tbody className="divide-y">{items.map((event) => <tr key={event.id} className="bg-card"><td className="px-4 py-4 text-muted-foreground">{formatAuditDate(event.createdAt)}</td><td className="px-4 py-4">{auditActorLabel(event.actor)}</td><td className="px-4 py-4"><div className="font-medium">{auditActionLabel(event.action)}</div><CategoryBadge category={event.category} /></td><td className="px-4 py-4 text-muted-foreground">{auditResourceLabel(event.resourceType, event.resourceId)}</td><td className="px-4 py-4"><OutcomeBadge outcome={event.outcome} /></td><td className="px-4 py-4 text-muted-foreground">{event.ipAddress || "-"}</td><td className="px-4 py-4 text-right"><Button size="sm" variant="outline" onClick={() => onDetail(event)}><Eye className="h-4 w-4" /> View</Button></td></tr>)}</tbody></table></Card>;
+  return <Card className="hidden overflow-hidden lg:block"><table className="w-full table-fixed text-sm"><thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="w-[18%] px-4 py-3">Time</th><th className="w-[26%] px-4 py-3">Actor</th><th className="w-[30%] px-4 py-3">Action</th><th className="w-[14%] px-4 py-3">Outcome</th><th className="w-[12%] px-4 py-3 text-right">Details</th></tr></thead><tbody className="divide-y">{items.map((event) => <tr key={event.id} className="bg-card"><td className="px-4 py-4 text-muted-foreground">{formatAuditDate(event.createdAt)}</td><td className="min-w-0 px-4 py-4"><div className="truncate" title={auditActorLabel(event.actor)}>{auditActorLabel(event.actor)}</div></td><td className="min-w-0 px-4 py-4"><div className="truncate font-medium" title={auditActionLabel(event.action)}>{auditActionLabel(event.action)}</div><div className="mt-1 flex min-w-0 items-center gap-2"><CategoryBadge category={event.category} /><span className="hidden truncate text-xs text-muted-foreground xl:inline" title={auditResourceLabel(event.resourceType, event.resourceId)}>{auditResourceLabel(event.resourceType, event.resourceId)}</span></div></td><td className="px-4 py-4"><OutcomeBadge outcome={event.outcome} /></td><td className="px-4 py-4 text-right"><Button size="sm" variant="outline" onClick={() => onDetail(event)}><Eye className="h-4 w-4" /> View</Button></td></tr>)}</tbody></table></Card>;
 }
 
 function AuditCards({ items, onDetail }: { items: AuditEventSummary[]; onDetail: (event: AuditEventSummary) => void }) {
@@ -163,11 +165,11 @@ function Detail({ label, value }: { label: string; value?: string }) {
 }
 
 function SelectFilter({ id, label, value, values, onChange }: { id: string; label: string; value: string; values: readonly string[]; onChange: (value: string) => void }) {
-  return <div className="grid gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">{values.map((item) => <option key={item} value={item}>{item === "all" ? "All" : auditCategoryLabel(item)}</option>)}</select></div>;
+  return <div className="grid min-w-0 gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:min-w-36 xl:w-40">{values.map((item) => <option key={item} value={item}>{item === "all" ? "All" : auditCategoryLabel(item)}</option>)}</select></div>;
 }
 
 function DateFilter({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
-  return <div className="grid gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><Input id={id} type="date" value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+  return <div className="grid min-w-0 gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><Input id={id} type="date" value={value} onChange={(event) => onChange(event.target.value)} className="w-full sm:min-w-40" /></div>;
 }
 
 function CategoryBadge({ category }: { category: string }) {

@@ -188,7 +188,7 @@ export function TranscriptAnalysisClient() {
 }
 
 function BackToList() {
-  return <Button asChild variant="outline"><Link href="/Transcripts/List"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
+  return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 
 function MetaRow({ label, value }: { label: string; value: string }) {
