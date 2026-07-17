@@ -30,6 +30,17 @@ type AuthMessageResponse struct {
 	Message string `json:"message"`
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+	ConfirmPassword string `json:"confirmPassword"`
+}
+
+type ChangePasswordResponse struct {
+	Message                  string `json:"message"`
+	ReauthenticationRequired bool   `json:"reauthenticationRequired"`
+}
+
 type AdminUserSummary struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`

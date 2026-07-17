@@ -50,6 +50,7 @@ func main() {
 	{
 		api.POST("/auth/login", handlers.APILogin)
 		api.POST("/auth/logout", handlers.RequireAuth(), handlers.APILogout)
+		api.POST("/auth/change-password", handlers.RequireAuth(), handlers.APIChangePassword)
 		api.GET("/auth/me", handlers.RequireAuth(), handlers.APIMe)
 		api.GET("/health", handlers.APIHealth)
 

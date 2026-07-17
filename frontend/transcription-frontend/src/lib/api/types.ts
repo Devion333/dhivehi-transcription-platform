@@ -43,6 +43,17 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  message: string;
+  reauthenticationRequired: boolean;
+}
+
 export interface CurrentUserResponse {
   user: AuthUser;
 }
