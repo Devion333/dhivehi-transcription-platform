@@ -1,7 +1,11 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -209,4 +213,145 @@ func TestBuildTranscriptSearchResponsePaginates(t *testing.T) {
 	if result.Items[0].SegmentIndex != 2 {
 		t.Fatalf("expected page two item index 2, got %+v", result.Items[0])
 	}
+}
+
+func TestMapTranscriptDetailIncludesSpeakerNames(t *testing.T) {
+	detail := MapTranscriptDetail(map[string]interface{}{"job_id": "job", "speaker_names": map[string]interface{}{"SPEAKER_00": "Officer Ahmed"}}, nil)
+	if detail.SpeakerNames["SPEAKER_00"] != "Officer Ahmed" {
+		t.Fatalf("expected speaker mapping in detail, got %+v", detail.SpeakerNames)
+	}
+}
+
+func TestUpdateSpeakerNameOwnerPersistsMapping(t *testing.T) {
+	var payload map[string]interface{}
+	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job", "owner_user_id": "owner", "speaker_names": map[string]interface{}{}}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+
+	result, err := UpdateSpeakerName(TranscriptAccessScope{UserID: "owner"}, "job", "SPEAKER_00", " Officer Ahmed ")
+	if err != nil {
+		t.Fatalf("UpdateSpeakerName failed: %v", err)
+	}
+	if result.DisplayName != "Officer Ahmed" || result.SpeakerNames["SPEAKER_00"] != "Officer Ahmed" {
+		t.Fatalf("unexpected response: %+v", result)
+	}
+	stored, ok := payload["speaker_names"].(map[string]interface{})
+	if !ok || stored["SPEAKER_00"] != "Officer Ahmed" {
+		t.Fatalf("expected persisted mapping, got %+v", payload)
+	}
+}
+
+func TestUpdateSpeakerNameAdminCanRenameLegacyTranscript(t *testing.T) {
+	var payload map[string]interface{}
+	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job"}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+
+	if _, err := UpdateSpeakerName(TranscriptAccessScope{IsAdmin: true}, "job", "SPEAKER_01", "Interviewee"); err != nil {
+		t.Fatalf("admin should rename legacy transcript: %v", err)
+	}
+}
+
+func TestUpdateSpeakerNameRejectsOtherUserAndLegacyForStandardUser(t *testing.T) {
+	var payload map[string]interface{}
+	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job", "owner_user_id": "owner"}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+
+	_, err := UpdateSpeakerName(TranscriptAccessScope{UserID: "other"}, "job", "SPEAKER_00", "Name")
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeForbidden {
+		t.Fatalf("expected forbidden for other user, got %#v", err)
+	}
+
+	server = speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job"}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+	_, err = UpdateSpeakerName(TranscriptAccessScope{UserID: "owner"}, "job", "SPEAKER_00", "Name")
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeForbidden {
+		t.Fatalf("expected forbidden for ownerless legacy standard user, got %#v", err)
+	}
+}
+
+func TestUpdateSpeakerNameRejectsInvalidInputs(t *testing.T) {
+	var payload map[string]interface{}
+	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job", "owner_user_id": "owner"}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+
+	tests := []struct {
+		name        string
+		speakerKey  string
+		displayName string
+		code        string
+	}{
+		{"unknown speaker", "SPEAKER_99", "Name", ErrCodeInvalidSpeakerKey},
+		{"empty name", "SPEAKER_00", " ", ErrCodeInvalidSpeakerName},
+		{"overlong name", "SPEAKER_00", strings.Repeat("A", maxSpeakerNameRunes+1), ErrCodeInvalidSpeakerName},
+		{"control char", "SPEAKER_00", "Bad\nName", ErrCodeInvalidSpeakerName},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := UpdateSpeakerName(TranscriptAccessScope{UserID: "owner"}, "job", test.speakerKey, test.displayName)
+			var serviceErr *ServiceError
+			if !errors.As(err, &serviceErr) || serviceErr.Code != test.code {
+				t.Fatalf("expected %s, got %#v", test.code, err)
+			}
+		})
+	}
+}
+
+func TestUpdateSpeakerNameResetRemovesMappingAndSegmentsRemainUnchanged(t *testing.T) {
+	var payload map[string]interface{}
+	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job", "owner_user_id": "owner", "speaker_names": map[string]interface{}{"SPEAKER_00": "Officer Ahmed"}}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+
+	result, err := UpdateSpeakerName(TranscriptAccessScope{UserID: "owner"}, "job", "SPEAKER_00", "SPEAKER_00")
+	if err != nil {
+		t.Fatalf("reset failed: %v", err)
+	}
+	if !result.Reset || result.DisplayName != "SPEAKER_00" {
+		t.Fatalf("expected reset response, got %+v", result)
+	}
+	stored, ok := payload["speaker_names"].(map[string]interface{})
+	if !ok || stored["SPEAKER_00"] != nil {
+		t.Fatalf("expected mapping removal, got %+v", payload)
+	}
+}
+
+func speakerRenameQdrantServer(t *testing.T, parentPayload map[string]interface{}, updatedPayload *map[string]interface{}) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/collections/file_metadata/points/payload" {
+			var body struct {
+				Payload map[string]interface{} `json:"payload"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode payload request: %v", err)
+			}
+			*updatedPayload = body.Payload
+			_, _ = w.Write([]byte(`{"result":{}}`))
+			return
+		}
+		var body struct {
+			Filter struct {
+				Must []struct {
+					Key string `json:"key"`
+				} `json:"must"`
+			} `json:"filter"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode scroll request: %v", err)
+		}
+		isSegmentScroll := false
+		for _, clause := range body.Filter.Must {
+			if clause.Key == "parent_job_id" {
+				isSegmentScroll = true
+			}
+		}
+		if isSegmentScroll {
+			_, _ = w.Write([]byte(`{"result":{"points":[{"id":2,"payload":{"type":"segment","parent_job_id":"job","segment_index":0,"speaker":"SPEAKER_00"}},{"id":3,"payload":{"type":"segment","parent_job_id":"job","segment_index":1,"speaker":"SPEAKER_01"}}]}}`))
+			return
+		}
+		response := map[string]interface{}{"result": map[string]interface{}{"points": []map[string]interface{}{{"id": 1, "payload": parentPayload}}}}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	t.Cleanup(server.Close)
+	return server
 }

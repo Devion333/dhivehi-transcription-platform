@@ -1,5 +1,6 @@
 import type { TranscriptAnalysis, TranscriptDetail } from "./api/types";
 import type { PdfExportAnalysis, PdfExportPayload, PdfExportSegment } from "./pdf-export-types";
+import { getSpeakerDisplayName } from "./transcript-details-utils";
 
 const MAX_FILENAME_LENGTH = 80;
 
@@ -91,7 +92,7 @@ export function buildPdfExportPayload(transcript: TranscriptDetail, format: PdfE
       segments: transcript.segments.map((segment) => ({
         id: segment.id,
         segmentIndex: segment.segmentIndex,
-        speaker: segment.speaker,
+        speaker: getSpeakerDisplayName(segment.speaker, transcript.speakerNames),
         startTime: segment.startTime,
         endTime: segment.endTime,
         transcriptText: segment.transcriptText,

@@ -24,6 +24,8 @@ const (
 	ErrCodePasswordMismatch       = "PASSWORD_CONFIRMATION_MISMATCH"
 	ErrCodePasswordPolicyFailed   = "PASSWORD_POLICY_FAILED"
 	ErrCodePasswordUnchanged      = "PASSWORD_UNCHANGED"
+	ErrCodeInvalidSpeakerKey      = "INVALID_SPEAKER_KEY"
+	ErrCodeInvalidSpeakerName     = "INVALID_SPEAKER_NAME"
 	ErrCodeUserNotFound           = "USER_NOT_FOUND"
 	ErrCodeCannotDeactivateSelf   = "CANNOT_DEACTIVATE_SELF"
 	ErrCodeLastActiveAdmin        = "LAST_ACTIVE_ADMIN"

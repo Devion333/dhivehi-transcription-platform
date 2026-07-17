@@ -1,5 +1,5 @@
 import { request } from "./client";
-import type { AnalysisTriggerResponse, SegmentUpdateResponse, TranscriptAnalysis, TranscriptDetail, TranscriptListResponse, TranscriptSegment } from "./types";
+import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDetail, TranscriptListResponse, TranscriptSegment } from "./types";
 
 export type TranscriptListParams = {
   page?: number;
@@ -60,4 +60,15 @@ export function updateSegment(
       body: JSON.stringify({ transcriptText: input.transcriptText }),
     },
   ).then((response) => response.segment);
+}
+
+export function updateSpeakerName(jobId: string, speakerKey: string, displayName: string, signal?: AbortSignal) {
+  const trimmedJobId = jobId.trim();
+  if (!trimmedJobId) throw new Error("A transcript job ID is required");
+  return request<SpeakerRenameResponse>(`/api/transcripts/${encodeURIComponent(trimmedJobId)}/speakers`, {
+    method: "PATCH",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ speakerKey, displayName }),
+  });
 }

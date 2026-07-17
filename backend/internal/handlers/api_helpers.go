@@ -50,6 +50,10 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Password does not meet policy", nil)
 		case services.ErrCodePasswordUnchanged:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "New password must be different from current password", nil)
+		case services.ErrCodeInvalidSpeakerKey:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Speaker key is invalid", nil)
+		case services.ErrCodeInvalidSpeakerName:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Speaker name is invalid", nil)
 		case services.ErrCodeRateLimited:
 			writeAPIError(c, http.StatusTooManyRequests, serviceErr.Code, "Too many password change attempts. Try again later.", nil)
 		case services.ErrCodeUserNotFound:

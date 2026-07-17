@@ -235,22 +235,35 @@ type Segment struct {
 }
 
 type TranscriptDetail struct {
-	JobID            string    `json:"jobId"`
-	Filename         string    `json:"filename"`
-	Category         string    `json:"category"`
-	ReferenceNumber  string    `json:"referenceNumber"`
-	Notes            string    `json:"notes"`
-	Status           string    `json:"status"`
-	Speakers         int       `json:"speakers"`
-	SegmentCount     int       `json:"segmentCount"`
-	MediaURL         string    `json:"mediaUrl"`
-	CreatedAt        string    `json:"createdAt"`
-	UpdatedAt        string    `json:"updatedAt"`
-	AnalysisStatus   string    `json:"analysisStatus"`
-	OwnerUserID      string    `json:"ownerUserId"`
-	OwnerDisplayName string    `json:"ownerDisplayName"`
-	OwnerEmail       string    `json:"ownerEmail"`
-	Segments         []Segment `json:"segments"`
+	JobID            string            `json:"jobId"`
+	Filename         string            `json:"filename"`
+	Category         string            `json:"category"`
+	ReferenceNumber  string            `json:"referenceNumber"`
+	Notes            string            `json:"notes"`
+	Status           string            `json:"status"`
+	Speakers         int               `json:"speakers"`
+	SegmentCount     int               `json:"segmentCount"`
+	MediaURL         string            `json:"mediaUrl"`
+	CreatedAt        string            `json:"createdAt"`
+	UpdatedAt        string            `json:"updatedAt"`
+	AnalysisStatus   string            `json:"analysisStatus"`
+	OwnerUserID      string            `json:"ownerUserId"`
+	OwnerDisplayName string            `json:"ownerDisplayName"`
+	OwnerEmail       string            `json:"ownerEmail"`
+	SpeakerNames     map[string]string `json:"speakerNames"`
+	Segments         []Segment         `json:"segments"`
+}
+
+type SpeakerRenameRequest struct {
+	SpeakerKey  string `json:"speakerKey"`
+	DisplayName string `json:"displayName"`
+}
+
+type SpeakerRenameResponse struct {
+	SpeakerKey   string            `json:"speakerKey"`
+	DisplayName  string            `json:"displayName"`
+	SpeakerNames map[string]string `json:"speakerNames"`
+	Reset        bool              `json:"reset"`
 }
 
 type Analysis struct {

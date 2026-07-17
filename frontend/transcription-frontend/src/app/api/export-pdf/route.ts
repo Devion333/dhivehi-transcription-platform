@@ -7,6 +7,8 @@ import puppeteer, { type Browser, type Page } from "puppeteer";
 import type { PdfExportPayload, PdfExportSegment } from "@/lib/pdf-export-types";
 import { escapeHtml, formatPdfTimestamp, groupSegmentsBySpeaker, hasUsableAnalysis, pdfDownloadFilename, sortPdfSegments } from "@/lib/pdf-export-utils";
 import { BACKEND_URL } from "@/config";
+import type { TranscriptDetail } from "@/lib/api/types";
+import { getSpeakerDisplayName } from "@/lib/transcript-details-utils";
 
 export const runtime = "nodejs";
 
@@ -28,7 +30,8 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuthenticated(request);
     payload = await readAndValidatePayload(request);
-    await requireTranscriptAccess(request, payload.transcript.jobId);
+    const authorizedTranscript = await requireTranscriptAccess(request, payload.transcript.jobId);
+    payload = withAuthorizedTranscript(payload, authorizedTranscript);
     browser = await puppeteer.launch({
       headless: "shell",
       timeout: 30_000,
@@ -82,6 +85,32 @@ async function requireTranscriptAccess(request: NextRequest, jobId: string) {
   if (response.status === 403) throw routeError(403, "FORBIDDEN", "You do not have permission to export this transcript.");
   if (response.status === 404) throw routeError(404, "TRANSCRIPT_NOT_FOUND", "Transcript was not found.");
   if (!response.ok) throw routeError(500, "TRANSCRIPT_ACCESS_CHECK_FAILED", "Transcript access check failed");
+  return response.json() as Promise<TranscriptDetail>;
+}
+
+function withAuthorizedTranscript(payload: PdfExportPayload, transcript: TranscriptDetail): PdfExportPayload {
+  return {
+    ...payload,
+    transcript: {
+      jobId: transcript.jobId,
+      filename: transcript.filename,
+      category: transcript.category,
+      referenceNumber: transcript.referenceNumber,
+      notes: transcript.notes,
+      createdAt: transcript.createdAt,
+      status: transcript.status,
+      speakers: transcript.speakers,
+      segmentCount: transcript.segmentCount,
+      segments: transcript.segments.map((segment) => ({
+        id: segment.id,
+        segmentIndex: segment.segmentIndex,
+        speaker: getSpeakerDisplayName(segment.speaker, transcript.speakerNames),
+        startTime: segment.startTime,
+        endTime: segment.endTime,
+        transcriptText: segment.transcriptText,
+      })),
+    },
+  };
 }
 
 async function recordPDFExportAudit(request: NextRequest, payload: PdfExportPayload, outcome: "success" | "failure") {

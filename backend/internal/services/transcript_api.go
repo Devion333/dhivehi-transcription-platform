@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	qdrantCollection = "file_metadata"
-	defaultPage      = 1
-	defaultPageSize  = 20
-	maxPageSize      = 100
+	qdrantCollection    = "file_metadata"
+	defaultPage         = 1
+	defaultPageSize     = 20
+	maxPageSize         = 100
+	maxSpeakerNameRunes = 80
 )
 
 var qdrantHTTPClient = &http.Client{Timeout: 10 * time.Second}
@@ -365,6 +366,62 @@ func UpdateSegmentTranscript(scope TranscriptAccessScope, jobID, segmentID, tran
 	return MapSegment(parent.Payload, updatedPayload), nil
 }
 
+func UpdateSpeakerName(scope TranscriptAccessScope, jobID, speakerKey, displayName string) (dtos.SpeakerRenameResponse, error) {
+	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
+	if err != nil {
+		return dtos.SpeakerRenameResponse{}, err
+	}
+	segments, err := ListSegmentPointsByParent(jobID)
+	if err != nil {
+		return dtos.SpeakerRenameResponse{}, err
+	}
+	speakerKey = strings.TrimSpace(speakerKey)
+	displayName = strings.TrimSpace(displayName)
+	if speakerKey == "" || hasControlCharacters(speakerKey) || !speakerKeyExists(speakerKey, segments) {
+		return dtos.SpeakerRenameResponse{}, newServiceError(ErrCodeInvalidSpeakerKey, errors.New("invalid speaker key"))
+	}
+	if err := validateSpeakerDisplayName(displayName); err != nil {
+		return dtos.SpeakerRenameResponse{}, err
+	}
+
+	speakerNames := MapSpeakerNames(parent.Payload)
+	reset := displayName == speakerKey
+	if reset {
+		delete(speakerNames, speakerKey)
+	} else {
+		speakerNames[speakerKey] = displayName
+	}
+	if err := updateParentPayloadByJobID(jobID, map[string]interface{}{"speaker_names": speakerNames, "updated_at": time.Now().UTC().Format(time.RFC3339)}); err != nil {
+		return dtos.SpeakerRenameResponse{}, err
+	}
+	return dtos.SpeakerRenameResponse{SpeakerKey: speakerKey, DisplayName: SpeakerDisplayName(speakerKey, speakerNames), SpeakerNames: speakerNames, Reset: reset}, nil
+}
+
+func validateSpeakerDisplayName(value string) error {
+	if value == "" || len([]rune(value)) > maxSpeakerNameRunes || hasControlCharacters(value) {
+		return newServiceError(ErrCodeInvalidSpeakerName, errors.New("invalid speaker display name"))
+	}
+	return nil
+}
+
+func speakerKeyExists(speakerKey string, segments []QdrantPoint) bool {
+	for _, segment := range segments {
+		if getString(segment.Payload, "speaker", "") == speakerKey {
+			return true
+		}
+	}
+	return false
+}
+
+func hasControlCharacters(value string) bool {
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
 func findSegmentForUpdate(jobID, segmentID string, segments []QdrantPoint) (*QdrantPoint, error) {
 	for i := range segments {
 		candidateID := SegmentIDFromPayload(jobID, segments[i].Payload)
@@ -616,6 +673,19 @@ func updateSegmentPayloadByIndex(jobID string, segmentIndex int, payload map[str
 	return qdrantRequest(http.MethodPost, fmt.Sprintf("/collections/%s/points/payload?wait=true", qdrantCollection), requestBody, nil)
 }
 
+func updateParentPayloadByJobID(jobID string, payload map[string]interface{}) error {
+	requestBody := map[string]interface{}{
+		"filter": map[string]interface{}{
+			"must": []map[string]interface{}{
+				{"key": "type", "match": map[string]string{"value": "parent"}},
+				{"key": "job_id", "match": map[string]string{"value": jobID}},
+			},
+		},
+		"payload": payload,
+	}
+	return qdrantRequest(http.MethodPost, fmt.Sprintf("/collections/%s/points/payload?wait=true", qdrantCollection), requestBody, nil)
+}
+
 func qdrantRequest(method, path string, body interface{}, out interface{}) error {
 	var reader io.Reader
 	if body != nil {
@@ -701,8 +771,41 @@ func MapTranscriptDetail(parent map[string]interface{}, segments []dtos.Segment)
 		OwnerUserID:      parentOwnerUserID(parent),
 		OwnerDisplayName: getString(parent, "owner_display_name", ""),
 		OwnerEmail:       getString(parent, "owner_email", ""),
+		SpeakerNames:     MapSpeakerNames(parent),
 		Segments:         segments,
 	}
+}
+
+func MapSpeakerNames(payload map[string]interface{}) map[string]string {
+	result := map[string]string{}
+	value := payload["speaker_names"]
+	switch typed := value.(type) {
+	case map[string]string:
+		for key, name := range typed {
+			if key != "" && name != "" {
+				result[key] = name
+			}
+		}
+	case map[string]interface{}:
+		for key, value := range typed {
+			if name, ok := value.(string); ok && key != "" && name != "" {
+				result[key] = name
+			}
+		}
+	}
+	return result
+}
+
+func SpeakerDisplayName(speakerKey string, speakerNames map[string]string) string {
+	if speakerNames != nil {
+		if displayName := strings.TrimSpace(speakerNames[speakerKey]); displayName != "" {
+			return displayName
+		}
+	}
+	if strings.TrimSpace(speakerKey) == "" {
+		return "Unknown speaker"
+	}
+	return speakerKey
 }
 
 func parentOwnerUserID(payload map[string]interface{}) string {

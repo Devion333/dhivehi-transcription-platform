@@ -93,7 +93,11 @@ func retryAnalysisJob(c *gin.Context, jobID string, before dtos.AdminJobDetail) 
 	if services.WorkerAvailability(c.Request.Context(), services.JobStageAnalysis) == services.WorkerAvailabilityUnavailable {
 		return dtos.AdminJobDetail{}, services.NewWorkerUnavailableError()
 	}
-	result, analysisErr := runTranscriptAnalysis(jobID)
+	parent, err := services.GetParentTranscriptPoint(jobID)
+	if err != nil {
+		return dtos.AdminJobDetail{}, err
+	}
+	result, analysisErr := runTranscriptAnalysis(jobID, services.MapSpeakerNames(parent.Payload))
 	if analysisErr != nil {
 		_ = services.UpdateParentPayload(jobID, map[string]interface{}{"analysis_status": "failed", "analysis_error": services.SafeFailureMessage(analysisErr.message), "updated_at": time.Now().UTC().Format(time.RFC3339)})
 		return dtos.AdminJobDetail{}, services.NewJobNotRetryableError(analysisErr)
