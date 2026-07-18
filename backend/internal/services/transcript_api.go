@@ -39,6 +39,27 @@ type TranscriptAccessScope struct {
 	IsAdmin bool
 }
 
+type TranscriptSearchFilters struct {
+	Query       string
+	Filename    string
+	Reference   string
+	Category    string
+	Status      string
+	OwnerUserID string
+	CreatedFrom string
+	CreatedTo   string
+	Speaker     string
+	Page        int
+	PageSize    int
+	IsAdmin     bool
+}
+
+type TranscriptDownload struct {
+	Filename    string
+	ContentType string
+	Body        []byte
+}
+
 type qdrantScrollResponse struct {
 	Result struct {
 		Points         []QdrantPoint `json:"points"`
@@ -116,79 +137,95 @@ func GetAPITranscripts(scope TranscriptAccessScope, page, pageSize int, search, 
 }
 
 func SearchTranscriptText(scope TranscriptAccessScope, query string, page, pageSize int, status, category string) (dtos.TranscriptSearchResponse, error) {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchQueryRequired, errors.New("search query is required"))
-	}
-	page, pageSize = NormalizePagination(page, pageSize)
+	return SearchTranscripts(scope, TranscriptSearchFilters{Query: query, Page: page, PageSize: pageSize, Status: status, Category: category, IsAdmin: scope.IsAdmin})
+}
 
-	segments, err := ListAllSegmentPoints()
-	if err != nil {
-		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchUnavailable, err)
+func SearchTranscripts(scope TranscriptAccessScope, filters TranscriptSearchFilters) (dtos.TranscriptSearchResponse, error) {
+	filters.Page, filters.PageSize = NormalizePagination(filters.Page, filters.PageSize)
+	filters.Query = strings.TrimSpace(filters.Query)
+	filters.Filename = strings.TrimSpace(filters.Filename)
+	filters.Reference = strings.TrimSpace(filters.Reference)
+	filters.Category = strings.TrimSpace(filters.Category)
+	filters.Status = strings.TrimSpace(filters.Status)
+	filters.OwnerUserID = strings.TrimSpace(filters.OwnerUserID)
+	filters.Speaker = strings.TrimSpace(filters.Speaker)
+	filters.IsAdmin = scope.IsAdmin
+	if err := validateTranscriptSearchFilters(filters); err != nil {
+		return dtos.TranscriptSearchResponse{}, err
 	}
+	if filters.OwnerUserID != "" && !scope.IsAdmin {
+		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeForbidden, ErrForbidden)
+	}
+
 	parents, err := ListParentTranscriptPointsForScope(scope)
 	if err != nil {
 		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchUnavailable, err)
 	}
-	allowedJobIDs := map[string]struct{}{}
-	for _, parent := range parents {
-		if jobID := getString(parent.Payload, "job_id", ""); jobID != "" {
-			allowedJobIDs[jobID] = struct{}{}
-		}
+	segments, err := ListAllSegmentPoints()
+	if err != nil {
+		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchUnavailable, err)
 	}
-	filteredSegments := make([]QdrantPoint, 0, len(segments))
-	for _, segment := range segments {
-		if _, ok := allowedJobIDs[getString(segment.Payload, "parent_job_id", "")]; ok {
-			filteredSegments = append(filteredSegments, segment)
-		}
-	}
-
-	return BuildTranscriptSearchResponse(query, page, pageSize, status, category, filteredSegments, parents), nil
+	return BuildTranscriptSearchResponse(filters, segments, parents), nil
 }
 
-func BuildTranscriptSearchResponse(query string, page, pageSize int, status, category string, segments, parents []QdrantPoint) dtos.TranscriptSearchResponse {
-	page, pageSize = NormalizePagination(page, pageSize)
-	query = strings.TrimSpace(query)
-	status = strings.TrimSpace(status)
-	category = strings.ToLower(strings.TrimSpace(category))
+func BuildTranscriptSearchResponse(filters TranscriptSearchFilters, segments, parents []QdrantPoint) dtos.TranscriptSearchResponse {
+	filters.Page, filters.PageSize = NormalizePagination(filters.Page, filters.PageSize)
+	query := strings.TrimSpace(filters.Query)
 	parentLookup := map[string]map[string]interface{}{}
 	for _, parent := range parents {
 		jobID := getString(parent.Payload, "job_id", "")
-		if jobID != "" {
+		if jobID != "" && parentMatchesSearchFilters(parent.Payload, filters) {
 			parentLookup[jobID] = parent.Payload
 		}
 	}
 
 	items := make([]dtos.TranscriptSearchResult, 0)
+	matchedBySegment := map[string]struct{}{}
 	for _, segment := range segments {
-		text := getString(segment.Payload, "transcript_text", "")
-		if !literalContains(text, query) {
-			continue
-		}
 		jobID := getString(segment.Payload, "parent_job_id", "")
-		parent := parentLookup[jobID]
-		publicStatus := publicParentStatus(getString(parent, "status", "uploaded"))
-		parentCategory := getString(parent, "category", "Uncategorized")
-		if status != "" && status != "all" && publicStatus != status {
+		parent, ok := parentLookup[jobID]
+		if !ok {
 			continue
 		}
-		if category != "" && strings.ToLower(parentCategory) != category {
+		text := getString(segment.Payload, "transcript_text", "")
+		speakerKey := getString(segment.Payload, "speaker", "Unknown")
+		speakerDisplayName := SpeakerDisplayName(speakerKey, MapSpeakerNames(parent))
+		if filters.Speaker != "" && !containsFold(speakerKey, filters.Speaker) && !containsFold(speakerDisplayName, filters.Speaker) {
 			continue
 		}
+		if query != "" && !literalContains(text, query) {
+			continue
+		}
+		if query == "" && filters.Speaker == "" {
+			continue
+		}
+		matchedBySegment[jobID] = struct{}{}
 		items = append(items, dtos.TranscriptSearchResult{
-			SegmentID:        SegmentIDFromPayload(jobID, segment.Payload),
-			JobID:            jobID,
-			Filename:         getString(parent, "filename", "Unknown"),
-			ReferenceNumber:  getString(parent, "reference_number", "N/A"),
-			Category:         parentCategory,
-			TranscriptStatus: publicStatus,
-			SegmentIndex:     getInt(segment.Payload, "segment_index", 0),
-			Speaker:          getString(segment.Payload, "speaker", "Unknown"),
-			StartTime:        getFloat(segment.Payload, "start_time", 0),
-			EndTime:          getFloat(segment.Payload, "end_time", 0),
-			TranscriptText:   text,
-			MatchExcerpt:     MatchExcerpt(text, query, 48),
+			SegmentID:          SegmentIDFromPayload(jobID, segment.Payload),
+			JobID:              jobID,
+			Filename:           getString(parent, "filename", "Unknown"),
+			ReferenceNumber:    getString(parent, "reference_number", "N/A"),
+			Category:           getString(parent, "category", "Uncategorized"),
+			TranscriptStatus:   publicParentStatus(getString(parent, "status", "uploaded")),
+			CreatedAt:          getString(parent, "timestamp", ""),
+			OwnerUserID:        parentOwnerUserID(parent),
+			OwnerDisplayName:   getString(parent, "owner_display_name", ""),
+			OwnerEmail:         getString(parent, "owner_email", ""),
+			SegmentIndex:       getInt(segment.Payload, "segment_index", 0),
+			Speaker:            speakerKey,
+			SpeakerDisplayName: speakerDisplayName,
+			StartTime:          getFloat(segment.Payload, "start_time", 0),
+			EndTime:            getFloat(segment.Payload, "end_time", 0),
+			TranscriptText:     text,
+			MatchedText:        MatchExcerpt(text, query, 48),
+			MatchExcerpt:       MatchExcerpt(text, query, 48),
 		})
+	}
+	for jobID, parent := range parentLookup {
+		if _, ok := matchedBySegment[jobID]; ok || !metadataMatchesQuery(parent, query) {
+			continue
+		}
+		items = append(items, dtos.TranscriptSearchResult{JobID: jobID, Filename: getString(parent, "filename", "Unknown"), ReferenceNumber: getString(parent, "reference_number", "N/A"), Category: getString(parent, "category", "Uncategorized"), TranscriptStatus: publicParentStatus(getString(parent, "status", "uploaded")), CreatedAt: getString(parent, "timestamp", ""), OwnerUserID: parentOwnerUserID(parent), OwnerDisplayName: getString(parent, "owner_display_name", ""), OwnerEmail: getString(parent, "owner_email", ""), MatchedText: metadataMatchText(parent, query), MatchExcerpt: metadataMatchText(parent, query)})
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -206,30 +243,145 @@ func BuildTranscriptSearchResponse(query string, page, pageSize int, status, cat
 	})
 
 	total := len(items)
-	start := (page - 1) * pageSize
+	start := (filters.Page - 1) * filters.PageSize
 	if start > total {
 		start = total
 	}
-	end := start + pageSize
+	end := start + filters.PageSize
 	if end > total {
 		end = total
 	}
 	totalPages := 0
 	if total > 0 {
-		totalPages = (total + pageSize - 1) / pageSize
+		totalPages = (total + filters.PageSize - 1) / filters.PageSize
 	}
 
 	return dtos.TranscriptSearchResponse{
 		Query: query,
 		Items: items[start:end],
 		Pagination: dtos.Pagination{
-			Page:        page,
-			PageSize:    pageSize,
+			Page:        filters.Page,
+			PageSize:    filters.PageSize,
 			Total:       total,
 			TotalPages:  totalPages,
-			HasNextPage: page < totalPages,
+			HasNextPage: filters.Page < totalPages,
 		},
 	}
+}
+
+func validateTranscriptSearchFilters(filters TranscriptSearchFilters) error {
+	if filters.Status != "" && filters.Status != "all" && !validPublicTranscriptStatus(filters.Status) {
+		return newServiceError(ErrCodeInvalidSearchFilter, errors.New("invalid status filter"))
+	}
+	if filters.CreatedFrom != "" {
+		if _, err := parseSearchDate(filters.CreatedFrom, false); err != nil {
+			return newServiceError(ErrCodeInvalidSearchFilter, errors.New("invalid createdFrom"))
+		}
+	}
+	if filters.CreatedTo != "" {
+		if _, err := parseSearchDate(filters.CreatedTo, true); err != nil {
+			return newServiceError(ErrCodeInvalidSearchFilter, errors.New("invalid createdTo"))
+		}
+	}
+	return nil
+}
+
+func validPublicTranscriptStatus(status string) bool {
+	switch status {
+	case "uploaded", "processing", "converting", "diarizing", "transcribing", "diarized", "transcribed", "completed", "complete", "failed", "queued_conversion", "analysing":
+		return true
+	default:
+		return false
+	}
+}
+
+func parentMatchesSearchFilters(parent map[string]interface{}, filters TranscriptSearchFilters) bool {
+	if filters.Status != "" && filters.Status != "all" && publicParentStatus(getString(parent, "status", "uploaded")) != filters.Status {
+		return false
+	}
+	if filters.Filename != "" && !containsFold(getString(parent, "filename", ""), filters.Filename) {
+		return false
+	}
+	if filters.Reference != "" && !containsFold(getString(parent, "reference_number", ""), filters.Reference) {
+		return false
+	}
+	if filters.Category != "" && !containsFold(getString(parent, "category", ""), filters.Category) {
+		return false
+	}
+	if filters.OwnerUserID != "" && parentOwnerUserID(parent) != filters.OwnerUserID {
+		return false
+	}
+	created := parseTimeOrZero(getString(parent, "timestamp", ""))
+	if filters.CreatedFrom != "" {
+		from, _ := parseSearchDate(filters.CreatedFrom, false)
+		if created.IsZero() || created.Before(from) {
+			return false
+		}
+	}
+	if filters.CreatedTo != "" {
+		to, _ := parseSearchDate(filters.CreatedTo, true)
+		if created.IsZero() || created.After(to) {
+			return false
+		}
+	}
+	return true
+}
+
+func metadataMatchesQuery(parent map[string]interface{}, query string) bool {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return true
+	}
+	for _, value := range []string{getString(parent, "filename", ""), getString(parent, "reference_number", ""), getString(parent, "category", ""), publicParentStatus(getString(parent, "status", "uploaded")), getString(parent, "owner_display_name", ""), getString(parent, "owner_email", "")} {
+		if containsFold(value, query) {
+			return true
+		}
+	}
+	for _, value := range MapSpeakerNames(parent) {
+		if containsFold(value, query) {
+			return true
+		}
+	}
+	return false
+}
+
+func metadataMatchText(parent map[string]interface{}, query string) string {
+	if query == "" {
+		return getString(parent, "filename", "Unknown")
+	}
+	for _, value := range []string{getString(parent, "filename", ""), getString(parent, "reference_number", ""), getString(parent, "category", ""), publicParentStatus(getString(parent, "status", "uploaded")), getString(parent, "owner_display_name", ""), getString(parent, "owner_email", "")} {
+		if containsFold(value, query) {
+			return value
+		}
+	}
+	for _, value := range MapSpeakerNames(parent) {
+		if containsFold(value, query) {
+			return value
+		}
+	}
+	return "Metadata match"
+}
+
+func containsFold(value, query string) bool {
+	return strings.Contains(strings.ToLower(value), strings.ToLower(strings.TrimSpace(query)))
+}
+
+func parseSearchDate(value string, endOfDay bool) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, nil
+	}
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		return parsed, nil
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if endOfDay {
+		return parsed.Add(24*time.Hour - time.Nanosecond), nil
+	}
+	return parsed, nil
 }
 
 func MatchExcerpt(text, query string, contextRunes int) string {
@@ -338,6 +490,160 @@ func GetAPITranscriptStatus(scope TranscriptAccessScope, jobID string) (dtos.Tra
 		return dtos.TranscriptStatusResponse{}, err
 	}
 	return MapTranscriptStatus(parent.Payload, segments, scope.IsAdmin), nil
+}
+
+func BuildTranscriptDownload(scope TranscriptAccessScope, jobID, format string) (TranscriptDownload, error) {
+	format = strings.ToLower(strings.TrimSpace(format))
+	if !supportedTranscriptDownloadFormat(format) {
+		return TranscriptDownload{}, newServiceError(ErrCodeUnsupportedDownloadFormat, errors.New("unsupported download format"))
+	}
+	detail, err := GetAPITranscriptDetail(scope, jobID)
+	if err != nil {
+		return TranscriptDownload{}, err
+	}
+	if err := validateDownloadSegments(detail.Segments); err != nil {
+		return TranscriptDownload{}, err
+	}
+	base := safeDownloadBaseName(detail.ReferenceNumber)
+	if base == "" {
+		base = safeDownloadBaseName(detail.Filename)
+	}
+	if base == "" {
+		base = "transcript-" + detail.JobID
+	}
+	body, contentType, err := renderTranscriptDownload(scope, detail, format)
+	if err != nil {
+		return TranscriptDownload{}, err
+	}
+	return TranscriptDownload{Filename: base + "." + format, ContentType: contentType, Body: body}, nil
+}
+
+func supportedTranscriptDownloadFormat(format string) bool {
+	switch format {
+	case "txt", "json", "srt", "vtt":
+		return true
+	default:
+		return false
+	}
+}
+
+func renderTranscriptDownload(scope TranscriptAccessScope, detail dtos.TranscriptDetail, format string) ([]byte, string, error) {
+	switch format {
+	case "txt":
+		return []byte(renderTranscriptTXT(detail)), "text/plain; charset=utf-8", nil
+	case "json":
+		data, err := json.MarshalIndent(MapTranscriptDownloadDocument(scope, detail), "", "  ")
+		if err != nil {
+			return nil, "", newServiceError(ErrCodeInternal, err)
+		}
+		return data, "application/json; charset=utf-8", nil
+	case "srt":
+		return []byte(renderTranscriptSubtitles(detail, "srt")), "application/x-subrip; charset=utf-8", nil
+	case "vtt":
+		return []byte(renderTranscriptSubtitles(detail, "vtt")), "text/vtt; charset=utf-8", nil
+	default:
+		return nil, "", newServiceError(ErrCodeUnsupportedDownloadFormat, errors.New("unsupported download format"))
+	}
+}
+
+func MapTranscriptDownloadDocument(scope TranscriptAccessScope, detail dtos.TranscriptDetail) dtos.TranscriptDownloadDocument {
+	document := dtos.TranscriptDownloadDocument{JobID: detail.JobID, Filename: detail.Filename, ReferenceNumber: detail.ReferenceNumber, Category: detail.Category, SpeakerNames: detail.SpeakerNames, Segments: make([]dtos.TranscriptDownloadSegment, 0, len(detail.Segments))}
+	if scope.IsAdmin {
+		document.OwnerUserID = detail.OwnerUserID
+		document.OwnerDisplayName = detail.OwnerDisplayName
+		document.OwnerEmail = detail.OwnerEmail
+	}
+	for _, segment := range detail.Segments {
+		document.Segments = append(document.Segments, dtos.TranscriptDownloadSegment{ID: segment.ID, SegmentIndex: segment.SegmentIndex, Speaker: segment.Speaker, SpeakerDisplayName: SpeakerDisplayName(segment.Speaker, detail.SpeakerNames), StartTime: segment.StartTime, EndTime: segment.EndTime, TranscriptText: segment.TranscriptText, Status: segment.Status})
+	}
+	return document
+}
+
+func renderTranscriptTXT(detail dtos.TranscriptDetail) string {
+	var builder strings.Builder
+	builder.WriteString("Transcript\n")
+	builder.WriteString("Job ID: " + detail.JobID + "\n")
+	builder.WriteString("Filename: " + detail.Filename + "\n")
+	builder.WriteString("Reference: " + detail.ReferenceNumber + "\n")
+	builder.WriteString("Category: " + detail.Category + "\n\n")
+	for _, segment := range detail.Segments {
+		builder.WriteString(fmt.Sprintf("[%s - %s] %s\n%s\n\n", formatTranscriptTimestamp(segment.StartTime, "."), formatTranscriptTimestamp(segment.EndTime, "."), SpeakerDisplayName(segment.Speaker, detail.SpeakerNames), segment.TranscriptText))
+	}
+	return builder.String()
+}
+
+func renderTranscriptSubtitles(detail dtos.TranscriptDetail, format string) string {
+	var builder strings.Builder
+	if format == "vtt" {
+		builder.WriteString("WEBVTT\n\n")
+	}
+	number := 1
+	for _, segment := range detail.Segments {
+		text := sanitizeSubtitleText(segment.TranscriptText)
+		if text == "" {
+			continue
+		}
+		if format == "srt" {
+			builder.WriteString(strconv.Itoa(number) + "\n")
+			builder.WriteString(formatTranscriptTimestamp(segment.StartTime, ",") + " --> " + formatTranscriptTimestamp(segment.EndTime, ",") + "\n")
+		} else {
+			builder.WriteString(formatTranscriptTimestamp(segment.StartTime, ".") + " --> " + formatTranscriptTimestamp(segment.EndTime, ".") + "\n")
+		}
+		builder.WriteString(SpeakerDisplayName(segment.Speaker, detail.SpeakerNames) + ": " + text + "\n\n")
+		number++
+	}
+	return builder.String()
+}
+
+func validateDownloadSegments(segments []dtos.Segment) error {
+	for _, segment := range segments {
+		if !validSegmentTimestamp(segment.StartTime, segment.EndTime) {
+			return newServiceError(ErrCodeInvalidTranscriptTimestamp, errors.New("invalid segment timestamp"))
+		}
+	}
+	return nil
+}
+
+func validSegmentTimestamp(start, end float64) bool {
+	return start >= 0 && end >= 0 && end >= start && start < 24*60*60*100
+}
+
+func formatTranscriptTimestamp(seconds float64, separator string) string {
+	if seconds < 0 {
+		seconds = 0
+	}
+	millis := int64(seconds*1000 + 0.5)
+	hours := millis / 3600000
+	millis %= 3600000
+	minutes := millis / 60000
+	millis %= 60000
+	secs := millis / 1000
+	millis %= 1000
+	return fmt.Sprintf("%02d:%02d:%02d%s%03d", hours, minutes, secs, separator, millis)
+}
+
+func sanitizeSubtitleText(text string) string {
+	lines := strings.Fields(strings.ReplaceAll(strings.ReplaceAll(text, "\r", "\n"), "\n", " "))
+	return strings.Join(lines, " ")
+}
+
+func safeDownloadBaseName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "N/A" {
+		return ""
+	}
+	var builder strings.Builder
+	for _, r := range value {
+		if r < 32 || r == 127 || strings.ContainsRune(`<>:"/\|?*`, r) {
+			continue
+		}
+		if r == ' ' || r == '\t' {
+			builder.WriteRune('-')
+			continue
+		}
+		builder.WriteRune(r)
+	}
+	return strings.Trim(builder.String(), ".-_")
 }
 
 func UpdateSegmentTranscript(scope TranscriptAccessScope, jobID, segmentID, transcriptText string) (dtos.Segment, error) {

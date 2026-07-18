@@ -369,17 +369,23 @@ export interface TranscriptListResponse {
 }
 
 export interface TranscriptSearchResult {
-  segmentId: string;
+  segmentId?: string;
   jobId: string;
   filename: string;
   referenceNumber: string;
   category: string;
   transcriptStatus: string;
+  createdAt: string;
+  ownerUserId?: string;
+  ownerDisplayName?: string;
+  ownerEmail?: string;
   segmentIndex: number;
   speaker: string;
+  speakerDisplayName: string;
   startTime: number;
   endTime: number;
-  transcriptText: string;
+  transcriptText?: string;
+  matchedText: string;
   matchExcerpt: string;
 }
 

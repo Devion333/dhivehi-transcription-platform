@@ -1,4 +1,5 @@
 import { request } from "./client";
+import { BACKEND_URL } from "@/config";
 import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
 
 export type TranscriptListParams = {
@@ -32,6 +33,23 @@ export function getTranscriptStatus(jobId: string, signal?: AbortSignal) {
   const trimmed = jobId.trim();
   if (!trimmed) throw new Error("A transcript job ID is required");
   return request<TranscriptStatusResponse>(`/api/transcripts/${encodeURIComponent(trimmed)}/status`, { signal });
+}
+
+export async function downloadTranscript(jobId: string, format: "txt" | "json" | "srt" | "vtt", signal?: AbortSignal) {
+  const trimmed = jobId.trim();
+  if (!trimmed) throw new Error("A transcript job ID is required");
+  const response = await fetch(`${BACKEND_URL}/api/transcripts/${encodeURIComponent(trimmed)}/download?format=${encodeURIComponent(format)}`, {
+    credentials: "include",
+    signal,
+  });
+  if (!response.ok) throw new Error("Download failed");
+  const blob = await response.blob();
+  return { blob, filename: filenameFromContentDisposition(response.headers.get("Content-Disposition")) ?? `transcript.${format}` };
+}
+
+function filenameFromContentDisposition(value: string | null) {
+  const match = value?.match(/filename="?([^";]+)"?/i);
+  return match?.[1];
 }
 
 export function getTranscriptAnalysis(jobId: string, signal?: AbortSignal) {

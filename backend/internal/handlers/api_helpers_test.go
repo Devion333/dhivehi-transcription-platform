@@ -72,13 +72,13 @@ func TestAnalysisTranscriptLinesUseMappedSpeakerNames(t *testing.T) {
 	}
 }
 
-func TestAPISearchTranscriptsRequiresQuery(t *testing.T) {
+func TestAPISearchTranscriptsRejectsInvalidDate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.GET("/api/search/transcripts", APISearchTranscripts)
 
 	recorder := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/search/transcripts?q=%20%20", strings.NewReader(""))
+	req := httptest.NewRequest(http.MethodGet, "/api/search/transcripts?createdFrom=not-a-date", strings.NewReader(""))
 	router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusBadRequest {
@@ -88,7 +88,7 @@ func TestAPISearchTranscriptsRequiresQuery(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatalf("failed to decode error body: %v", err)
 	}
-	if body.Error.Code != services.ErrCodeSearchQueryRequired {
-		t.Fatalf("expected search query error, got %+v", body)
+	if body.Error.Code != services.ErrCodeInvalidSearchFilter {
+		t.Fatalf("expected invalid search filter error, got %+v", body)
 	}
 }

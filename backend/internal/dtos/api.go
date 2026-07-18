@@ -325,18 +325,47 @@ type TranscriptListResponse struct {
 }
 
 type TranscriptSearchResult struct {
-	SegmentID        string  `json:"segmentId"`
-	JobID            string  `json:"jobId"`
-	Filename         string  `json:"filename"`
-	ReferenceNumber  string  `json:"referenceNumber"`
-	Category         string  `json:"category"`
-	TranscriptStatus string  `json:"transcriptStatus"`
-	SegmentIndex     int     `json:"segmentIndex"`
-	Speaker          string  `json:"speaker"`
-	StartTime        float64 `json:"startTime"`
-	EndTime          float64 `json:"endTime"`
-	TranscriptText   string  `json:"transcriptText"`
-	MatchExcerpt     string  `json:"matchExcerpt"`
+	SegmentID          string  `json:"segmentId,omitempty"`
+	JobID              string  `json:"jobId"`
+	Filename           string  `json:"filename"`
+	ReferenceNumber    string  `json:"referenceNumber"`
+	Category           string  `json:"category"`
+	TranscriptStatus   string  `json:"transcriptStatus"`
+	CreatedAt          string  `json:"createdAt"`
+	OwnerUserID        string  `json:"ownerUserId,omitempty"`
+	OwnerDisplayName   string  `json:"ownerDisplayName,omitempty"`
+	OwnerEmail         string  `json:"ownerEmail,omitempty"`
+	SegmentIndex       int     `json:"segmentIndex"`
+	Speaker            string  `json:"speaker"`
+	SpeakerDisplayName string  `json:"speakerDisplayName"`
+	StartTime          float64 `json:"startTime"`
+	EndTime            float64 `json:"endTime"`
+	TranscriptText     string  `json:"transcriptText,omitempty"`
+	MatchedText        string  `json:"matchedText"`
+	MatchExcerpt       string  `json:"matchExcerpt"`
+}
+
+type TranscriptDownloadSegment struct {
+	ID                 string  `json:"id"`
+	SegmentIndex       int     `json:"segmentIndex"`
+	Speaker            string  `json:"speaker"`
+	SpeakerDisplayName string  `json:"speakerDisplayName"`
+	StartTime          float64 `json:"startTime"`
+	EndTime            float64 `json:"endTime"`
+	TranscriptText     string  `json:"transcriptText"`
+	Status             string  `json:"status"`
+}
+
+type TranscriptDownloadDocument struct {
+	JobID            string                      `json:"jobId"`
+	Filename         string                      `json:"filename"`
+	ReferenceNumber  string                      `json:"referenceNumber"`
+	Category         string                      `json:"category"`
+	OwnerUserID      string                      `json:"ownerUserId,omitempty"`
+	OwnerDisplayName string                      `json:"ownerDisplayName,omitempty"`
+	OwnerEmail       string                      `json:"ownerEmail,omitempty"`
+	SpeakerNames     map[string]string           `json:"speakerNames"`
+	Segments         []TranscriptDownloadSegment `json:"segments"`
 }
 
 type TranscriptSearchResponse struct {

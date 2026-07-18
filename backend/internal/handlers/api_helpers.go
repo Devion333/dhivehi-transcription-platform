@@ -34,6 +34,12 @@ func writeServiceError(c *gin.Context, err error) {
 		case services.ErrCodeSearchUnavailable:
 			log.Printf("search service error: %v", err)
 			writeAPIError(c, http.StatusInternalServerError, serviceErr.Code, "Search is unavailable", nil)
+		case services.ErrCodeInvalidSearchFilter:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Search filter is invalid", nil)
+		case services.ErrCodeUnsupportedDownloadFormat:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Download format is not supported", nil)
+		case services.ErrCodeInvalidTranscriptTimestamp:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Transcript contains invalid timestamps", nil)
 		case services.ErrCodeInvalidUserInput:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "User input is invalid", nil)
 		case services.ErrCodeEmailExists:

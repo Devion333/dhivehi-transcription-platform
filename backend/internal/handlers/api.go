@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -79,21 +80,17 @@ func APIListTranscripts(c *gin.Context) {
 }
 
 func APISearchTranscripts(c *gin.Context) {
-	query := strings.TrimSpace(c.Query("q"))
-	if query == "" {
-		writeAPIError(c, http.StatusBadRequest, services.ErrCodeSearchQueryRequired, "Search query is required", nil)
-		return
-	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	page, pageSize = services.NormalizePagination(page, pageSize)
 
-	result, err := services.SearchTranscriptText(transcriptAccessScope(c), query, page, pageSize, c.Query("status"), c.Query("category"))
+	filters := services.TranscriptSearchFilters{Query: c.Query("q"), Filename: c.Query("filename"), Reference: c.Query("reference"), Category: c.Query("category"), Status: c.Query("status"), OwnerUserID: c.Query("ownerUserId"), CreatedFrom: c.Query("createdFrom"), CreatedTo: c.Query("createdTo"), Speaker: c.Query("speaker"), Page: page, PageSize: pageSize}
+	result, err := services.SearchTranscripts(transcriptAccessScope(c), filters)
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	auditRequestEvent(c, services.AuditEventInput{Action: "search.executed", Category: "search", Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"queryLength": len([]rune(query)), "page": page, "pageSize": pageSize, "statusFilter": c.Query("status"), "categoryFilter": c.Query("category"), "resultCount": len(result.Items)}})
+	auditRequestEvent(c, services.AuditEventInput{Action: "search.executed", Category: "search", Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"queryLength": len([]rune(strings.TrimSpace(c.Query("q")))), "page": page, "pageSize": pageSize, "statusFilter": c.Query("status"), "categoryFilter": c.Query("category"), "resultCount": len(result.Items)}})
 	c.JSON(http.StatusOK, result)
 }
 
@@ -126,6 +123,26 @@ func APIGetTranscriptStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, status)
+}
+
+func APIDownloadTranscript(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	format := strings.ToLower(strings.TrimSpace(c.DefaultQuery("format", "txt")))
+	if jobID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+
+	download, err := services.BuildTranscriptDownload(transcriptAccessScope(c), jobID, format)
+	if err != nil {
+		auditRequestEvent(c, services.AuditEventInput{Action: "transcript_download_failed", Category: "export", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"jobId": jobID, "format": format}})
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "transcript_download_succeeded", Category: "export", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"jobId": jobID, "format": format}})
+	c.Header("Content-Type", download.ContentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", download.Filename))
+	c.Data(http.StatusOK, download.ContentType, download.Body)
 }
 
 func APIUpdateSegment(c *gin.Context) {
