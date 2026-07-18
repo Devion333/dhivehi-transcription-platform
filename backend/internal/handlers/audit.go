@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,11 +13,7 @@ import (
 )
 
 func APIAdminListAuditEvents(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
-	response, err := services.ListAuditEvents(c.Request.Context(), services.AuditFilters{
-		Page: page, PageSize: pageSize, Search: c.Query("search"), Category: c.Query("category"), Action: c.Query("action"), Outcome: c.Query("outcome"), ActorUserID: c.Query("actorUserId"), ResourceType: c.Query("resourceType"), ResourceID: c.Query("resourceId"), DateFrom: c.Query("dateFrom"), DateTo: c.Query("dateTo"),
-	})
+	response, err := services.ListAuditEvents(c.Request.Context(), auditFiltersFromQuery(c))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -31,6 +28,26 @@ func APIAdminGetAuditEvent(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dtos.AuditEventResponse{Event: event})
+}
+
+func APIAdminExportAuditEvents(c *gin.Context) {
+	filters := auditFiltersFromQuery(c)
+	export, err := services.ExportAuditEventsCSV(c.Request.Context(), filters)
+	if err != nil {
+		auditRequestEvent(c, services.AuditEventInput{Action: "audit_export_failed", Category: "export", ResourceType: "audit", Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"rowCount": export.RowCount, "filterTypes": export.FilterTypes, "truncated": export.Truncated}})
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "audit_export_succeeded", Category: "export", ResourceType: "audit", Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"rowCount": export.RowCount, "filterTypes": export.FilterTypes, "truncated": export.Truncated}})
+	c.Header("Content-Type", export.ContentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", export.Filename))
+	c.Data(http.StatusOK, export.ContentType, export.Body)
+}
+
+func auditFiltersFromQuery(c *gin.Context) services.AuditFilters {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	return services.AuditFilters{Page: page, PageSize: pageSize, Search: c.Query("search"), Category: c.Query("category"), Action: c.Query("action"), Outcome: c.Query("outcome"), ActorUserID: c.Query("actorUserId"), ResourceType: c.Query("resourceType"), ResourceID: c.Query("resourceId"), DateFrom: c.Query("dateFrom"), DateTo: c.Query("dateTo")}
 }
 
 func APIAuditPDFExport(c *gin.Context) {

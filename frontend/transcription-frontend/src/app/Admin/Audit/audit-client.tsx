@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Eye, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eye, Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { getAuditEvent, getAuditEvents } from "@/lib/api/admin-audit";
+import { exportAuditEvents, getAuditEvent, getAuditEvents } from "@/lib/api/admin-audit";
 import { ApiError } from "@/lib/api/client";
 import type { AuditEventDetail, AuditEventSummary, Pagination } from "@/lib/api/types";
 import {
@@ -55,6 +55,8 @@ export function AdminAuditClient() {
   const [error, setError] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<AuditEventDetail | null>(null);
   const [detailError, setDetailError] = React.useState<string | null>(null);
+  const [exporting, setExporting] = React.useState(false);
+  const [exportError, setExportError] = React.useState<string | null>(null);
   const [retryToken, setRetryToken] = React.useState(0);
 
   React.useEffect(() => setSearchDraft(search), [search]);
@@ -95,6 +97,27 @@ export function AdminAuditClient() {
     }
   }
 
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const result = await exportAuditEvents({ search, category, action: action === "all" ? "" : action, outcome, dateFrom: toRFC3339Date(dateFrom), dateTo: toRFC3339Date(dateTo, true) });
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Audit export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const pagination = data.pagination;
   const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 0;
@@ -102,7 +125,7 @@ export function AdminAuditClient() {
 
   return (
     <PageContainer>
-      <PageHeader title="Audit" />
+      <PageHeader title="Audit" actions={<Button type="button" variant="outline" onClick={exportCsv} disabled={exporting}>{exporting ? "Exporting" : <><Download className="h-4 w-4" /> Export CSV</>}</Button>} />
 
       <Card className="mb-5">
         <CardContent className="p-4">
@@ -127,7 +150,7 @@ export function AdminAuditClient() {
         </CardContent>
       </Card>
 
-      {detailError && <div className="mb-4 rounded-lg border bg-card px-4 py-3 text-sm text-destructive">{detailError}</div>}
+      {(detailError || exportError) && <div className="mb-4 rounded-lg border bg-card px-4 py-3 text-sm text-destructive">{detailError || exportError}</div>}
       {loading && <LoadingState label="Loading audit" />}
       {!loading && error && <ErrorState title="Could not load audit" description={error} onRetry={() => setRetryToken((value) => value + 1)} />}
       {!loading && !error && data.items.length === 0 && (hasFilters ? <EmptyState title="No matching events" /> : <EmptyState title="No audit events" />)}

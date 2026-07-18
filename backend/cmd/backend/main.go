@@ -84,6 +84,7 @@ func main() {
 			admin.POST("/users/:userId/deactivate", handlers.APIAdminDeactivateUser)
 			admin.POST("/users/:userId/reset-password", handlers.APIAdminResetUserPassword)
 			admin.GET("/audit", handlers.APIAdminListAuditEvents)
+			admin.GET("/audit/export", handlers.APIAdminExportAuditEvents)
 			admin.GET("/audit/:eventId", handlers.APIAdminGetAuditEvent)
 			admin.GET("/jobs", handlers.APIAdminListJobs)
 			admin.GET("/jobs/health", handlers.APIAdminJobHealth)

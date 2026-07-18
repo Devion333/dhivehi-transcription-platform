@@ -1,14 +1,17 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +25,7 @@ const (
 	AuditOutcomeSuccess       = "success"
 	AuditOutcomeFailure       = "failure"
 	maxAuditPageSize          = 100
+	maxAuditExportRows        = 10000
 	maxAuditMetaBytes         = 4096
 	maxUserAgentLength        = 256
 	DefaultAuditRetentionDays = 365
@@ -82,6 +86,15 @@ type AuditEventRecord struct {
 	CreatedAt    time.Time
 }
 
+type AuditCSVExport struct {
+	Filename    string
+	ContentType string
+	Body        []byte
+	RowCount    int
+	FilterTypes []string
+	Truncated   bool
+}
+
 var actionCategories = map[string]string{
 	"auth.login_succeeded":              "authentication",
 	"auth.login_failed":                 "authentication",
@@ -113,6 +126,8 @@ var actionCategories = map[string]string{
 	"search.executed":                   "search",
 	"transcript_download_succeeded":     "export",
 	"transcript_download_failed":        "export",
+	"audit_export_succeeded":            "export",
+	"audit_export_failed":               "export",
 	"export.pdf_generated":              "export",
 	"export.pdf_failed":                 "export",
 	"admin.job_retry_requested":         "job_management",
@@ -148,6 +163,8 @@ var auditMetadataAllowlist = map[string]map[string]struct{}{
 	"search.executed":                   keys("queryLength", "page", "pageSize", "statusFilter", "categoryFilter", "resultCount"),
 	"transcript_download_succeeded":     keys("jobId", "format"),
 	"transcript_download_failed":        keys("jobId", "format"),
+	"audit_export_succeeded":            keys("rowCount", "filterTypes", "truncated"),
+	"audit_export_failed":               keys("rowCount", "filterTypes", "truncated"),
 	"export.pdf_generated":              keys("jobId", "format", "includeAnalysis"),
 	"export.pdf_failed":                 keys("jobId", "format", "includeAnalysis"),
 	"admin.job_retry_requested":         keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
@@ -242,6 +259,131 @@ func ListAuditEvents(ctx context.Context, filters AuditFilters) (dtos.AuditListR
 		totalPages = (total + filters.PageSize - 1) / filters.PageSize
 	}
 	return dtos.AuditListResponse{Items: items, Pagination: dtos.Pagination{Page: filters.Page, PageSize: filters.PageSize, Total: total, TotalPages: totalPages, HasNextPage: filters.Page < totalPages}}, nil
+}
+
+func ExportAuditEventsCSV(ctx context.Context, filters AuditFilters) (AuditCSVExport, error) {
+	filters = normalizeAuditFilters(filters)
+	where, args, err := auditWhere(filters)
+	if err != nil {
+		return AuditCSVExport{}, err
+	}
+	var total int
+	if err := Database.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_events`+where, args...).Scan(&total); err != nil {
+		return AuditCSVExport{}, err
+	}
+	filterTypes := auditFilterTypes(filters)
+	if total > maxAuditExportRows {
+		return AuditCSVExport{RowCount: total, FilterTypes: filterTypes}, newServiceError(ErrCodeAuditExportTooLarge, errors.New("audit export too large"))
+	}
+	queryArgs := append(append([]interface{}{}, args...), maxAuditExportRows)
+	query := fmt.Sprintf(`SELECT id, actor_user_id::text, actor_name, actor_email, actor_role, action, category, resource_type, resource_id, outcome, ip_address, user_agent, metadata_json, created_at FROM audit_events%s ORDER BY created_at DESC, id DESC LIMIT $%d`, where, len(args)+1)
+	rows, err := Database.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return AuditCSVExport{}, err
+	}
+	defer rows.Close()
+	records := []AuditEventRecord{}
+	for rows.Next() {
+		record, err := scanAuditEvent(rows)
+		if err != nil {
+			return AuditCSVExport{}, err
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return AuditCSVExport{}, err
+	}
+	body, err := renderAuditCSV(records)
+	if err != nil {
+		return AuditCSVExport{}, err
+	}
+	return AuditCSVExport{Filename: "audit-events-" + time.Now().UTC().Format("2006-01-02") + ".csv", ContentType: "text/csv; charset=utf-8", Body: body, RowCount: len(records), FilterTypes: filterTypes, Truncated: false}, nil
+}
+
+func renderAuditCSV(records []AuditEventRecord) ([]byte, error) {
+	buffer := bytes.NewBuffer([]byte{0xEF, 0xBB, 0xBF})
+	writer := csv.NewWriter(buffer)
+	if err := writer.Write([]string{"Timestamp", "Actor display name", "Actor email", "Actor role", "Action", "Outcome", "Target type", "Target ID", "Failure code", "IP address", "Metadata summary"}); err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		metadata := auditMetadataMap(record)
+		if err := writer.Write([]string{record.CreatedAt.UTC().Format(time.RFC3339), nullString(record.ActorName), nullString(record.ActorEmail), nullString(record.ActorRole), record.Action, record.Outcome, nullString(record.ResourceType), nullString(record.ResourceID), metadataFailureCode(metadata), nullString(record.IPAddress), auditMetadataSummary(metadata)}); err != nil {
+			return nil, err
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func auditMetadataMap(record AuditEventRecord) map[string]interface{} {
+	metadata := map[string]interface{}{}
+	_ = json.Unmarshal(record.MetadataJSON, &metadata)
+	return metadata
+}
+
+func metadataFailureCode(metadata map[string]interface{}) string {
+	if value, ok := metadata["failureCode"]; ok {
+		return fmt.Sprint(value)
+	}
+	if value, ok := metadata["reasonCode"]; ok {
+		return fmt.Sprint(value)
+	}
+	return ""
+}
+
+func auditMetadataSummary(metadata map[string]interface{}) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		if !isSensitiveAuditKey(key) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+fmt.Sprint(sanitizeAuditValue(metadata[key])))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func auditFilterTypes(filters AuditFilters) []string {
+	filters = normalizeAuditFilters(filters)
+	items := []string{}
+	if filters.Search != "" {
+		items = append(items, "search")
+	}
+	if filters.Category != "" {
+		items = append(items, "category")
+	}
+	if filters.Action != "" {
+		items = append(items, "action")
+	}
+	if filters.Outcome != "" {
+		items = append(items, "outcome")
+	}
+	if filters.ActorUserID != "" {
+		items = append(items, "actorUserId")
+	}
+	if filters.ResourceType != "" {
+		items = append(items, "resourceType")
+	}
+	if filters.ResourceID != "" {
+		items = append(items, "resourceId")
+	}
+	if filters.DateFrom != "" {
+		items = append(items, "dateFrom")
+	}
+	if filters.DateTo != "" {
+		items = append(items, "dateTo")
+	}
+	return items
 }
 
 func GetAuditEvent(ctx context.Context, eventID string) (dtos.AuditEventDetail, error) {

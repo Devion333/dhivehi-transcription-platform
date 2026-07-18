@@ -88,6 +88,8 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit filter is invalid", nil)
 		case services.ErrCodeInvalidAuditEvent:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit event is invalid", nil)
+		case services.ErrCodeAuditExportTooLarge:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit export is too large. Narrow the filters and try again.", nil)
 		case services.ErrCodeJobNotFound:
 			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Job was not found", nil)
 		case services.ErrCodeJobNotFailed:

@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -113,6 +115,45 @@ func TestAuditFilterValidation(t *testing.T) {
 	if _, err := ListAuditEvents(context.Background(), AuditFilters{Outcome: "maybe"}); err == nil {
 		t.Fatal("expected invalid outcome")
 	}
+}
+
+func TestRenderAuditCSVDoesEscapingUnicodeAndSensitiveMetadata(t *testing.T) {
+	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	body, err := renderAuditCSV([]AuditEventRecord{{ActorName: sqlNull("Admin, One"), ActorEmail: sqlNull("admin@example.com"), ActorRole: sqlNull("admin"), Action: "profile_updated", Outcome: "success", ResourceType: sqlNull("user"), ResourceID: sqlNull("user-1"), IPAddress: sqlNull("127.0.0.1"), MetadataJSON: []byte(`{"changedFields":["displayName"],"password":"secret","unicode":"ދިވެހި"}`), CreatedAt: now}})
+	if err != nil {
+		t.Fatalf("renderAuditCSV failed: %v", err)
+	}
+	csv := string(body)
+	if !strings.Contains(csv, `"Admin, One"`) || !strings.Contains(csv, "ދިވެހި") || strings.Contains(csv, "secret") || strings.Contains(strings.ToLower(csv), "password") {
+		t.Fatalf("unexpected csv output: %q", csv)
+	}
+}
+
+func TestExportAuditEventsCSVRejectsTooLargeExport(t *testing.T) {
+	mock := withMockDatabase(t)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM audit_events`)).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(maxAuditExportRows + 1))
+	result, err := ExportAuditEventsCSV(context.Background(), AuditFilters{})
+	if err == nil {
+		t.Fatal("expected export too large")
+	}
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeAuditExportTooLarge || result.RowCount != maxAuditExportRows+1 {
+		t.Fatalf("unexpected error/result: %#v %+v", err, result)
+	}
+}
+
+func TestAuditExportMetadataExcludesRawSearchAndContent(t *testing.T) {
+	metadata, err := SanitizeAuditMetadata("audit_export_succeeded", map[string]interface{}{"rowCount": 2, "filterTypes": []string{"search"}, "truncated": false, "search": "secret", "csv": "contents"})
+	if err != nil {
+		t.Fatalf("sanitize failed: %v", err)
+	}
+	if metadata["search"] != nil || metadata["csv"] != nil || metadata["rowCount"] != 2 {
+		t.Fatalf("unexpected export audit metadata: %+v", metadata)
+	}
+}
+
+func sqlNull(value string) sql.NullString {
+	return sql.NullString{String: value, Valid: value != ""}
 }
 
 func TestParseAuditRetentionDays(t *testing.T) {

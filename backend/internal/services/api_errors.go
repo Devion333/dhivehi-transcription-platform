@@ -42,6 +42,7 @@ const (
 	ErrCodeAuditNotFound              = "AUDIT_EVENT_NOT_FOUND"
 	ErrCodeInvalidAuditFilter         = "INVALID_AUDIT_FILTER"
 	ErrCodeInvalidAuditEvent          = "INVALID_AUDIT_EVENT"
+	ErrCodeAuditExportTooLarge        = "AUDIT_EXPORT_TOO_LARGE"
 	ErrCodeJobNotFound                = "JOB_NOT_FOUND"
 	ErrCodeJobNotFailed               = "JOB_NOT_FAILED"
 	ErrCodeJobNotRetryable            = "JOB_NOT_RETRYABLE"

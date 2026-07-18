@@ -167,6 +167,7 @@ export interface AuditListParams {
   category?: "all" | AuditCategory;
   outcome?: "all" | AuditOutcome;
   action?: string;
+  actorUserId?: string;
   resourceType?: string;
   dateFrom?: string;
   dateTo?: string;
