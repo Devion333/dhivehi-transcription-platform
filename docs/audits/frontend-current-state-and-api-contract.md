@@ -754,3 +754,13 @@ Search endpoint remains `GET /api/search/transcripts` and now accepts optional `
 Search results include public metadata and, for segment matches, `segmentId`, `segmentIndex`, `speaker`, `speakerDisplayName`, `startTime`, `endTime`, and `matchedText`. Metadata-only results omit `segmentId`. Segment result links use `/Transcripts/Details?job_id=<jobId>&segment_id=<segmentId>`; Details scrolls/highlights the stable segment ID once after load without autoplay.
 
 Authenticated downloads are available at `GET /api/transcripts/:jobId/download?format=txt|json|srt|vtt`. The backend generates UTF-8 TXT, JSON, SRT, and WebVTT from authorized transcript data only, with safe filenames and appropriate content types. Download audit actions are `transcript_download_succeeded` and `transcript_download_failed` with safe metadata limited to `jobId` and `format`.
+
+## Admin Account Management Addition
+
+Profile endpoints are `GET /api/account/profile` and `PATCH /api/account/profile`. They use the authenticated session user only. Users may edit `displayName`; email, role, status, user ID, and password are read-only here. Existing transcript owner display-name snapshots remain historical and are not updated by profile edits; authorization remains based on `owner_user_id`.
+
+Admin transcript reassignment endpoints are `GET /api/admin/transcripts/:jobId/reassignment-options` and `POST /api/admin/transcripts/:jobId/reassign`. Admins can assign owned or ownerless transcripts to another active user. The backend derives `owner_user_id`, `owner_display_name`, and `owner_email` from PostgreSQL and does not rewrite segments or transcript content. Previous standard owners lose access on subsequent API calls; new owners gain access; admins retain access.
+
+Filtered Audit CSV export is available at `GET /api/admin/audit/export` with the same filter names as the Audit list: `search`, `category`, `action`, `outcome`, `actorUserId`, `resourceType`, `resourceId`, `dateFrom`, and `dateTo`. CSV columns are timestamp, actor display name/email/role, action, outcome, target type/ID, failure code, IP address, and metadata summary. Exports are server-side, UTF-8 CSV downloads, capped at 10,000 matching rows, and return `AUDIT_EXPORT_TOO_LARGE` when filters are too broad.
+
+Added audit events: `profile_viewed`, `profile_updated`, `profile_update_failed`, `transcript_reassignment_succeeded`, `transcript_reassignment_failed`, `audit_export_succeeded`, and `audit_export_failed`. Metadata is allowlisted and excludes display names for profile changes, owner email/display-name snapshots for reassignment, raw search text, and exported CSV content.
