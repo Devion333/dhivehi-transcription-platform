@@ -13,8 +13,8 @@ import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { analyseTranscript, getTranscript, getTranscriptAnalysis } from "@/lib/api/transcripts";
-import type { TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
+import { analyseTranscript, getTranscript, getTranscriptAnalysis, updateAnalysisReview } from "@/lib/api/transcripts";
+import type { AnalysisReviewStatus, TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
 import { analysisTextProps, canRunAnalysis, hasAnalysisContent, normalizeEntities } from "@/lib/transcript-analysis-utils";
 import { formatDetailDate, safeValue } from "@/lib/transcript-details-utils";
 import { hasUsableAnalysis } from "@/lib/pdf-export-utils";
@@ -28,6 +28,10 @@ export function TranscriptAnalysisClient() {
   const [error, setError] = React.useState<string | null>(null);
   const [runError, setRunError] = React.useState<string | null>(null);
   const [running, setRunning] = React.useState(false);
+  const [reviewSaving, setReviewSaving] = React.useState(false);
+  const [reviewError, setReviewError] = React.useState<string | null>(null);
+  const [reviewStatus, setReviewStatus] = React.useState<AnalysisReviewStatus>("unreviewed");
+  const [reviewNote, setReviewNote] = React.useState("");
   const [retryToken, setRetryToken] = React.useState(0);
   const [exportOpen, setExportOpen] = React.useState(false);
 
@@ -51,6 +55,12 @@ export function TranscriptAnalysisClient() {
     return () => controller.abort();
   }, [jobId, retryToken]);
 
+  React.useEffect(() => {
+    setReviewStatus(analysis?.review?.status ?? "unreviewed");
+    setReviewNote(analysis?.review?.note ?? "");
+    setReviewError(null);
+  }, [analysis?.review?.status, analysis?.review?.note]);
+
   async function runAnalysis() {
     if (!jobId || running) return;
     setRunning(true);
@@ -64,6 +74,20 @@ export function TranscriptAnalysisClient() {
       setRunError(err instanceof Error ? err.message : "Failed to run analysis");
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function saveReview() {
+    if (!jobId || !analysis || reviewSaving) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      const response = await updateAnalysisReview(jobId, { status: reviewStatus, note: reviewNote });
+      setAnalysis({ ...analysis, review: response.review });
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Failed to update review status");
+    } finally {
+      setReviewSaving(false);
     }
   }
 
@@ -142,6 +166,48 @@ export function TranscriptAnalysisClient() {
           )}
 
           {runError && <ErrorState title="Analysis failed" description={runError} />}
+
+          {analysis.status === "complete" && (
+            <Card>
+              <CardHeader><CardTitle>Review</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground" htmlFor="analysis-review-status">Status</label>
+                  <select
+                    id="analysis-review-status"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={reviewStatus}
+                    onChange={(event) => setReviewStatus(event.target.value as AnalysisReviewStatus)}
+                    disabled={reviewSaving}
+                  >
+                    <option value="unreviewed">Unreviewed</option>
+                    <option value="reviewed">Reviewed</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground" htmlFor="analysis-review-note">Note</label>
+                  <textarea
+                    id="analysis-review-note"
+                    className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    maxLength={500}
+                    value={reviewNote}
+                    onChange={(event) => setReviewNote(event.target.value)}
+                    disabled={reviewSaving}
+                    placeholder="Optional review note"
+                  />
+                </div>
+                {analysis.review?.reviewedByDisplayName && <MetaRow label="Reviewer" value={analysis.review.reviewedByDisplayName} />}
+                {analysis.review?.reviewedAt && <MetaRow label="Reviewed" value={formatDetailDate(analysis.review.reviewedAt)} />}
+                {reviewError && <p className="text-sm text-destructive">{reviewError}</p>}
+                <Button type="button" className="w-full" onClick={saveReview} disabled={reviewSaving}>
+                  {reviewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Save review
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </aside>
 
         <section className="space-y-4">

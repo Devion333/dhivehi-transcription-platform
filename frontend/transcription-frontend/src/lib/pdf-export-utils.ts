@@ -104,7 +104,7 @@ export function buildPdfExportPayload(transcript: TranscriptDetail, format: PdfE
   };
 }
 
-function toPdfAnalysis(analysis: TranscriptAnalysis): PdfExportAnalysis {
+export function toPdfAnalysis(analysis: TranscriptAnalysis): PdfExportAnalysis {
   return {
     status: analysis.status,
     keywords: Array.isArray(analysis.keywords) ? analysis.keywords : [],
@@ -112,6 +112,7 @@ function toPdfAnalysis(analysis: TranscriptAnalysis): PdfExportAnalysis {
     summary: analysis.summary,
     classification: analysis.classification,
     englishTranslation: analysis.englishTranslation,
+    review: analysis.review ?? { status: "unreviewed", reviewedByUserId: null, reviewedByDisplayName: null, reviewedAt: null, note: null },
   };
 }
 

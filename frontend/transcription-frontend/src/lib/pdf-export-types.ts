@@ -12,7 +12,7 @@ export type PdfExportTranscript = Pick<
   segments: PdfExportSegment[];
 };
 
-export type PdfExportAnalysis = Pick<TranscriptAnalysis, "status" | "keywords" | "summary" | "classification" | "englishTranslation"> & {
+export type PdfExportAnalysis = Pick<TranscriptAnalysis, "status" | "keywords" | "summary" | "classification" | "englishTranslation" | "review"> & {
   status: AnalysisStatus | string;
   entities: string[];
 };

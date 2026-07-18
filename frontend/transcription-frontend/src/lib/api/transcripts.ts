@@ -1,6 +1,6 @@
 import { request } from "./client";
 import { BACKEND_URL } from "@/config";
-import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptReassignmentOptionsResponse, TranscriptReassignmentResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
+import type { AnalysisReviewResponse, AnalysisReviewStatus, AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptReassignmentOptionsResponse, TranscriptReassignmentResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
 
 export type TranscriptListParams = {
   page?: number;
@@ -62,6 +62,17 @@ export function analyseTranscript(jobId: string, signal?: AbortSignal) {
   const trimmed = jobId.trim();
   if (!trimmed) throw new Error("A transcript job ID is required");
   return request<AnalysisTriggerResponse>(`/api/transcripts/${encodeURIComponent(trimmed)}/analyse`, { method: "POST", signal });
+}
+
+export function updateAnalysisReview(jobId: string, input: { status: AnalysisReviewStatus; note?: string }, signal?: AbortSignal) {
+  const trimmed = jobId.trim();
+  if (!trimmed) throw new Error("A transcript job ID is required");
+  return request<AnalysisReviewResponse>(`/api/transcripts/${encodeURIComponent(trimmed)}/analysis/review`, {
+    method: "PATCH",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: input.status, note: input.note ?? "" }),
+  });
 }
 
 export function updateSegment(

@@ -85,6 +85,22 @@ func TestSegmentUpdateMetadataExcludesTranscriptText(t *testing.T) {
 	}
 }
 
+func TestAnalysisReviewMetadataExcludesNoteAndAnalysisContent(t *testing.T) {
+	metadata, err := SanitizeAuditMetadata("analysis_review_updated", map[string]interface{}{"jobId": "job", "previousStatus": "unreviewed", "newStatus": "approved", "hasNote": true, "note": "private", "analysisSummary": "generated content"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := metadata["note"]; ok {
+		t.Fatal("review note leaked")
+	}
+	if _, ok := metadata["analysisSummary"]; ok {
+		t.Fatal("analysis content leaked")
+	}
+	if metadata["jobId"] != "job" || metadata["newStatus"] != "approved" || metadata["hasNote"] != true {
+		t.Fatalf("unexpected metadata: %#v", metadata)
+	}
+}
+
 func TestSearchMetadataExcludesRawQuery(t *testing.T) {
 	metadata, err := SanitizeAuditMetadata("search.executed", map[string]interface{}{"query": "secret", "queryLength": 12, "resultCount": 4})
 	if err != nil {
