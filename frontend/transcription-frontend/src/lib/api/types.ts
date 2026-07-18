@@ -381,6 +381,21 @@ export interface TranscriptAnalysis {
   summary: string;
   classification: string;
   englishTranslation: string;
+  review: AnalysisReview;
+}
+
+export type AnalysisReviewStatus = "unreviewed" | "reviewed" | "approved" | "rejected";
+
+export interface AnalysisReview {
+  status: AnalysisReviewStatus;
+  reviewedByUserId: string | null;
+  reviewedByDisplayName: string | null;
+  reviewedAt: string | null;
+  note: string | null;
+}
+
+export interface AnalysisReviewResponse {
+  review: AnalysisReview;
 }
 
 export interface SegmentUpdateResponse {

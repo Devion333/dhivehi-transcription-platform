@@ -69,6 +69,7 @@ func main() {
 			protected.PATCH("/transcripts/:jobId/speakers", handlers.APIUpdateSpeakerName)
 			protected.PATCH("/transcripts/:jobId/segments/:segmentId", handlers.APIUpdateSegment)
 			protected.GET("/transcripts/:jobId/analysis", handlers.APIGetAnalysis)
+			protected.PATCH("/transcripts/:jobId/analysis/review", handlers.APIUpdateAnalysisReview)
 			protected.POST("/transcripts/:jobId/analyse", handlers.APIAnalyseTranscript)
 			protected.POST("/audit/pdf-export", handlers.APIAuditPDFExport)
 		}

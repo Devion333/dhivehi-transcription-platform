@@ -222,6 +222,36 @@ func APIGetAnalysis(c *gin.Context) {
 	c.JSON(http.StatusOK, analysis)
 }
 
+func APIUpdateAnalysisReview(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	if jobID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+	user, ok := CurrentUser(c)
+	if !ok {
+		writeUnauthenticated(c)
+		return
+	}
+	previousStatus := "unreviewed"
+	if parent, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID); err == nil {
+		previousStatus = services.MapAnalysisReview(parent.Payload).Status
+	}
+	var request dtos.AnalysisReviewRequest
+	if !decodeStrictAPIJSON(c, &request) {
+		auditRequestEvent(c, services.AuditEventInput{Action: "analysis_review_failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"jobId": jobID, "previousStatus": previousStatus, "newStatus": strings.TrimSpace(request.Status), "hasNote": strings.TrimSpace(request.Note) != ""}})
+		return
+	}
+	review, err := services.UpdateAnalysisReview(transcriptAccessScope(c), user, jobID, request.Status, request.Note)
+	if err != nil {
+		auditRequestEvent(c, services.AuditEventInput{Action: "analysis_review_failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"jobId": jobID, "previousStatus": previousStatus, "newStatus": strings.TrimSpace(request.Status), "hasNote": strings.TrimSpace(request.Note) != ""}})
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "analysis_review_updated", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"jobId": jobID, "previousStatus": previousStatus, "newStatus": review.Status, "hasNote": review.Note != nil}})
+	c.JSON(http.StatusOK, dtos.AnalysisReviewResponse{Review: review})
+}
+
 func LegacyListTranscripts(c *gin.Context) {
 	status := c.Query("status")
 	var transcripts []services.TranscriptListItem

@@ -83,6 +83,42 @@ func TestMapAnalysisDefaults(t *testing.T) {
 	}
 }
 
+func TestMapAnalysisReviewDefaultsToUnreviewed(t *testing.T) {
+	review := MapAnalysisReview(map[string]interface{}{})
+	if review.Status != "unreviewed" {
+		t.Fatalf("expected unreviewed, got %q", review.Status)
+	}
+	if review.ReviewedByUserID != nil || review.ReviewedByDisplayName != nil || review.ReviewedAt != nil || review.Note != nil {
+		t.Fatalf("expected empty reviewer metadata, got %+v", review)
+	}
+}
+
+func TestMapAnalysisReviewIncludesMetadataForReviewedStatus(t *testing.T) {
+	review := MapAnalysisReview(map[string]interface{}{
+		"analysis_review_status":            "approved",
+		"analysis_reviewed_by_user_id":      "user-1",
+		"analysis_reviewed_by_display_name": "Reviewer",
+		"analysis_reviewed_at":              "2026-07-18T00:00:00Z",
+		"analysis_review_note":              "looks good",
+		"analysis_summary":                  "generated content must not matter",
+	})
+	if review.Status != "approved" || review.ReviewedByUserID == nil || *review.ReviewedByUserID != "user-1" || review.Note == nil || *review.Note != "looks good" {
+		t.Fatalf("unexpected review metadata: %+v", review)
+	}
+}
+
+func TestNormalizeReviewNoteValidation(t *testing.T) {
+	if note, err := normalizeReviewNote("  ok\n"); err != nil || note != "ok" {
+		t.Fatalf("expected trimmed note, got note=%q err=%v", note, err)
+	}
+	if _, err := normalizeReviewNote("bad\x00note"); err == nil {
+		t.Fatal("expected control character rejection")
+	}
+	if _, err := normalizeReviewNote(strings.Repeat("x", maxReviewNoteRunes+1)); err == nil {
+		t.Fatal("expected max length rejection")
+	}
+}
+
 func TestPublicMediaURLUsesConfiguredBase(t *testing.T) {
 	t.Setenv("MINIO_PUBLIC_URL", "https://media.example.test")
 	got := PublicMediaURL("http://minio:9000/uploads/object.wav")

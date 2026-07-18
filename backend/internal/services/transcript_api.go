@@ -25,6 +25,7 @@ const (
 	defaultPageSize     = 20
 	maxPageSize         = 100
 	maxSpeakerNameRunes = 80
+	maxReviewNoteRunes  = 500
 )
 
 var qdrantHTTPClient = &http.Client{Timeout: 10 * time.Second}
@@ -1261,7 +1262,92 @@ func MapAnalysis(payload map[string]interface{}) dtos.Analysis {
 		Summary:            getString(payload, "analysis_summary", ""),
 		Classification:     getString(payload, "analysis_classification", ""),
 		EnglishTranslation: getString(payload, "analysis_english_translation", ""),
+		Review:             MapAnalysisReview(payload),
 	}
+}
+
+func MapAnalysisReview(payload map[string]interface{}) dtos.AnalysisReview {
+	status := normalizeAnalysisReviewStatus(getString(payload, "analysis_review_status", ""))
+	if status == "unreviewed" {
+		return dtos.AnalysisReview{Status: status}
+	}
+	return dtos.AnalysisReview{Status: status, ReviewedByUserID: stringPtrIfNotEmpty(getString(payload, "analysis_reviewed_by_user_id", "")), ReviewedByDisplayName: stringPtrIfNotEmpty(getString(payload, "analysis_reviewed_by_display_name", "")), ReviewedAt: stringPtrIfNotEmpty(getString(payload, "analysis_reviewed_at", "")), Note: stringPtrIfNotEmpty(getString(payload, "analysis_review_note", ""))}
+}
+
+func UpdateAnalysisReview(scope TranscriptAccessScope, reviewer dtos.AuthUser, jobID, status, note string) (dtos.AnalysisReview, error) {
+	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
+	if err != nil {
+		return dtos.AnalysisReview{}, err
+	}
+	if publicAnalysisStatus(getString(parent.Payload, "analysis_status", "not_started")) != "complete" {
+		return dtos.AnalysisReview{}, newServiceError(ErrCodeAnalysisNotComplete, errors.New("analysis not complete"))
+	}
+	status = normalizeAnalysisReviewStatus(status)
+	if !validAnalysisReviewStatus(status) {
+		return dtos.AnalysisReview{}, newServiceError(ErrCodeInvalidReviewStatus, errors.New("invalid review status"))
+	}
+	note, err = normalizeReviewNote(note)
+	if err != nil {
+		return dtos.AnalysisReview{}, newServiceError(ErrCodeInvalidReviewNote, err)
+	}
+	payload := map[string]interface{}{"analysis_review_status": status, "updated_at": time.Now().UTC().Format(time.RFC3339)}
+	if status == "unreviewed" {
+		payload["analysis_reviewed_by_user_id"] = ""
+		payload["analysis_reviewed_by_display_name"] = ""
+		payload["analysis_reviewed_at"] = ""
+		payload["analysis_review_note"] = ""
+	} else {
+		payload["analysis_reviewed_by_user_id"] = reviewer.ID
+		payload["analysis_reviewed_by_display_name"] = reviewer.Name
+		payload["analysis_reviewed_at"] = time.Now().UTC().Format(time.RFC3339)
+		payload["analysis_review_note"] = note
+	}
+	if err := updateParentPayloadByJobID(jobID, payload); err != nil {
+		return dtos.AnalysisReview{}, err
+	}
+	merged := copyPayload(parent.Payload)
+	for key, value := range payload {
+		merged[key] = value
+	}
+	return MapAnalysisReview(merged), nil
+}
+
+func normalizeAnalysisReviewStatus(status string) string {
+	status = strings.ToLower(strings.TrimSpace(status))
+	if status == "" {
+		return "unreviewed"
+	}
+	return status
+}
+
+func validAnalysisReviewStatus(status string) bool {
+	switch status {
+	case "unreviewed", "reviewed", "approved", "rejected":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeReviewNote(note string) (string, error) {
+	note = strings.TrimSpace(note)
+	if len([]rune(note)) > maxReviewNoteRunes {
+		return "", errors.New("review note is too long")
+	}
+	for _, r := range note {
+		if r < 32 && r != '\n' && r != '\t' || r == 127 {
+			return "", errors.New("review note contains control characters")
+		}
+	}
+	return note, nil
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func SegmentIDFromPayload(jobID string, payload map[string]interface{}) string {

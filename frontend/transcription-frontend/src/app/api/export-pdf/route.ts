@@ -5,9 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import puppeteer, { type Browser, type Page } from "puppeteer";
 
 import type { PdfExportPayload, PdfExportSegment } from "@/lib/pdf-export-types";
-import { escapeHtml, formatPdfTimestamp, groupSegmentsBySpeaker, hasUsableAnalysis, pdfDownloadFilename, sortPdfSegments } from "@/lib/pdf-export-utils";
+import { escapeHtml, formatPdfTimestamp, groupSegmentsBySpeaker, hasUsableAnalysis, pdfDownloadFilename, sortPdfSegments, toPdfAnalysis } from "@/lib/pdf-export-utils";
 import { BACKEND_URL } from "@/config";
-import type { TranscriptDetail } from "@/lib/api/types";
+import type { TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
 import { getSpeakerDisplayName } from "@/lib/transcript-details-utils";
 
 export const runtime = "nodejs";
@@ -32,6 +32,10 @@ export async function POST(request: NextRequest) {
     payload = await readAndValidatePayload(request);
     const authorizedTranscript = await requireTranscriptAccess(request, payload.transcript.jobId);
     payload = withAuthorizedTranscript(payload, authorizedTranscript);
+    if (payload.includeAnalysis) {
+      const authorizedAnalysis = await requireTranscriptAnalysis(request, payload.transcript.jobId);
+      payload = { ...payload, analysis: hasUsableAnalysis(authorizedAnalysis) ? toPdfAnalysis(authorizedAnalysis) : undefined };
+    }
     browser = await puppeteer.launch({
       headless: "shell",
       timeout: 30_000,
@@ -72,6 +76,20 @@ export async function POST(request: NextRequest) {
     await page?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
+}
+
+async function requireTranscriptAnalysis(request: NextRequest, jobId: string) {
+  const response = await fetch(`${BACKEND_URL}/api/transcripts/${encodeURIComponent(jobId)}/analysis`, {
+    method: "GET",
+    headers: { Cookie: request.headers.get("cookie") ?? "", Accept: "application/json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(AUTH_CHECK_TIMEOUT_MS),
+  });
+  if (response.status === 401) throw routeError(401, "UNAUTHENTICATED", "Authentication is required");
+  if (response.status === 403) throw routeError(403, "FORBIDDEN", "You do not have permission to export this transcript.");
+  if (response.status === 404) throw routeError(404, "TRANSCRIPT_NOT_FOUND", "Transcript was not found.");
+  if (!response.ok) throw routeError(500, "TRANSCRIPT_ANALYSIS_CHECK_FAILED", "Transcript analysis check failed");
+  return response.json() as Promise<TranscriptAnalysis>;
 }
 
 async function requireTranscriptAccess(request: NextRequest, jobId: string) {
@@ -196,6 +214,7 @@ function sanitizeAnalysis(analysis: unknown): PdfExportPayload["analysis"] {
     summary: typeof typed.summary === "string" ? typed.summary : "",
     classification: typeof typed.classification === "string" ? typed.classification : "",
     englishTranslation: typeof typed.englishTranslation === "string" ? typed.englishTranslation : "",
+    review: typed.review ?? { status: "unreviewed", reviewedByUserId: null, reviewedByDisplayName: null, reviewedAt: null, note: null },
   };
 }
 
@@ -295,7 +314,16 @@ function metadataHtml(payload: PdfExportPayload) {
 }
 
 function buildAnalysisHtml(analysis: NonNullable<PdfExportPayload["analysis"]>) {
+  const review = analysis.review;
+  const reviewDetails = review.status === "approved" || review.status === "reviewed"
+    ? [
+        review.reviewedByDisplayName ? `Reviewer: ${review.reviewedByDisplayName}` : "",
+        review.reviewedAt ? `Reviewed: ${formatDate(review.reviewedAt)}` : "",
+        review.note ? `Note: ${review.note}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
   const sections = [
+    `<div class="analysis-card"><h3>Review Status</h3><span class="pill">${escapeHtml(formatLabel(review.status))}</span>${reviewDetails ? `<p>${escapeHtml(reviewDetails)}</p>` : ""}</div>`,
     analysis.summary.trim() ? `<div class="analysis-card"><h3>Summary</h3><p>${escapeHtml(analysis.summary.trim())}</p></div>` : "",
     analysis.classification.trim() ? `<div class="analysis-card"><h3>Classification</h3><span class="pill">${escapeHtml(formatLabel(analysis.classification.trim()))}</span></div>` : "",
     analysis.keywords.length > 0 ? `<div class="analysis-card"><h3>Keywords</h3><div class="pills">${analysis.keywords.map((keyword) => `<span class="pill">${escapeHtml(keyword)}</span>`).join("")}</div></div>` : "",

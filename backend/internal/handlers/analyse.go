@@ -206,5 +206,6 @@ func mapAnalysisResult(result AnalysisResult) dtos.Analysis {
 		Summary:            result.Summary,
 		Classification:     result.Classification,
 		EnglishTranslation: result.EnglishTranslation,
+		Review:             dtos.AnalysisReview{Status: "unreviewed"},
 	}
 }

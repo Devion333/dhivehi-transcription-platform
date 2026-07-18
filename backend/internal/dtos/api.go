@@ -338,12 +338,30 @@ type SpeakerRenameResponse struct {
 }
 
 type Analysis struct {
-	Status             string      `json:"status"`
-	Keywords           []string    `json:"keywords"`
-	Entities           interface{} `json:"entities"`
-	Summary            string      `json:"summary"`
-	Classification     string      `json:"classification"`
-	EnglishTranslation string      `json:"englishTranslation"`
+	Status             string         `json:"status"`
+	Keywords           []string       `json:"keywords"`
+	Entities           interface{}    `json:"entities"`
+	Summary            string         `json:"summary"`
+	Classification     string         `json:"classification"`
+	EnglishTranslation string         `json:"englishTranslation"`
+	Review             AnalysisReview `json:"review"`
+}
+
+type AnalysisReview struct {
+	Status                string  `json:"status"`
+	ReviewedByUserID      *string `json:"reviewedByUserId"`
+	ReviewedByDisplayName *string `json:"reviewedByDisplayName"`
+	ReviewedAt            *string `json:"reviewedAt"`
+	Note                  *string `json:"note"`
+}
+
+type AnalysisReviewRequest struct {
+	Status string `json:"status"`
+	Note   string `json:"note"`
+}
+
+type AnalysisReviewResponse struct {
+	Review AnalysisReview `json:"review"`
 }
 
 type AnalysisTriggerResponse struct {
