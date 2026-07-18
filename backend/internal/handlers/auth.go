@@ -93,6 +93,42 @@ func APIChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, dtos.ChangePasswordResponse{Message: "Password changed successfully", ReauthenticationRequired: false})
 }
 
+func APIGetAccountProfile(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		writeUnauthenticated(c)
+		return
+	}
+	profile, err := services.GetOwnProfile(c.Request.Context(), user.ID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "profile_viewed", Category: "authentication", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess})
+	c.JSON(http.StatusOK, dtos.AccountProfileResponse{Profile: profile})
+}
+
+func APIUpdateAccountProfile(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		writeUnauthenticated(c)
+		return
+	}
+	var request dtos.UpdateAccountProfileRequest
+	if !decodeAuthJSON(c, &request, "Profile update request is invalid") {
+		auditProfileUpdateFailure(c, user)
+		return
+	}
+	profile, err := services.UpdateOwnProfile(c.Request.Context(), user.ID, request.DisplayName)
+	if err != nil {
+		auditProfileUpdateFailure(c, user)
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{Action: "profile_updated", Category: "authentication", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"changedFields": []string{"displayName"}}})
+	c.JSON(http.StatusOK, dtos.AccountProfileResponse{Profile: profile})
+}
+
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := c.Cookie(services.SessionCookieConfig().Name)
@@ -168,6 +204,10 @@ func passwordChangeFailureCode(err error) string {
 
 func auditPasswordChangeFailure(c *gin.Context, user dtos.AuthUser, reason string) {
 	auditRequestEventWithActor(c, &user, services.AuditEventInput{Action: "password_change_failed", Category: "authentication", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"reasonCode": reason}})
+}
+
+func auditProfileUpdateFailure(c *gin.Context, user dtos.AuthUser) {
+	auditRequestEvent(c, services.AuditEventInput{Action: "profile_update_failed", Category: "authentication", ResourceType: "user", ResourceID: user.ID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"changedFields": []string{"displayName"}}})
 }
 
 func setSessionCookie(c *gin.Context, token string) {

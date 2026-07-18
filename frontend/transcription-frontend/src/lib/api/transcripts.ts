@@ -1,6 +1,6 @@
 import { request } from "./client";
 import { BACKEND_URL } from "@/config";
-import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
+import type { AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptReassignmentOptionsResponse, TranscriptReassignmentResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
 
 export type TranscriptListParams = {
   page?: number;
@@ -111,5 +111,22 @@ export function deleteTranscript(jobId: string, confirmation: string, signal?: A
     signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirmation }),
+  });
+}
+
+export function getTranscriptReassignmentOptions(jobId: string, signal?: AbortSignal) {
+  const trimmed = jobId.trim();
+  if (!trimmed) throw new Error("A transcript job ID is required");
+  return request<TranscriptReassignmentOptionsResponse>(`/api/admin/transcripts/${encodeURIComponent(trimmed)}/reassignment-options`, { signal });
+}
+
+export function reassignTranscript(jobId: string, newOwnerUserId: string, signal?: AbortSignal) {
+  const trimmed = jobId.trim();
+  if (!trimmed) throw new Error("A transcript job ID is required");
+  return request<TranscriptReassignmentResponse>(`/api/admin/transcripts/${encodeURIComponent(trimmed)}/reassign`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newOwnerUserId }),
   });
 }

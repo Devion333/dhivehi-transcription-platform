@@ -56,6 +56,24 @@ export interface ChangePasswordResponse {
   reauthenticationRequired: boolean;
 }
 
+export interface AccountProfile {
+  id: string;
+  displayName: string;
+  email: string;
+  role: AuthRole;
+  status: "active" | "inactive";
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AccountProfileResponse {
+  profile: AccountProfile;
+}
+
+export interface UpdateAccountProfileInput {
+  displayName: string;
+}
+
 export interface CurrentUserResponse {
   user: AuthUser;
 }
@@ -149,6 +167,7 @@ export interface AuditListParams {
   category?: "all" | AuditCategory;
   outcome?: "all" | AuditOutcome;
   action?: string;
+  actorUserId?: string;
   resourceType?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -343,6 +362,16 @@ export interface TranscriptDeletionResponse {
   mediaObjectCount: number;
   cleanupCategories: string[];
   partialCleanupCategories?: string[];
+}
+
+export interface TranscriptReassignmentOptionsResponse {
+  users: AdminUserSummary[];
+}
+
+export interface TranscriptReassignmentResponse {
+  jobId: string;
+  previousOwnerUserId: string;
+  newOwner: { displayName: string; email: string };
 }
 
 export interface TranscriptAnalysis {

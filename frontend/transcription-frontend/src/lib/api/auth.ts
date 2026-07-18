@@ -1,5 +1,5 @@
 import { request } from "@/lib/api/client";
-import type { ChangePasswordInput, ChangePasswordResponse, CurrentUserResponse, LoginInput, LoginResponse } from "@/lib/api/types";
+import type { AccountProfileResponse, ChangePasswordInput, ChangePasswordResponse, CurrentUserResponse, LoginInput, LoginResponse, UpdateAccountProfileInput } from "@/lib/api/types";
 
 export function login(input: LoginInput, signal?: AbortSignal) {
   return request<LoginResponse>("/api/auth/login", {
@@ -21,6 +21,19 @@ export function getCurrentUser(signal?: AbortSignal) {
 export function changePassword(input: ChangePasswordInput, signal?: AbortSignal) {
   return request<ChangePasswordResponse>("/api/auth/change-password", {
     method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function getAccountProfile(signal?: AbortSignal) {
+  return request<AccountProfileResponse>("/api/account/profile", { signal });
+}
+
+export function updateAccountProfile(input: UpdateAccountProfileInput, signal?: AbortSignal) {
+  return request<AccountProfileResponse>("/api/account/profile", {
+    method: "PATCH",
     signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

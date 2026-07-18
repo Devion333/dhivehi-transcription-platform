@@ -41,6 +41,24 @@ type ChangePasswordResponse struct {
 	ReauthenticationRequired bool   `json:"reauthenticationRequired"`
 }
 
+type AccountProfile struct {
+	ID          string  `json:"id"`
+	DisplayName string  `json:"displayName"`
+	Email       string  `json:"email"`
+	Role        string  `json:"role"`
+	Status      string  `json:"status"`
+	CreatedAt   string  `json:"createdAt"`
+	LastLoginAt *string `json:"lastLoginAt"`
+}
+
+type AccountProfileResponse struct {
+	Profile AccountProfile `json:"profile"`
+}
+
+type UpdateAccountProfileRequest struct {
+	DisplayName string `json:"displayName"`
+}
+
 type AdminUserSummary struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
@@ -205,6 +223,20 @@ type TranscriptDeletionResponse struct {
 	MediaObjectCount         int      `json:"mediaObjectCount"`
 	CleanupCategories        []string `json:"cleanupCategories"`
 	PartialCleanupCategories []string `json:"partialCleanupCategories,omitempty"`
+}
+
+type TranscriptReassignmentOptionsResponse struct {
+	Users []AdminUserSummary `json:"users"`
+}
+
+type TranscriptReassignmentRequest struct {
+	NewOwnerUserID string `json:"newOwnerUserId"`
+}
+
+type TranscriptReassignmentResponse struct {
+	JobID               string                  `json:"jobId"`
+	PreviousOwnerUserID string                  `json:"previousOwnerUserId"`
+	NewOwner            TranscriptDeletionOwner `json:"newOwner"`
 }
 
 type QueueCounts struct {

@@ -290,6 +290,59 @@ func TestChangeOwnPasswordRateLimit(t *testing.T) {
 	}
 }
 
+func TestGetOwnProfileReturnsAuthenticatedProfile(t *testing.T) {
+	mock := withMockDatabase(t)
+	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	lastLogin := sql.NullTime{Time: now.Add(-time.Hour), Valid: true}
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1`)).
+		WithArgs("user-id").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).AddRow("user-id", "User", "user@example.com", "hash", "user", true, now, now, lastLogin))
+	profile, err := GetOwnProfile(context.Background(), "user-id")
+	if err != nil {
+		t.Fatalf("GetOwnProfile failed: %v", err)
+	}
+	if profile.ID != "user-id" || profile.DisplayName != "User" || profile.Status != "active" || profile.LastLoginAt == nil {
+		t.Fatalf("unexpected profile: %+v", profile)
+	}
+}
+
+func TestUpdateOwnProfileNormalizesDisplayName(t *testing.T) {
+	mock := withMockDatabase(t)
+	now := time.Now()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1 FOR UPDATE`)).
+		WithArgs("user-id").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).AddRow("user-id", "Old", "user@example.com", "hash", "user", true, now, now, sql.NullTime{}))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2`)).
+		WithArgs("Updated Name", "user-id").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	profile, err := UpdateOwnProfile(context.Background(), "user-id", "  Updated   Name  ")
+	if err != nil {
+		t.Fatalf("UpdateOwnProfile failed: %v", err)
+	}
+	if profile.DisplayName != "Updated Name" || profile.Email != "user@example.com" || profile.Role != "user" {
+		t.Fatalf("unexpected profile: %+v", profile)
+	}
+}
+
+func TestNormalizeDisplayNameRejectsInvalidValues(t *testing.T) {
+	for _, value := range []string{"", "   ", strings.Repeat("a", maxDisplayNameRunes+1), "Bad\x00Name"} {
+		if _, err := NormalizeDisplayName(value); err == nil {
+			t.Fatalf("expected %q to be rejected", value)
+		}
+	}
+}
+
+func TestProfileAuditMetadataExcludesDisplayNames(t *testing.T) {
+	metadata, err := SanitizeAuditMetadata("profile_updated", map[string]interface{}{"changedFields": []string{"displayName"}, "oldDisplayName": "Old", "newDisplayName": "New"})
+	if err != nil {
+		t.Fatalf("sanitize failed: %v", err)
+	}
+	if metadata["oldDisplayName"] != nil || metadata["newDisplayName"] != nil {
+		t.Fatalf("display names leaked into audit metadata: %+v", metadata)
+	}
+}
+
 func TestBootstrapInitialAdminIdempotent(t *testing.T) {
 	t.Setenv("INITIAL_ADMIN_NAME", "Admin")
 	t.Setenv("INITIAL_ADMIN_EMAIL", "admin@example.com")

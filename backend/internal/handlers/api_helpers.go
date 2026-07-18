@@ -29,6 +29,8 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Request is invalid", nil)
 		case services.ErrCodeForbidden:
 			writeAPIError(c, http.StatusForbidden, serviceErr.Code, "You do not have permission to access this transcript", nil)
+		case services.ErrCodeInactiveUser:
+			writeAPIError(c, http.StatusUnauthorized, services.ErrCodeUnauthenticated, "Authentication is required", nil)
 		case services.ErrCodeSearchQueryRequired:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Search query is required", nil)
 		case services.ErrCodeSearchUnavailable:
@@ -70,6 +72,12 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusTooManyRequests, serviceErr.Code, "Too many password change attempts. Try again later.", nil)
 		case services.ErrCodeUserNotFound:
 			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "User was not found", nil)
+		case services.ErrCodeTargetUserNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Target user was not found", nil)
+		case services.ErrCodeTargetUserInactive:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Target user is inactive", nil)
+		case services.ErrCodeTranscriptOwnerUnchanged:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Transcript is already assigned to this owner", nil)
 		case services.ErrCodeCannotDeactivateSelf:
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "You cannot deactivate your own account", nil)
 		case services.ErrCodeLastActiveAdmin:
@@ -80,6 +88,8 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit filter is invalid", nil)
 		case services.ErrCodeInvalidAuditEvent:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit event is invalid", nil)
+		case services.ErrCodeAuditExportTooLarge:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Audit export is too large. Narrow the filters and try again.", nil)
 		case services.ErrCodeJobNotFound:
 			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Job was not found", nil)
 		case services.ErrCodeJobNotFailed:

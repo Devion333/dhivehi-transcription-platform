@@ -110,6 +110,45 @@ func TestChangePasswordUnauthenticatedReturns401(t *testing.T) {
 	}
 }
 
+func TestProfileUnauthenticatedReturns401(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/api/account/profile", RequireAuth(), APIGetAccountProfile)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/account/profile", nil))
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", recorder.Code)
+	}
+}
+
+func TestProfileUpdateRejectsUnknownImmutableFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.PATCH("/api/account/profile", setAuthUserForTest, APIUpdateAccountProfile)
+
+	for _, body := range []string{`{"displayName":"Updated","email":"other@example.com"}`, `{"displayName":"Updated","role":"admin"}`, `{"displayName":"Updated","status":"inactive"}`, `{"displayName":"Updated","unknown":true}`} {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPatch, "/api/account/profile", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for %s, got %d", body, recorder.Code)
+		}
+	}
+}
+
+func TestProfileUpdateRequiresJSONContentType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.PATCH("/api/account/profile", setAuthUserForTest, APIUpdateAccountProfile)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/account/profile", bytes.NewBufferString(`{"displayName":"Updated"}`))
+	router.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected 415, got %d", recorder.Code)
+	}
+}
+
 func TestChangePasswordRejectsConfirmationMismatch(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

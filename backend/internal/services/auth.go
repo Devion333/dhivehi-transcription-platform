@@ -34,6 +34,7 @@ const (
 	passwordChangeAttemptLimit  = 5
 	passwordChangeAttemptWindow = 15 * time.Minute
 	lastSeenInterval            = 5 * time.Minute
+	maxDisplayNameRunes         = 100
 )
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
@@ -157,6 +158,73 @@ func subtleCompare(a, b []byte) bool {
 
 func SafeUserDTO(user AuthUserRecord) dtos.AuthUser {
 	return dtos.AuthUser{ID: user.ID, Name: user.Name, Email: user.Email, Role: user.Role}
+}
+
+func AccountProfileDTO(user AuthUserRecord) dtos.AccountProfile {
+	status := "inactive"
+	if user.IsActive {
+		status = "active"
+	}
+	var lastLoginAt *string
+	if user.LastLoginAt.Valid {
+		formatted := user.LastLoginAt.Time.UTC().Format(time.RFC3339)
+		lastLoginAt = &formatted
+	}
+	return dtos.AccountProfile{ID: user.ID, DisplayName: user.Name, Email: user.Email, Role: user.Role, Status: status, CreatedAt: user.CreatedAt.UTC().Format(time.RFC3339), LastLoginAt: lastLoginAt}
+}
+
+func GetOwnProfile(ctx context.Context, userID string) (dtos.AccountProfile, error) {
+	user, err := GetUserByID(ctx, userID)
+	if err != nil {
+		return dtos.AccountProfile{}, err
+	}
+	if !user.IsActive {
+		return dtos.AccountProfile{}, newServiceError(ErrCodeInactiveUser, errors.New("inactive user"))
+	}
+	return AccountProfileDTO(user), nil
+}
+
+func UpdateOwnProfile(ctx context.Context, userID, displayName string) (dtos.AccountProfile, error) {
+	displayName, err := NormalizeDisplayName(displayName)
+	if err != nil {
+		return dtos.AccountProfile{}, newServiceError(ErrCodeInvalidUserInput, err)
+	}
+	tx, err := Database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return dtos.AccountProfile{}, err
+	}
+	defer tx.Rollback()
+	user, err := getAuthUserForUpdate(ctx, tx, userID)
+	if err != nil {
+		return dtos.AccountProfile{}, err
+	}
+	if !user.IsActive {
+		return dtos.AccountProfile{}, newServiceError(ErrCodeInactiveUser, errors.New("inactive user"))
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2`, displayName, userID); err != nil {
+		return dtos.AccountProfile{}, err
+	}
+	user.Name = displayName
+	if err := tx.Commit(); err != nil {
+		return dtos.AccountProfile{}, err
+	}
+	return AccountProfileDTO(user), nil
+}
+
+func NormalizeDisplayName(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("display name is required")
+	}
+	if len([]rune(value)) > maxDisplayNameRunes {
+		return "", errors.New("display name is too long")
+	}
+	for _, r := range value {
+		if r < 32 || r == 127 {
+			return "", errors.New("display name contains control characters")
+		}
+	}
+	return strings.Join(strings.Fields(value), " "), nil
 }
 
 func CreateSession(ctx context.Context, userID string) (string, SessionRecord, error) {
@@ -299,6 +367,16 @@ func GetUserByEmail(ctx context.Context, email string) (AuthUserRecord, error) {
 	row := Database.QueryRowContext(ctx, `SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE email = $1`, NormalizeEmail(email))
 	var user AuthUserRecord
 	err := row.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.Role, &user.IsActive, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt)
+	return user, err
+}
+
+func GetUserByID(ctx context.Context, userID string) (AuthUserRecord, error) {
+	row := Database.QueryRowContext(ctx, `SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1`, strings.TrimSpace(userID))
+	var user AuthUserRecord
+	err := row.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.Role, &user.IsActive, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AuthUserRecord{}, newServiceError(ErrCodeUserNotFound, errors.New("user not found"))
+	}
 	return user, err
 }
 

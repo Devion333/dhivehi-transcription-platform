@@ -16,9 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
+import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, getTranscriptReassignmentOptions, reassignTranscript, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
-import type { TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
+import type { AdminUserSummary, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
 import { transcriptStatusLabel } from "@/lib/transcript-status";
 import {
   formatDetailDate,
@@ -80,6 +80,13 @@ export function TranscriptDetailsClient() {
 	const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
 	const [deleteConfirmation, setDeleteConfirmation] = React.useState("");
 	const [deleteError, setDeleteError] = React.useState<string | null>(null);
+	const [reassignOpen, setReassignOpen] = React.useState(false);
+	const [reassignUsers, setReassignUsers] = React.useState<AdminUserSummary[]>([]);
+	const [reassignSearch, setReassignSearch] = React.useState("");
+	const [selectedOwnerId, setSelectedOwnerId] = React.useState("");
+	const [reassignLoading, setReassignLoading] = React.useState(false);
+	const [reassignSubmitting, setReassignSubmitting] = React.useState(false);
+	const [reassignError, setReassignError] = React.useState<string | null>(null);
 	const [exportOpen, setExportOpen] = React.useState(false);
   const [downloadFormat, setDownloadFormat] = React.useState<"txt" | "json" | "srt" | "vtt" | "pdf">("txt");
   const [downloadLoading, setDownloadLoading] = React.useState(false);
@@ -108,6 +115,9 @@ export function TranscriptDetailsClient() {
 				setDeletePreview(null);
 				setDeleteConfirmation("");
 				setDeleteError(null);
+				setReassignOpen(false);
+				setSelectedOwnerId("");
+				setReassignError(null);
 				setDownloadError(null);
 			})
       .catch((err: unknown) => {
@@ -345,6 +355,36 @@ export function TranscriptDetailsClient() {
 		}
 	}
 
+	async function openReassignment() {
+		if (!detail || reassignLoading) return;
+		setReassignOpen(true);
+		setReassignError(null);
+		setReassignLoading(true);
+		try {
+			const response = await getTranscriptReassignmentOptions(detail.jobId);
+			setReassignUsers(response.users);
+		} catch (err) {
+			setReassignError(reassignmentErrorMessage(err));
+		} finally {
+			setReassignLoading(false);
+		}
+	}
+
+	async function submitReassignment() {
+		if (!detail || reassignSubmitting || !selectedOwnerId || selectedOwnerId === detail.ownerUserId) return;
+		setReassignSubmitting(true);
+		setReassignError(null);
+		try {
+			await reassignTranscript(detail.jobId, selectedOwnerId);
+			setReassignOpen(false);
+			setRetryToken((value) => value + 1);
+		} catch (err) {
+			setReassignError(reassignmentErrorMessage(err));
+		} finally {
+			setReassignSubmitting(false);
+		}
+	}
+
   async function startDownload() {
     if (!detail || downloadLoading || !transcriptReady) return;
     setDownloadError(null);
@@ -411,6 +451,7 @@ export function TranscriptDetailsClient() {
       <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
 		<aside className="space-y-4">
 			<MetadataCard detail={detail} status={currentStatus} isAdmin={isAdmin} />
+			{isAdmin && <OwnershipCard detail={detail} onReassign={openReassignment} />}
 			{isAdmin && (
 				<TranscriptDeletionCard
 					detail={detail}
@@ -497,6 +538,21 @@ export function TranscriptDetailsClient() {
           return stored;
         }}
       />
+		{reassignOpen && detail && (
+			<ReassignmentDialog
+				detail={detail}
+				users={reassignUsers}
+				search={reassignSearch}
+				selectedOwnerId={selectedOwnerId}
+				loading={reassignLoading}
+				submitting={reassignSubmitting}
+				error={reassignError}
+				onSearch={setReassignSearch}
+				onSelect={setSelectedOwnerId}
+				onSubmit={submitReassignment}
+				onClose={() => setReassignOpen(false)}
+			/>
+		)}
     </PageContainer>
   );
 }
@@ -633,6 +689,68 @@ function MetadataCard({ detail, status, isAdmin }: { detail: TranscriptDetail; s
   );
 }
 
+function OwnershipCard({ detail, onReassign }: { detail: TranscriptDetail; onReassign: () => void }) {
+  const hasOwner = Boolean(detail.ownerUserId);
+  return (
+    <Card>
+      <CardHeader><CardTitle>Ownership</CardTitle></CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {hasOwner ? (
+          <>
+            <Meta label="Current owner" value={ownerLabel(detail)} />
+            <Meta label="Display name" value={detail.ownerDisplayName || "Not recorded"} />
+            <Meta label="Email" value={detail.ownerEmail || "Not recorded"} />
+          </>
+        ) : (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">No owner assigned</p>
+        )}
+        <Button type="button" variant="outline" onClick={onReassign}>Reassign transcript</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReassignmentDialog({ detail, users, search, selectedOwnerId, loading, submitting, error, onSearch, onSelect, onSubmit, onClose }: {
+  detail: TranscriptDetail;
+  users: AdminUserSummary[];
+  search: string;
+  selectedOwnerId: string;
+  loading: boolean;
+  submitting: boolean;
+  error: string | null;
+  onSearch: (value: string) => void;
+  onSelect: (value: string) => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const filtered = users.filter((user) => `${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase().trim()));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl border bg-card p-5 shadow-xl" role="dialog" aria-modal="true" aria-label="Reassign transcript">
+        <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Reassign transcript</h2><Button type="button" size="icon" variant="ghost" onClick={onClose} disabled={submitting} aria-label="Close"><X className="h-4 w-4" /></Button></div>
+        <div className="space-y-4 text-sm">
+          <div className="rounded-lg border p-3"><p className="text-muted-foreground">Current owner</p><p className="font-medium">{detail.ownerUserId ? ownerLabel(detail) : "No owner assigned"}</p></div>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">The previous owner will lose access after reassignment. Administrators retain access.</p>
+          <Input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search active users" disabled={loading || submitting} />
+          <div className="max-h-64 space-y-2 overflow-auto rounded-lg border p-2">
+            {loading ? <p className="p-2 text-muted-foreground">Loading users...</p> : filtered.length === 0 ? <p className="p-2 text-muted-foreground">No active users found.</p> : filtered.map((user) => {
+              const current = user.id === detail.ownerUserId;
+              return (
+                <label key={user.id} className={cn("flex cursor-pointer items-start gap-3 rounded-md p-2", current ? "opacity-50" : "hover:bg-muted")}>
+                  <input type="radio" name="new-owner" value={user.id} checked={selectedOwnerId === user.id} disabled={current || submitting} onChange={() => onSelect(user.id)} className="mt-1" />
+                  <span className="min-w-0"><span className="block font-medium">{user.name}{current ? " (current owner)" : ""}</span><span className="block break-all text-xs text-muted-foreground">{user.email}</span></span>
+                </label>
+              );
+            })}
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>Cancel</Button><Button type="button" onClick={onSubmit} disabled={submitting || loading || !selectedOwnerId || selectedOwnerId === detail.ownerUserId}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Reassign</Button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TranscriptDeletionCard({ detail, preview, loading, submitting, confirmation, error, onPreview, onConfirmation, onDelete }: {
   detail: TranscriptDetail;
   preview: TranscriptDeletionPreview | null;
@@ -692,6 +810,17 @@ function deletionErrorMessage(error: unknown) {
     return error.message;
   }
   return "Transcript deletion failed.";
+}
+
+function reassignmentErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === "TARGET_USER_NOT_FOUND") return "The selected user was not found.";
+    if (error.code === "TARGET_USER_INACTIVE") return "The selected user is inactive.";
+    if (error.code === "TRANSCRIPT_OWNER_UNCHANGED") return "This transcript is already assigned to that user.";
+    if (error.status === 403) return "Only administrators can reassign transcripts.";
+    return error.message;
+  }
+  return "Transcript reassignment failed.";
 }
 
 function ownerLabel(detail: Pick<TranscriptDetail, "ownerDisplayName" | "ownerEmail" | "ownerUserId">) {

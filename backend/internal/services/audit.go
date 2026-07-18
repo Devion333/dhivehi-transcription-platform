@@ -1,14 +1,17 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +25,7 @@ const (
 	AuditOutcomeSuccess       = "success"
 	AuditOutcomeFailure       = "failure"
 	maxAuditPageSize          = 100
+	maxAuditExportRows        = 10000
 	maxAuditMetaBytes         = 4096
 	maxUserAgentLength        = 256
 	DefaultAuditRetentionDays = 365
@@ -82,68 +86,90 @@ type AuditEventRecord struct {
 	CreatedAt    time.Time
 }
 
+type AuditCSVExport struct {
+	Filename    string
+	ContentType string
+	Body        []byte
+	RowCount    int
+	FilterTypes []string
+	Truncated   bool
+}
+
 var actionCategories = map[string]string{
-	"auth.login_succeeded":          "authentication",
-	"auth.login_failed":             "authentication",
-	"auth.logout":                   "authentication",
-	"password_change_succeeded":     "authentication",
-	"password_change_failed":        "authentication",
-	"admin.user_created":            "user_management",
-	"admin.user_updated":            "user_management",
-	"admin.user_activated":          "user_management",
-	"admin.user_deactivated":        "user_management",
-	"admin.password_reset":          "user_management",
-	"transcript.uploaded":           "transcript",
-	"transcript.viewed":             "transcript",
-	"transcript.segment_updated":    "transcript",
-	"speaker_rename_succeeded":      "transcript",
-	"speaker_rename_failed":         "transcript",
-	"speaker_name_reset":            "transcript",
-	"transcript_deletion_previewed": "transcript",
-	"transcript_deletion_succeeded": "transcript",
-	"transcript_deletion_failed":    "transcript",
-	"analysis.started":              "analysis",
-	"analysis.completed":            "analysis",
-	"analysis.failed":               "analysis",
-	"search.executed":               "search",
-	"transcript_download_succeeded": "export",
-	"transcript_download_failed":    "export",
-	"export.pdf_generated":          "export",
-	"export.pdf_failed":             "export",
-	"admin.job_retry_requested":     "job_management",
-	"admin.job_retry_succeeded":     "job_management",
-	"admin.job_retry_failed":        "job_management",
+	"auth.login_succeeded":              "authentication",
+	"auth.login_failed":                 "authentication",
+	"auth.logout":                       "authentication",
+	"password_change_succeeded":         "authentication",
+	"password_change_failed":            "authentication",
+	"profile_viewed":                    "authentication",
+	"profile_updated":                   "authentication",
+	"profile_update_failed":             "authentication",
+	"admin.user_created":                "user_management",
+	"admin.user_updated":                "user_management",
+	"admin.user_activated":              "user_management",
+	"admin.user_deactivated":            "user_management",
+	"admin.password_reset":              "user_management",
+	"transcript.uploaded":               "transcript",
+	"transcript.viewed":                 "transcript",
+	"transcript.segment_updated":        "transcript",
+	"speaker_rename_succeeded":          "transcript",
+	"speaker_rename_failed":             "transcript",
+	"speaker_name_reset":                "transcript",
+	"transcript_deletion_previewed":     "transcript",
+	"transcript_deletion_succeeded":     "transcript",
+	"transcript_deletion_failed":        "transcript",
+	"transcript_reassignment_succeeded": "transcript",
+	"transcript_reassignment_failed":    "transcript",
+	"analysis.started":                  "analysis",
+	"analysis.completed":                "analysis",
+	"analysis.failed":                   "analysis",
+	"search.executed":                   "search",
+	"transcript_download_succeeded":     "export",
+	"transcript_download_failed":        "export",
+	"audit_export_succeeded":            "export",
+	"audit_export_failed":               "export",
+	"export.pdf_generated":              "export",
+	"export.pdf_failed":                 "export",
+	"admin.job_retry_requested":         "job_management",
+	"admin.job_retry_succeeded":         "job_management",
+	"admin.job_retry_failed":            "job_management",
 }
 
 var auditMetadataAllowlist = map[string]map[string]struct{}{
-	"auth.login_failed":             keys("loginIdentifierHash"),
-	"password_change_succeeded":     keys("otherSessionsRevoked", "currentSessionPreserved"),
-	"password_change_failed":        keys("reasonCode"),
-	"admin.user_created":            keys("targetUserId", "targetRole"),
-	"admin.user_updated":            keys("targetUserId", "changedFields", "previousRole", "newRole"),
-	"admin.user_activated":          keys("targetUserId", "previousActiveState", "newActiveState"),
-	"admin.user_deactivated":        keys("targetUserId", "previousActiveState", "newActiveState", "sessionsRevoked"),
-	"admin.password_reset":          keys("targetUserId", "sessionsRevoked"),
-	"transcript.uploaded":           keys("jobId", "filename", "category", "referenceNumber", "requestedSpeakers"),
-	"transcript.viewed":             keys("jobId"),
-	"transcript.segment_updated":    keys("jobId", "segmentId", "segmentIndex", "changedFields"),
-	"speaker_rename_succeeded":      keys("jobId", "speakerKey"),
-	"speaker_rename_failed":         keys("jobId", "speakerKey"),
-	"speaker_name_reset":            keys("jobId", "speakerKey"),
-	"transcript_deletion_previewed": keys("jobId", "segmentCount", "mediaObjectCount"),
-	"transcript_deletion_succeeded": keys("jobId", "segmentCount", "mediaObjectCount"),
-	"transcript_deletion_failed":    keys("jobId", "segmentCount", "mediaObjectCount", "failureCode", "partialCleanupCategories"),
-	"analysis.started":              keys("analysisStatus", "provider"),
-	"analysis.completed":            keys("analysisStatus", "durationMs", "provider"),
-	"analysis.failed":               keys("analysisStatus", "durationMs", "provider"),
-	"search.executed":               keys("queryLength", "page", "pageSize", "statusFilter", "categoryFilter", "resultCount"),
-	"transcript_download_succeeded": keys("jobId", "format"),
-	"transcript_download_failed":    keys("jobId", "format"),
-	"export.pdf_generated":          keys("jobId", "format", "includeAnalysis"),
-	"export.pdf_failed":             keys("jobId", "format", "includeAnalysis"),
-	"admin.job_retry_requested":     keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
-	"admin.job_retry_succeeded":     keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
-	"admin.job_retry_failed":        keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
+	"auth.login_failed":                 keys("loginIdentifierHash"),
+	"password_change_succeeded":         keys("otherSessionsRevoked", "currentSessionPreserved"),
+	"password_change_failed":            keys("reasonCode"),
+	"profile_updated":                   keys("changedFields"),
+	"profile_update_failed":             keys("changedFields"),
+	"admin.user_created":                keys("targetUserId", "targetRole"),
+	"admin.user_updated":                keys("targetUserId", "changedFields", "previousRole", "newRole"),
+	"admin.user_activated":              keys("targetUserId", "previousActiveState", "newActiveState"),
+	"admin.user_deactivated":            keys("targetUserId", "previousActiveState", "newActiveState", "sessionsRevoked"),
+	"admin.password_reset":              keys("targetUserId", "sessionsRevoked"),
+	"transcript.uploaded":               keys("jobId", "filename", "category", "referenceNumber", "requestedSpeakers"),
+	"transcript.viewed":                 keys("jobId"),
+	"transcript.segment_updated":        keys("jobId", "segmentId", "segmentIndex", "changedFields"),
+	"speaker_rename_succeeded":          keys("jobId", "speakerKey"),
+	"speaker_rename_failed":             keys("jobId", "speakerKey"),
+	"speaker_name_reset":                keys("jobId", "speakerKey"),
+	"transcript_deletion_previewed":     keys("jobId", "segmentCount", "mediaObjectCount"),
+	"transcript_deletion_succeeded":     keys("jobId", "segmentCount", "mediaObjectCount"),
+	"transcript_deletion_failed":        keys("jobId", "segmentCount", "mediaObjectCount", "failureCode", "partialCleanupCategories"),
+	"transcript_reassignment_succeeded": keys("jobId", "previousOwnerUserId", "newOwnerUserId"),
+	"transcript_reassignment_failed":    keys("jobId", "previousOwnerUserId", "newOwnerUserId"),
+	"analysis.started":                  keys("analysisStatus", "provider"),
+	"analysis.completed":                keys("analysisStatus", "durationMs", "provider"),
+	"analysis.failed":                   keys("analysisStatus", "durationMs", "provider"),
+	"search.executed":                   keys("queryLength", "page", "pageSize", "statusFilter", "categoryFilter", "resultCount"),
+	"transcript_download_succeeded":     keys("jobId", "format"),
+	"transcript_download_failed":        keys("jobId", "format"),
+	"audit_export_succeeded":            keys("rowCount", "filterTypes", "truncated"),
+	"audit_export_failed":               keys("rowCount", "filterTypes", "truncated"),
+	"export.pdf_generated":              keys("jobId", "format", "includeAnalysis"),
+	"export.pdf_failed":                 keys("jobId", "format", "includeAnalysis"),
+	"admin.job_retry_requested":         keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
+	"admin.job_retry_succeeded":         keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
+	"admin.job_retry_failed":            keys("jobId", "stage", "previousStatus", "newStatus", "retryCount", "failureCode"),
 }
 
 func keys(values ...string) map[string]struct{} {
@@ -233,6 +259,131 @@ func ListAuditEvents(ctx context.Context, filters AuditFilters) (dtos.AuditListR
 		totalPages = (total + filters.PageSize - 1) / filters.PageSize
 	}
 	return dtos.AuditListResponse{Items: items, Pagination: dtos.Pagination{Page: filters.Page, PageSize: filters.PageSize, Total: total, TotalPages: totalPages, HasNextPage: filters.Page < totalPages}}, nil
+}
+
+func ExportAuditEventsCSV(ctx context.Context, filters AuditFilters) (AuditCSVExport, error) {
+	filters = normalizeAuditFilters(filters)
+	where, args, err := auditWhere(filters)
+	if err != nil {
+		return AuditCSVExport{}, err
+	}
+	var total int
+	if err := Database.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_events`+where, args...).Scan(&total); err != nil {
+		return AuditCSVExport{}, err
+	}
+	filterTypes := auditFilterTypes(filters)
+	if total > maxAuditExportRows {
+		return AuditCSVExport{RowCount: total, FilterTypes: filterTypes}, newServiceError(ErrCodeAuditExportTooLarge, errors.New("audit export too large"))
+	}
+	queryArgs := append(append([]interface{}{}, args...), maxAuditExportRows)
+	query := fmt.Sprintf(`SELECT id, actor_user_id::text, actor_name, actor_email, actor_role, action, category, resource_type, resource_id, outcome, ip_address, user_agent, metadata_json, created_at FROM audit_events%s ORDER BY created_at DESC, id DESC LIMIT $%d`, where, len(args)+1)
+	rows, err := Database.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return AuditCSVExport{}, err
+	}
+	defer rows.Close()
+	records := []AuditEventRecord{}
+	for rows.Next() {
+		record, err := scanAuditEvent(rows)
+		if err != nil {
+			return AuditCSVExport{}, err
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return AuditCSVExport{}, err
+	}
+	body, err := renderAuditCSV(records)
+	if err != nil {
+		return AuditCSVExport{}, err
+	}
+	return AuditCSVExport{Filename: "audit-events-" + time.Now().UTC().Format("2006-01-02") + ".csv", ContentType: "text/csv; charset=utf-8", Body: body, RowCount: len(records), FilterTypes: filterTypes, Truncated: false}, nil
+}
+
+func renderAuditCSV(records []AuditEventRecord) ([]byte, error) {
+	buffer := bytes.NewBuffer([]byte{0xEF, 0xBB, 0xBF})
+	writer := csv.NewWriter(buffer)
+	if err := writer.Write([]string{"Timestamp", "Actor display name", "Actor email", "Actor role", "Action", "Outcome", "Target type", "Target ID", "Failure code", "IP address", "Metadata summary"}); err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		metadata := auditMetadataMap(record)
+		if err := writer.Write([]string{record.CreatedAt.UTC().Format(time.RFC3339), nullString(record.ActorName), nullString(record.ActorEmail), nullString(record.ActorRole), record.Action, record.Outcome, nullString(record.ResourceType), nullString(record.ResourceID), metadataFailureCode(metadata), nullString(record.IPAddress), auditMetadataSummary(metadata)}); err != nil {
+			return nil, err
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func auditMetadataMap(record AuditEventRecord) map[string]interface{} {
+	metadata := map[string]interface{}{}
+	_ = json.Unmarshal(record.MetadataJSON, &metadata)
+	return metadata
+}
+
+func metadataFailureCode(metadata map[string]interface{}) string {
+	if value, ok := metadata["failureCode"]; ok {
+		return fmt.Sprint(value)
+	}
+	if value, ok := metadata["reasonCode"]; ok {
+		return fmt.Sprint(value)
+	}
+	return ""
+}
+
+func auditMetadataSummary(metadata map[string]interface{}) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		if !isSensitiveAuditKey(key) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+fmt.Sprint(sanitizeAuditValue(metadata[key])))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func auditFilterTypes(filters AuditFilters) []string {
+	filters = normalizeAuditFilters(filters)
+	items := []string{}
+	if filters.Search != "" {
+		items = append(items, "search")
+	}
+	if filters.Category != "" {
+		items = append(items, "category")
+	}
+	if filters.Action != "" {
+		items = append(items, "action")
+	}
+	if filters.Outcome != "" {
+		items = append(items, "outcome")
+	}
+	if filters.ActorUserID != "" {
+		items = append(items, "actorUserId")
+	}
+	if filters.ResourceType != "" {
+		items = append(items, "resourceType")
+	}
+	if filters.ResourceID != "" {
+		items = append(items, "resourceId")
+	}
+	if filters.DateFrom != "" {
+		items = append(items, "dateFrom")
+	}
+	if filters.DateTo != "" {
+		items = append(items, "dateTo")
+	}
+	return items
 }
 
 func GetAuditEvent(ctx context.Context, eventID string) (dtos.AuditEventDetail, error) {
