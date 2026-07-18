@@ -40,7 +40,7 @@ export function ActivityClient() {
 
   return (
     <PageContainer>
-      <PageHeader title="Activity" description="Your own safe account and transcript actions. Administrative audit metadata is not shown here." />
+      <PageHeader title="Activity" />
       {loading && <LoadingState label="Loading activity" />}
       {error && <ErrorState title="Could not load activity" description={error} />}
       {!loading && !error && items.length === 0 && <EmptyState title="No activity yet" description="Your recent uploads, transcript views, edits, reviews, and downloads will appear here." />}

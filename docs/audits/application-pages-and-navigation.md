@@ -6,7 +6,7 @@ Branch: `feature/application-pages`
 
 ## Summary
 
-The application now has 22 navigable page routes. Eight meaningful pages were added without duplicating existing transcript detail, upload, search, or admin job pages.
+The application now has 21 navigable page routes. `/Supported-Formats` is preserved only as a compatibility redirect to `/Help#supported-formats`, not as a primary standalone destination.
 
 ## Added Routes
 
@@ -17,11 +17,11 @@ The application now has 22 navigable page routes. Eight meaningful pages were ad
 | `/Analysis/Review-Queue` | Accessible completed analyses grouped by review status. | Authenticated. Standard users receive owned transcripts only; admins receive all via transcript list service. |
 | `/Admin/Transcripts` | Admin oversight list for transcripts, owners, processing status, review status, and admin actions. | Admin UI route plus backend admin enforcement for reassignment/deletion actions. |
 | `/Admin/System-Health` | Concise backend, dependency, and worker health. | Admin UI route plus admin-only worker health API. |
-| `/Help` | User guide for upload, processing, editing, speaker names, search, analysis review, downloads, notifications, and security. | Authenticated. |
-| `/Supported-Formats` | Upload and export format reference using shared upload validation constants. | Authenticated. |
+| `/Help` | User guide for upload, processing, editing, speaker names, search, transcript review, downloads, notifications, change password access, and supported formats. | Authenticated. |
+| `/Supported-Formats` | Compatibility redirect to `/Help#supported-formats`. | Authenticated. Not a primary navigation destination. |
 | `/About` | Professional system information, workflow, privacy model, technology summary, and generated-analysis disclaimer. | Authenticated. |
 
-## Final Route Inventory
+## Final Navigable Route Inventory
 
 | Count | Route |
 | --- | --- |
@@ -45,8 +45,13 @@ The application now has 22 navigable page routes. Eight meaningful pages were ad
 | 18 | `/Admin/Transcripts` |
 | 19 | `/Admin/System-Health` |
 | 20 | `/Help` |
-| 21 | `/Supported-Formats` |
-| 22 | `/About` |
+| 21 | `/About` |
+
+Compatibility redirects not counted as primary navigable pages:
+
+| Route | Redirect target |
+| --- | --- |
+| `/Supported-Formats` | `/Help#supported-formats` |
 
 ## Navigation Placement
 
@@ -57,6 +62,7 @@ Main sidebar:
 | Dashboard | `/` |
 | Upload | `/Upload` |
 | Transcripts | `/Transcripts` |
+| Folders | `/Folders` |
 | Search | `/Search` |
 | Notifications | `/Notifications` |
 | Activity | `/Activity` |
@@ -66,9 +72,9 @@ Administration sidebar, visible only to admins:
 
 | Link | Route |
 | --- | --- |
-| Transcripts | `/Admin/Transcripts` |
+| Transcript Management | `/Admin/Transcripts` |
 | System Health | `/Admin/System-Health` |
-| Review Queue | `/Analysis/Review-Queue` |
+| Transcript Review | `/Analysis/Review-Queue` |
 | Users | `/Admin/Users` |
 | Audit | `/Admin/Audit` |
 | Jobs | `/Admin/Jobs` |
@@ -78,9 +84,11 @@ Account/mobile menu:
 | Link | Route |
 | --- | --- |
 | Profile | `/Account/Profile` |
-| Security | `/Account/Security` |
-| Supported formats | `/Supported-Formats` |
 | About | `/About` |
+
+Password changes are accessed from `/Account/Profile` via the `Change password` action. The internal route remains `/Account/Security`, but user-facing navigation and headings use `Change password`.
+
+Supported format information is available on Help under `Supported formats` at `/Help#supported-formats`.
 
 The notification bell popover keeps its compact workflow view and now includes `View all notifications` linking to `/Notifications`.
 

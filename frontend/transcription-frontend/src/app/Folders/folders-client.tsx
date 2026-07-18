@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderPlus, Search } from "lucide-react";
+import { FolderOpen, FolderPlus, Search } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -11,9 +11,12 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { Textarea } from "@/components/ui/textarea";
 import { createFolder, listFolders } from "@/lib/api/folders";
 import type { Folder, Pagination } from "@/lib/api/types";
+import { sectionToneClasses } from "@/lib/section-styles";
+import { cn } from "@/lib/utils";
 
 export function FoldersClient() {
   const auth = useAuth();
@@ -58,9 +61,9 @@ export function FoldersClient() {
 
   return (
     <PageContainer>
-      <PageHeader title="Folders" description="Group related transcripts into cases or working folders." />
+      <PageHeader title="Folders" />
       <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <Card><CardContent className="p-4"><form className="space-y-3" onSubmit={submitCreate}><h2 className="font-semibold">Create folder</h2><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Case 2026-014" maxLength={120} /><Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Related interview recordings" maxLength={500} /><Button type="submit" disabled={creating || !name.trim()}><FolderPlus className="h-4 w-4" /> Create</Button></form></CardContent></Card>
+        <Card className={cn("border-t-4", sectionToneClasses.folder.border)}><CardContent className="p-4"><form className="space-y-3" onSubmit={submitCreate}><SectionHeading title="Create folder" icon={FolderPlus} tone="folder" /><div className="space-y-2"><label className="text-sm font-medium" htmlFor="folder-name">Name</label><Input id="folder-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Enter name" maxLength={120} /></div><div className="space-y-2"><label className="text-sm font-medium" htmlFor="folder-description">Description</label><Textarea id="folder-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Enter description" maxLength={500} /></div><Button type="submit" disabled={creating || !name.trim()}><FolderPlus className={cn("h-4 w-4", sectionToneClasses.folder.text)} /> Create</Button></form></CardContent></Card>
         <div>
           <form className="mb-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setQuery(search); }}><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search folders" className="pl-9" /></div><Button type="submit" variant="outline">Search</Button></form>
           {loading && <LoadingState label="Loading folders" />}
@@ -74,7 +77,7 @@ export function FoldersClient() {
 }
 
 function FolderRow({ folder, showOwner }: { folder: Folder; showOwner: boolean }) {
-  return <Card><CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"><div className="min-w-0"><h2 className="break-words font-semibold">{folder.name}</h2>{folder.description && <p className="mt-1 text-sm text-muted-foreground">{folder.description}</p>}<p className="mt-1 text-xs text-muted-foreground">{folder.transcriptCount} transcript{folder.transcriptCount === 1 ? "" : "s"} · Updated {formatDate(folder.updatedAt)}{showOwner ? ` · Owner: ${folder.ownerDisplayName}` : ""}</p></div><Button asChild><Link href={`/Folders/Details?folder_id=${encodeURIComponent(folder.id)}`}>Open</Link></Button></CardContent></Card>;
+  return <Card className="border-l-4 border-[var(--accent-folder-border)]"><CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"><div className="flex min-w-0 gap-3"><span className={cn("mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", sectionToneClasses.folder.icon)}><FolderOpen className="h-4 w-4" /></span><div className="min-w-0"><h2 className="break-words font-semibold">{folder.name}</h2>{folder.description && <p className="mt-1 text-sm text-muted-foreground">{folder.description}</p>}<p className="mt-1 text-xs text-muted-foreground">{folder.transcriptCount} transcript{folder.transcriptCount === 1 ? "" : "s"} · Updated {formatDate(folder.updatedAt)}{showOwner ? ` · Owner: ${folder.ownerDisplayName}` : ""}</p></div></div><Button asChild><Link href={`/Folders/Details?folder_id=${encodeURIComponent(folder.id)}`}>Open</Link></Button></CardContent></Card>;
 }
 
 function formatDate(value: string) {

@@ -11,10 +11,13 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { getAdminJobHealth } from "@/lib/api/admin-jobs";
 import { apiClient } from "@/lib/api/client";
 import type { AdminJobHealthResponse, StatsResponse, TranscriptSummary } from "@/lib/api/types";
+import type { SectionTone } from "@/lib/section-styles";
+import { sectionToneClasses } from "@/lib/section-styles";
 import { fallbackText, formatTranscriptDate, segmentCountLabel, transcriptDetailPath } from "@/lib/transcript-list-utils";
 import { cn } from "@/lib/utils";
 
@@ -94,24 +97,25 @@ function MetricGrid({ stats }: { stats: StatsResponse }) {
   const completed = stats.transcribed;
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <MetricCard label="Total transcripts" value={stats.totalTranscripts} detail={`${stats.totalSegments.toLocaleString()} segments`} icon={FileText} />
-      <MetricCard label="Processing" value={processing} detail="Uploaded or separated" icon={Clock} />
-      <MetricCard label="Completed" value={completed} detail={`${stats.analysisComplete.toLocaleString()} analysed`} icon={CheckCircle2} />
-      <MetricCard label="Failed" value={stats.failed} detail="Needs review" icon={Activity} />
+      <MetricCard label="Total transcripts" value={stats.totalTranscripts} detail={`${stats.totalSegments.toLocaleString()} segments`} icon={FileText} tone="transcript" />
+      <MetricCard label="Processing" value={processing} detail="Uploaded or separated" icon={Clock} tone="warning" />
+      <MetricCard label="Completed" value={completed} detail={`${stats.analysisComplete.toLocaleString()} analysed`} icon={CheckCircle2} tone="success" />
+      <MetricCard label="Failed" value={stats.failed} detail="Needs review" icon={Activity} tone="danger" />
     </div>
   );
 }
 
-function MetricCard({ label, value, detail, icon: Icon }: { label: string; value: number; detail: string; icon: React.ElementType }) {
+function MetricCard({ label, value, detail, icon: Icon, tone }: { label: string; value: number; detail: string; icon: React.ElementType; tone: SectionTone }) {
+  const classes = sectionToneClasses[tone];
   return (
-    <Card>
+    <Card className={cn("border-l-4", classes.border)}>
       <CardContent className="flex min-h-[108px] items-center justify-between gap-3 p-4">
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight">{value.toLocaleString()}</p>
+          <p className={cn("mt-1 text-2xl font-semibold tracking-tight", classes.text)}>{value.toLocaleString()}</p>
           <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
         </div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", classes.icon)}>
           <Icon className="h-4 w-4" />
         </div>
       </CardContent>
@@ -124,8 +128,7 @@ function RecentTranscripts({ items }: { items: TranscriptSummary[] }) {
     <Card className="min-w-0">
       <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-4">
         <div>
-          <CardTitle className="text-base">Recent transcripts</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">Latest files and processing status.</p>
+          <SectionHeading title="Recent transcripts" description="Latest files and processing status." icon={FileText} tone="transcript" />
         </div>
         <Button asChild size="sm" variant="outline"><Link href="/Transcripts">View all</Link></Button>
       </CardHeader>
@@ -164,7 +167,7 @@ function ProcessingOverview({ stats }: { stats: StatsResponse }) {
 
   return (
     <Card>
-      <CardHeader className="pb-3"><CardTitle className="text-base">Processing overview</CardTitle></CardHeader>
+      <CardHeader className="pb-3"><SectionHeading title="Processing overview" icon={Clock} tone="warning" /></CardHeader>
       <CardContent className="space-y-2">
         {rows.map(([label, value]) => <CountRow key={label} label={label} value={value} />)}
       </CardContent>
@@ -175,7 +178,7 @@ function ProcessingOverview({ stats }: { stats: StatsResponse }) {
 function QuickActions({ isAdmin }: { isAdmin: boolean }) {
   return (
     <Card>
-      <CardHeader className="pb-3"><CardTitle className="text-base">Quick actions</CardTitle></CardHeader>
+      <CardHeader className="pb-3"><SectionHeading title="Quick actions" icon={UploadCloud} tone="primary" /></CardHeader>
       <CardContent className="grid gap-2">
         <ActionLink href="/Upload" label="Upload media" icon={UploadCloud} />
         <ActionLink href="/Transcripts" label="Browse transcripts" icon={FileText} />
@@ -191,7 +194,7 @@ function WorkerStatus({ health }: { health: AdminJobHealthResponse | null }) {
   const workers = ["conversion", "diarization", "transcription", "analysis"];
   return (
     <Card>
-      <CardHeader className="pb-3"><CardTitle className="text-base">Worker status</CardTitle></CardHeader>
+      <CardHeader className="pb-3"><SectionHeading title="Worker status" icon={BriefcaseBusiness} tone="admin" /></CardHeader>
       <CardContent className="space-y-2">
         {!health ? <p className="text-sm text-muted-foreground">Worker status unavailable.</p> : workers.map((name) => <CountRow key={name} label={workerLabel(name)} value={workerStatusLabel(health.workers[name]?.status)} />)}
       </CardContent>
@@ -202,7 +205,7 @@ function WorkerStatus({ health }: { health: AdminJobHealthResponse | null }) {
 function UserSummary({ stats }: { stats: StatsResponse }) {
   return (
     <Card>
-      <CardHeader className="pb-3"><CardTitle className="text-base">Workspace summary</CardTitle></CardHeader>
+      <CardHeader className="pb-3"><SectionHeading title="Workspace summary" icon={Users} tone="transcript" /></CardHeader>
       <CardContent className="space-y-2 text-sm text-muted-foreground">
         <p>{stats.totalTranscripts.toLocaleString()} transcripts are available in this workspace.</p>
         <p>Use search to find transcript text, references, or categories.</p>

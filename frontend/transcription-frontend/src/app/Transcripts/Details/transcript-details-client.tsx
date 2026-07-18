@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, BarChart3, Check, Edit3, FileDown, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Trash2, Volume1, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, Check, ChevronDown, Edit3, FileDown, FileText, Folder as FolderIcon, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Trash2, UserRound, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -9,17 +9,22 @@ import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
+import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
 import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
+import { TranscriptReassignmentDialog } from "@/components/transcripts/transcript-reassignment-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { addTranscriptToFolder, listFolders, removeTranscriptFromFolder } from "@/lib/api/folders";
-import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, getTranscriptReassignmentOptions, reassignTranscript, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
+import { addTranscriptToFolder, createFolder, listFolders, removeTranscriptFromFolder } from "@/lib/api/folders";
+import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateAnalysisReview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
-import type { AdminUserSummary, Folder, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
+import type { AnalysisReviewStatus, Folder, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
+import { sectionToneClasses } from "@/lib/section-styles";
 import { transcriptStatusLabel } from "@/lib/transcript-status";
 import {
   formatDetailDate,
@@ -54,6 +59,7 @@ export function TranscriptDetailsClient() {
 	const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
+  const reviewParam = searchParams.get("review");
   const targetSegmentId = (searchParams.get("segment_id") ?? "").trim();
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const stopAtRef = React.useRef<number | null>(null);
@@ -82,17 +88,17 @@ export function TranscriptDetailsClient() {
 	const [deleteConfirmation, setDeleteConfirmation] = React.useState("");
 	const [deleteError, setDeleteError] = React.useState<string | null>(null);
 	const [reassignOpen, setReassignOpen] = React.useState(false);
-	const [reassignUsers, setReassignUsers] = React.useState<AdminUserSummary[]>([]);
-	const [reassignSearch, setReassignSearch] = React.useState("");
-	const [selectedOwnerId, setSelectedOwnerId] = React.useState("");
-	const [reassignLoading, setReassignLoading] = React.useState(false);
-	const [reassignSubmitting, setReassignSubmitting] = React.useState(false);
-	const [reassignError, setReassignError] = React.useState<string | null>(null);
 	const [exportOpen, setExportOpen] = React.useState(false);
-  const [downloadFormat, setDownloadFormat] = React.useState<"txt" | "json" | "srt" | "vtt" | "pdf">("txt");
   const [downloadLoading, setDownloadLoading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const [exportAnalysis, setExportAnalysis] = React.useState<TranscriptAnalysis | null>(null);
+  const [reviewLoading, setReviewLoading] = React.useState(false);
+  const [reviewSaving, setReviewSaving] = React.useState(false);
+  const [reviewStatus, setReviewStatus] = React.useState<AnalysisReviewStatus>("unreviewed");
+  const [reviewNote, setReviewNote] = React.useState("");
+  const [reviewOpen, setReviewOpen] = React.useState(false);
+  const [reviewMessage, setReviewMessage] = React.useState<string | null>(null);
+  const [reviewError, setReviewError] = React.useState<string | null>(null);
   const reloadedReadyRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -117,9 +123,13 @@ export function TranscriptDetailsClient() {
 				setDeleteConfirmation("");
 				setDeleteError(null);
 				setReassignOpen(false);
-				setSelectedOwnerId("");
-				setReassignError(null);
 				setDownloadError(null);
+				setExportAnalysis(null);
+        setReviewStatus(response.analysisReviewStatus ?? "unreviewed");
+        setReviewNote("");
+        setReviewOpen(reviewParam === "open");
+        setReviewMessage(null);
+        setReviewError(null);
 			})
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -129,7 +139,22 @@ export function TranscriptDetailsClient() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [jobId, retryToken]);
+  }, [jobId, retryToken, reviewParam]);
+
+  React.useEffect(() => {
+    if (!detail || detail.analysisStatus !== "complete") return;
+    const controller = new AbortController();
+    setReviewLoading(true);
+    getTranscriptAnalysis(detail.jobId, controller.signal)
+      .then((analysis) => {
+        setExportAnalysis(analysis);
+        setReviewStatus(analysis.review?.status ?? detail.analysisReviewStatus ?? "unreviewed");
+        setReviewNote(analysis.review?.note ?? "");
+      })
+      .catch(() => undefined)
+      .finally(() => { if (!controller.signal.aborted) setReviewLoading(false); });
+    return () => controller.abort();
+  }, [detail]);
 
   React.useEffect(() => {
     if (!detail || !targetSegmentId || scrolledTargetRef.current === `${detail.jobId}:${targetSegmentId}`) return;
@@ -208,7 +233,8 @@ export function TranscriptDetailsClient() {
   if (!jobId) {
     return (
       <PageContainer>
-        <PageHeader title="Transcript Details" description="Missing job ID." actions={<BackToList />} />
+        <div className="mb-4"><BackToList /></div>
+        <PageHeader title="Transcript Details" description="Missing job ID." />
         <EmptyState title="Invalid link" description="Open a transcript from the list." />
       </PageContainer>
     );
@@ -217,7 +243,8 @@ export function TranscriptDetailsClient() {
   if (loading) {
     return (
       <PageContainer>
-        <PageHeader title="Transcript Details" actions={<BackToList />} />
+        <div className="mb-4"><BackToList /></div>
+        <PageHeader title="Transcript Details" />
         <LoadingState label="Loading transcript" />
       </PageContainer>
     );
@@ -227,13 +254,15 @@ export function TranscriptDetailsClient() {
     const notFound = error?.toLowerCase().includes("not found");
     return (
       <PageContainer>
-        <PageHeader title="Transcript Details" actions={<BackToList />} />
+        <div className="mb-4"><BackToList /></div>
+        <PageHeader title="Transcript Details" />
         <ErrorState title={notFound ? "Transcript not found" : "Could not load transcript"} description={error ?? "Transcript data was unavailable."} onRetry={() => setRetryToken((value) => value + 1)} />
       </PageContainer>
     );
   }
 
-  const analysisHref = `/Transcripts/Analysis?job_id=${encodeURIComponent(detail.jobId)}`;
+  const detailHref = `/Transcripts/Details?job_id=${encodeURIComponent(detail.jobId)}`;
+  const analysisHref = `/Transcripts/Analysis?job_id=${encodeURIComponent(detail.jobId)}&returnTo=${encodeURIComponent(detailHref)}`;
   const isAdmin = auth.user?.role === "admin";
   const currentStatus = liveStatus?.status ?? detail.status;
   const transcriptReady = !isProcessingStatus(currentStatus) && currentStatus !== "failed";
@@ -356,46 +385,35 @@ export function TranscriptDetailsClient() {
 		}
 	}
 
-	async function openReassignment() {
-		if (!detail || reassignLoading) return;
-		setReassignOpen(true);
-		setReassignError(null);
-		setReassignLoading(true);
-		try {
-			const response = await getTranscriptReassignmentOptions(detail.jobId);
-			setReassignUsers(response.users);
-		} catch (err) {
-			setReassignError(reassignmentErrorMessage(err));
-		} finally {
-			setReassignLoading(false);
-		}
-	}
+  async function saveTranscriptReview(nextStatus: AnalysisReviewStatus) {
+    if (!detail || reviewSaving || detail.analysisStatus !== "complete") return;
+    setReviewSaving(true);
+    setReviewError(null);
+    setReviewMessage(null);
+    try {
+      const response = await updateAnalysisReview(detail.jobId, { status: nextStatus, note: reviewNote });
+      setReviewStatus(response.review.status);
+      setReviewNote(response.review.note ?? "");
+      setExportAnalysis((current) => current ? { ...current, review: response.review } : current);
+      setDetail((current) => current ? { ...current, analysisReviewStatus: response.review.status } : current);
+      setReviewMessage("Transcript review saved.");
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Transcript review could not be saved.");
+    } finally {
+      setReviewSaving(false);
+    }
+  }
 
-	async function submitReassignment() {
-		if (!detail || reassignSubmitting || !selectedOwnerId || selectedOwnerId === detail.ownerUserId) return;
-		setReassignSubmitting(true);
-		setReassignError(null);
-		try {
-			await reassignTranscript(detail.jobId, selectedOwnerId);
-			setReassignOpen(false);
-			setRetryToken((value) => value + 1);
-		} catch (err) {
-			setReassignError(reassignmentErrorMessage(err));
-		} finally {
-			setReassignSubmitting(false);
-		}
-	}
-
-  async function startDownload() {
+  async function startDownload(format: "txt" | "json" | "srt" | "vtt" | "pdf") {
     if (!detail || downloadLoading || !transcriptReady) return;
     setDownloadError(null);
-    if (downloadFormat === "pdf") {
+    if (format === "pdf") {
       setExportOpen(true);
       return;
     }
     setDownloadLoading(true);
     try {
-      const result = await downloadTranscript(detail.jobId, downloadFormat);
+      const result = await downloadTranscript(detail.jobId, format);
       const url = URL.createObjectURL(result.blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -413,21 +431,58 @@ export function TranscriptDetailsClient() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title={detail.filename}
-        actions={
-          <>
-            <BackToList />
-            <DownloadMenu format={downloadFormat} loading={downloadLoading} disabled={!transcriptReady || detail.segments.length === 0} onFormat={setDownloadFormat} onDownload={startDownload} />
-            {transcriptReady ? (
-              <Button asChild variant="outline"><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {detail.analysisStatus === "complete" ? "View analysis" : "Analyse"}</Link></Button>
-            ) : (
-              <Button type="button" variant="outline" disabled><BarChart3 className="h-4 w-4" /> Analyse</Button>
-            )}
-            <Button type="button" variant="outline" onClick={() => setRetryToken((value) => value + 1)}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
-          </>
-        }
-      />
+      <div className="mb-4"><BackToList /></div>
+      <header className="mb-3 space-y-3">
+      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="line-clamp-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground md:text-3xl" title={detail.filename}>{detail.filename}</h1>
+          <CompactMetadata detail={detail} status={currentStatus} />
+          <MetadataDetailsPanel detail={detail} />
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-start gap-2 xl:justify-end">
+          <TranscriptFolderButton detail={detail} onChanged={() => setRetryToken((value) => value + 1)} />
+          {speakers.length > 0 && (
+            <SpeakerManagementMenu
+              speakers={speakers}
+              speakerNames={detail.speakerNames}
+              edit={speakerEdit}
+              onEdit={(speakerKey) => setSpeakerEdit({ speakerKey, draft: getSpeakerDisplayName(speakerKey, detail.speakerNames), saving: false, error: null })}
+              onCancel={() => setSpeakerEdit(null)}
+              onDraft={(draft) => setSpeakerEdit((current) => current ? { ...current, draft, error: null } : current)}
+              onSave={(speakerKey, displayName) => saveSpeakerName(speakerKey, displayName)}
+              onReset={(speakerKey) => saveSpeakerName(speakerKey, speakerKey)}
+            />
+          )}
+          <DownloadMenu loading={downloadLoading} disabled={!transcriptReady || detail.segments.length === 0} onDownload={startDownload} />
+          {transcriptReady ? (
+            <Button asChild variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)}><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {analysisActionLabel(detail.analysisStatus)}</Link></Button>
+          ) : (
+            <Button type="button" variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)} disabled><BarChart3 className="h-4 w-4" /> Analysing...</Button>
+          )}
+          {isAdmin && <OwnershipControl detail={detail} onReassign={() => setReassignOpen(true)} />}
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setRetryToken((value) => value + 1)}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
+        </div>
+      </div>
+      </header>
+
+      {transcriptReady && (
+        <div className="mb-4">
+          <TranscriptReviewCard
+            open={reviewOpen}
+            onOpenChange={setReviewOpen}
+            status={reviewStatus}
+            note={reviewNote}
+            analysis={exportAnalysis}
+            loading={reviewLoading}
+            saving={reviewSaving}
+            editable={detail.analysisStatus === "complete" && Boolean(exportAnalysis)}
+            message={reviewMessage}
+            error={reviewError}
+            onNote={setReviewNote}
+            onSave={(status) => void saveTranscriptReview(status)}
+          />
+        </div>
+      )}
 
       <AudioCard
         mediaUrl={detail.mediaUrl}
@@ -449,66 +504,36 @@ export function TranscriptDetailsClient() {
 
       {downloadError && <p className="mt-3 text-sm text-destructive">{downloadError}</p>}
 
-      <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-		<aside className="space-y-4">
-			<MetadataCard detail={detail} status={currentStatus} isAdmin={isAdmin} />
-			<TranscriptFolderCard detail={detail} onChanged={() => setRetryToken((value) => value + 1)} />
-			{isAdmin && <OwnershipCard detail={detail} onReassign={openReassignment} />}
-			{isAdmin && (
-				<TranscriptDeletionCard
-					detail={detail}
-					preview={deletePreview}
-					loading={deleteLoading}
-					submitting={deleteSubmitting}
-					confirmation={deleteConfirmation}
-					error={deleteError}
-					onPreview={loadDeletionPreview}
-					onConfirmation={setDeleteConfirmation}
-					onDelete={confirmDelete}
-				/>
-			)}
-		</aside>
-
+      <div className="mt-8 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         <section className="min-w-0 space-y-4">
-          {speakers.length > 0 && (
-            <SpeakerManagementCard
-              speakers={speakers}
-              speakerNames={detail.speakerNames}
-              edit={speakerEdit}
-              onEdit={(speakerKey) => setSpeakerEdit({ speakerKey, draft: getSpeakerDisplayName(speakerKey, detail.speakerNames), saving: false, error: null })}
-              onCancel={() => setSpeakerEdit(null)}
-              onDraft={(draft) => setSpeakerEdit((current) => current ? { ...current, draft, error: null } : current)}
-              onSave={(speakerKey, displayName) => saveSpeakerName(speakerKey, displayName)}
-              onReset={(speakerKey) => saveSpeakerName(speakerKey, speakerKey)}
-            />
-          )}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <SectionHeading title="Transcript" description={`${detail.segments.length} segment${detail.segments.length === 1 ? "" : "s"}`} icon={FileText} tone="transcript" />
+            </div>
+          </div>
           {isProcessingStatus(currentStatus) && (
-            <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
-              <CardContent className="p-4 text-sm text-amber-900 dark:text-amber-200">
+            <Card className={sectionToneClasses.warning.panel}>
+              <CardContent className="p-3 text-sm">
                 Transcript is still processing: {transcriptStatusLabel(currentStatus)}.
               </CardContent>
             </Card>
           )}
           {liveStatus?.status === "failed" && liveStatus.failureMessage && (
-            <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40">
-              <CardContent className="p-4 text-sm text-red-900 dark:text-red-200">{liveStatus.failureMessage}</CardContent>
+            <Card className={sectionToneClasses.danger.panel}>
+              <CardContent className="p-3 text-sm">{liveStatus.failureMessage}</CardContent>
             </Card>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold">Segments</h2>
-              <p className="text-sm text-muted-foreground">{detail.segments.length} total</p>
-            </div>
-          </div>
           {detail.segments.length === 0 ? (
             <EmptyState title="No segments available" description={emptySegmentsMessage(detail.status)} />
           ) : (
-            <div className="space-y-4">
-              {detail.segments.map((segment) => (
+            <div className="space-y-3">
+              {detail.segments.map((segment, index) => (
                 <SegmentCard
                   key={segment.id}
                   segment={segment}
                   speakerNames={detail.speakerNames}
+                  speakerIndex={speakers.indexOf(segment.speaker)}
+                  isLast={index === detail.segments.length - 1}
                   active={activeSegmentId === segment.id}
                   edit={edits[segment.id] ?? initialEditState(segment.transcriptText)}
                   highlighted={highlightedSegmentId === segment.id}
@@ -525,6 +550,22 @@ export function TranscriptDetailsClient() {
             </div>
           )}
         </section>
+
+		<aside className="space-y-4 xl:order-last">
+			{isAdmin && (
+				<TranscriptDeletionCard
+					detail={detail}
+					preview={deletePreview}
+					loading={deleteLoading}
+					submitting={deleteSubmitting}
+					confirmation={deleteConfirmation}
+					error={deleteError}
+					onPreview={loadDeletionPreview}
+					onConfirmation={setDeleteConfirmation}
+					onDelete={confirmDelete}
+				/>
+			)}
+		</aside>
       </div>
 
       {detail.mediaUrl && <audio ref={audioRef} src={detail.mediaUrl} preload="metadata" />}
@@ -540,21 +581,14 @@ export function TranscriptDetailsClient() {
           return stored;
         }}
       />
-		{reassignOpen && detail && (
-			<ReassignmentDialog
-				detail={detail}
-				users={reassignUsers}
-				search={reassignSearch}
-				selectedOwnerId={selectedOwnerId}
-				loading={reassignLoading}
-				submitting={reassignSubmitting}
-				error={reassignError}
-				onSearch={setReassignSearch}
-				onSelect={setSelectedOwnerId}
-				onSubmit={submitReassignment}
-				onClose={() => setReassignOpen(false)}
-			/>
-		)}
+      <TranscriptReassignmentDialog
+        jobId={detail.jobId}
+        filename={detail.filename}
+        currentOwner={{ userId: detail.ownerUserId, displayName: detail.ownerDisplayName, email: detail.ownerEmail }}
+        open={reassignOpen}
+        onOpenChange={setReassignOpen}
+        onReassigned={() => setRetryToken((value) => value + 1)}
+      />
     </PageContainer>
   );
 }
@@ -567,7 +601,7 @@ function uniqueSpeakers(segments: TranscriptSegment[]) {
   return Array.from(new Set(segments.map((segment) => segment.speaker).filter(Boolean))).sort();
 }
 
-function SpeakerManagementCard({ speakers, speakerNames, edit, onEdit, onCancel, onDraft, onSave, onReset }: {
+function SpeakerManagementMenu({ speakers, speakerNames, edit, onEdit, onCancel, onDraft, onSave, onReset }: {
   speakers: string[];
   speakerNames: Record<string, string>;
   edit: SpeakerEditState | null;
@@ -578,37 +612,59 @@ function SpeakerManagementCard({ speakers, speakerNames, edit, onEdit, onCancel,
   onReset: (speakerKey: string) => void;
 }) {
   return (
-    <Card>
-      <CardHeader><CardTitle>Speakers</CardTitle></CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {speakers.map((speakerKey) => {
-          const editing = edit?.speakerKey === speakerKey;
-          const displayName = getSpeakerDisplayName(speakerKey, speakerNames);
-          return (
-            <div key={speakerKey} className="rounded-lg border p-3">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <p className="font-medium">{displayName}</p>
-                  <p className="text-xs text-muted-foreground">Generated label: {speakerKey}</p>
-                </div>
-                {!editing && <Button type="button" variant="outline" size="sm" onClick={() => onEdit(speakerKey)}>Edit</Button>}
-              </div>
-              {editing && (
-                <div className="mt-3 space-y-2">
-                  <Input value={edit.draft} onChange={(event) => onDraft(event.target.value)} disabled={edit.saving} maxLength={80} aria-label={`Display name for ${speakerKey}`} />
-                  {edit.error && <p className="text-sm text-destructive">{edit.error}</p>}
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" onClick={() => onSave(speakerKey, edit.draft)} disabled={edit.saving}>{edit.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => onReset(speakerKey)} disabled={edit.saving}>Reset to generated label</Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={edit.saving}><X className="h-4 w-4" /> Cancel</Button>
-                  </div>
-                </div>
-              )}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-2">
+          <UserRound className="h-4 w-4" /> Speakers {speakers.length}
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="bottom" sideOffset={8} avoidCollisions collisionPadding={16} className="w-[min(420px,calc(100vw-2rem))] p-0">
+        <div className="border-b px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">Speakers</p>
+              <p className="text-xs text-muted-foreground">Rename display labels without changing generated labels.</p>
             </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+            <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">{speakers.length}</span>
+          </div>
+        </div>
+        <div className="max-h-[min(60vh,420px)] overflow-y-auto">
+          <div className="grid grid-cols-[minmax(0,1fr)_110px_56px] gap-3 border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground">
+            <span>Speaker name</span>
+            <span>Generated label</span>
+            <span className="text-right">Action</span>
+          </div>
+          <div className="divide-y divide-border/70">
+            {speakers.map((speakerKey) => {
+              const editing = edit?.speakerKey === speakerKey;
+              const displayName = getSpeakerDisplayName(speakerKey, speakerNames);
+              return (
+                <div key={speakerKey} className="px-4 py-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)_110px_56px] items-center gap-3 text-sm">
+                    <p className="truncate font-medium" title={displayName}>{displayName}</p>
+                    <p className="truncate text-xs text-muted-foreground" title={speakerKey}>{speakerKey}</p>
+                    {!editing && <Button type="button" variant="ghost" size="sm" className="justify-self-end" onClick={() => onEdit(speakerKey)}>Edit</Button>}
+                    {editing && <span className="text-right text-xs text-muted-foreground">Editing</span>}
+                  </div>
+                  {editing && (
+                    <div className="mt-3 space-y-2 rounded-lg border bg-background p-3">
+                      <Input value={edit.draft} onChange={(event) => onDraft(event.target.value)} disabled={edit.saving} maxLength={80} aria-label={`Display name for ${speakerKey}`} />
+                      {edit.error && <p className="text-sm text-destructive">{edit.error}</p>}
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" onClick={() => onSave(speakerKey, edit.draft)} disabled={edit.saving}>{edit.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => onReset(speakerKey)} disabled={edit.saving}>Reset</Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={edit.saving}><X className="h-4 w-4" /> Cancel</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -639,70 +695,156 @@ function hasControlCharacters(value: string) {
 }
 
 function BackToList() {
-  return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
+  return <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 
-function DownloadMenu({ format, loading, disabled, onFormat, onDownload }: {
-  format: "txt" | "json" | "srt" | "vtt" | "pdf";
+function analysisActionLabel(status: string) {
+  if (status === "complete") return "View analysis";
+  if (status === "processing") return "Analysing...";
+  if (status === "failed") return "Retry analysis";
+  return "Analyse transcript";
+}
+
+function TranscriptReviewCard({ open, onOpenChange, status, note, analysis, loading, saving, editable, message, error, onNote, onSave }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  status: AnalysisReviewStatus;
+  note: string;
+  analysis: TranscriptAnalysis | null;
+  loading: boolean;
+  saving: boolean;
+  editable: boolean;
+  message: string | null;
+  error: string | null;
+  onNote: (note: string) => void;
+  onSave: (status: AnalysisReviewStatus) => void;
+}) {
+  const review = analysis?.review;
+  return (
+    <section id="transcript-review" className="rounded-xl border bg-card text-sm">
+      <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-expanded={open} onClick={() => onOpenChange(!open)}>
+        <span className="flex min-w-0 flex-wrap items-center gap-2"><span className="font-semibold">Transcript review</span><AnalysisReviewStatusBadge status={status} /></span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="space-y-4 border-t px-4 py-4">
+          <p className="text-muted-foreground">Record whether the transcript has been checked by a person for accuracy and completeness.</p>
+          <div className="flex flex-wrap items-center gap-2"><span className="text-muted-foreground">Status:</span><AnalysisReviewStatusBadge status={status} /></div>
+          {review?.reviewedByDisplayName && <PreviewRow label="Reviewed by" value={review.reviewedByDisplayName} />}
+          {review?.reviewedAt && <PreviewRow label="Reviewed" value={formatDetailDate(review.reviewedAt)} />}
+          {review?.note && <div><p className="text-muted-foreground">Reviewer note</p><p className="mt-1 whitespace-pre-wrap">{review.note}</p></div>}
+          {!editable && <p className="rounded-md border bg-muted/30 p-3 text-muted-foreground">Transcript review editing is available after analysis has completed.</p>}
+          {editable && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant={status === "reviewed" ? "default" : "outline"} disabled={saving} onClick={() => onSave("reviewed")}>{saving && status === "reviewed" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Mark reviewed</Button>
+                <Button type="button" size="sm" variant={status === "approved" ? "default" : "outline"} disabled={saving} onClick={() => onSave("approved")}>Approve</Button>
+                <Button type="button" size="sm" variant={status === "rejected" ? "destructive" : "outline"} disabled={saving} onClick={() => onSave("rejected")}>Reject</Button>
+                {status !== "unreviewed" && <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => onSave("unreviewed")}>Reset to unreviewed</Button>}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-muted-foreground" htmlFor="transcript-review-note">Optional reviewer note</label>
+                <Textarea id="transcript-review-note" value={note} onChange={(event) => onNote(event.target.value)} disabled={saving} maxLength={500} placeholder="Optional reviewer note" />
+              </div>
+              <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => onSave(status)}>Save note</Button>
+            </>
+          )}
+          {loading && <p className="text-muted-foreground">Loading review details...</p>}
+          {message && <p className="text-[var(--accent-success)]">{message}</p>}
+          {error && <p className="text-destructive">{error}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DownloadMenu({ loading, disabled, onDownload }: {
   loading: boolean;
   disabled: boolean;
-  onFormat: (format: "txt" | "json" | "srt" | "vtt" | "pdf") => void;
-  onDownload: () => void;
+  onDownload: (format: "txt" | "json" | "srt" | "vtt" | "pdf") => void;
 }) {
+  const options: Array<{ label: string; value: "txt" | "json" | "srt" | "vtt" | "pdf" }> = [
+    { label: "Plain text", value: "txt" },
+    { label: "JSON", value: "json" },
+    { label: "SRT subtitles", value: "srt" },
+    { label: "WebVTT subtitles", value: "vtt" },
+    { label: "PDF", value: "pdf" },
+  ];
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-background p-1">
-      <select
-        value={format}
-        onChange={(event) => onFormat(event.target.value as "txt" | "json" | "srt" | "vtt" | "pdf")}
-        disabled={disabled || loading}
-        aria-label="Download format"
-        className="h-8 rounded-md border-0 bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-      >
-        <option value="txt">Plain text</option>
-        <option value="json">JSON</option>
-        <option value="srt">SRT subtitles</option>
-        <option value="vtt">WebVTT subtitles</option>
-        <option value="pdf">PDF</option>
-      </select>
-      <Button type="button" size="sm" variant="outline" onClick={onDownload} disabled={disabled || loading}>
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-        Download
-      </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 gap-2" disabled={disabled || loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+          <span>Download</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {options.map((option) => <DropdownMenuItem key={option.value} disabled={disabled || loading} onSelect={() => onDownload(option.value)}>{option.label}</DropdownMenuItem>)}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function CompactMetadata({ detail, status }: { detail: TranscriptDetail; status: string }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      <span>{safeValue(detail.referenceNumber, "No reference")}</span>
+      <SeparatorDot />
+      <span>{safeValue(detail.category, "Uncategorized")}</span>
+      <SeparatorDot />
+      <StatusBadge status={status} />
+      <SeparatorDot />
+      <span>{formatDetailDate(detail.createdAt)}</span>
     </div>
   );
 }
 
-function MetadataCard({ detail, status, isAdmin }: { detail: TranscriptDetail; status: string; isAdmin: boolean }) {
+function SeparatorDot() {
+  return <span aria-hidden="true" className="text-muted-foreground/60">&middot;</span>;
+}
+
+function MetadataDetailsPanel({ detail }: { detail: TranscriptDetail }) {
+  const [open, setOpen] = React.useState(false);
   return (
-    <Card>
-      <CardHeader><CardTitle>Metadata</CardTitle></CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <div className="flex flex-wrap gap-2"><StatusBadge status={status} /><StatusBadge status={detail.analysisStatus} /></div>
-        <Meta label="Reference" value={safeValue(detail.referenceNumber, "No reference")} />
-        <Meta label="Category" value={safeValue(detail.category, "Uncategorized")} />
-        <Meta label="Speakers" value={String(detail.speakers || 0)} />
-        <Meta label="Segments" value={String(detail.segmentCount)} />
-        <Meta label="Created" value={formatDetailDate(detail.createdAt)} />
-        <Meta label="Updated" value={formatDetailDate(detail.updatedAt)} />
-        {detail.folderName && <Meta label="Folder" value={detail.folderName} />}
-        {isAdmin && <Meta label="Owner" value={ownerLabel(detail)} />}
-        <div><p className="text-muted-foreground">Notes</p><p className="mt-1 whitespace-pre-wrap">{safeValue(detail.notes, "No notes")}</p></div>
-      </CardContent>
-    </Card>
+    <div className="mt-2 text-sm">
+      <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-[var(--accent-primary)] hover:bg-[var(--accent-primary-bg)] hover:text-[var(--accent-primary)]" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        More details
+        <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+      </Button>
+      {open && (
+        <div className="mt-3 border-t pt-3">
+          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+            <Meta label="Job ID" value={detail.jobId} />
+            <Meta label="Updated" value={formatDetailDate(detail.updatedAt)} />
+            <Meta label="Analysis status" value={detail.analysisStatus} />
+            <Meta label="Speakers" value={String(detail.speakers || 0)} />
+            <Meta label="Segments" value={String(detail.segmentCount)} />
+          </dl>
+          <div className="mt-2"><p className="text-muted-foreground">Notes</p><p className="mt-1 whitespace-pre-wrap">{safeValue(detail.notes, "No notes")}</p></div>
+        </div>
+      )}
+    </div>
   );
 }
 
-function TranscriptFolderCard({ detail, onChanged }: { detail: TranscriptDetail; onChanged: () => void }) {
+function TranscriptFolderButton({ detail, onChanged }: { detail: TranscriptDetail; onChanged: () => void }) {
+  const [open, setOpen] = React.useState(false);
   const [folders, setFolders] = React.useState<Folder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [newDescription, setNewDescription] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    if (!open) return;
     const controller = new AbortController();
     listFolders({ page: 1, pageSize: 100 }, controller.signal).then((response) => setFolders(response.items)).catch(() => undefined);
     return () => controller.abort();
-  }, []);
+  }, [open]);
 
   async function addOrMove() {
     if (!selectedFolderId) return;
@@ -712,6 +854,7 @@ function TranscriptFolderCard({ detail, onChanged }: { detail: TranscriptDetail;
       if (detail.folderId) await removeTranscriptFromFolder(detail.folderId, detail.jobId);
       await addTranscriptToFolder(selectedFolderId, detail.jobId);
       setSelectedFolderId("");
+      setOpen(false);
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Folder update failed");
@@ -726,6 +869,7 @@ function TranscriptFolderCard({ detail, onChanged }: { detail: TranscriptDetail;
     setError(null);
     try {
       await removeTranscriptFromFolder(detail.folderId, detail.jobId);
+      setOpen(false);
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Folder update failed");
@@ -734,83 +878,89 @@ function TranscriptFolderCard({ detail, onChanged }: { detail: TranscriptDetail;
     }
   }
 
-  return (
-    <Card>
-      <CardHeader><CardTitle>Folder</CardTitle></CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <p className="text-muted-foreground">Current: {detail.folderName || "No folder"}</p>
-        <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)} disabled={saving}>
-          <option value="">Select folder</option>
-          {folders.filter((folder) => folder.id !== detail.folderId).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
-        </select>
-        {error && <p className="text-destructive">{error}</p>}
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={addOrMove} disabled={saving || !selectedFolderId}>{detail.folderId ? "Move" : "Add to folder"}</Button>
-          <Button type="button" variant="ghost" onClick={remove} disabled={saving || !detail.folderId}>Remove</Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+  async function createAndAdd() {
+    if (!newName.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await createFolder({ name: newName, description: newDescription });
+      if (detail.folderId) await removeTranscriptFromFolder(detail.folderId, detail.jobId);
+      await addTranscriptToFolder(response.folder.id, detail.jobId);
+      setNewName("");
+      setNewDescription("");
+      setCreateOpen(false);
+      setOpen(false);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Folder could not be created");
+    } finally {
+      setSaving(false);
+    }
+  }
 
-function OwnershipCard({ detail, onReassign }: { detail: TranscriptDetail; onReassign: () => void }) {
-  const hasOwner = Boolean(detail.ownerUserId);
-  return (
-    <Card>
-      <CardHeader><CardTitle>Ownership</CardTitle></CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {hasOwner ? (
-          <>
-            <Meta label="Current owner" value={ownerLabel(detail)} />
-            <Meta label="Display name" value={detail.ownerDisplayName || "Not recorded"} />
-            <Meta label="Email" value={detail.ownerEmail || "Not recorded"} />
-          </>
-        ) : (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">No owner assigned</p>
-        )}
-        <Button type="button" variant="outline" onClick={onReassign}>Reassign transcript</Button>
-      </CardContent>
-    </Card>
-  );
-}
+  const filteredFolders = folders.filter((folder) => folder.id !== detail.folderId && folder.name.toLowerCase().includes(search.toLowerCase().trim()));
 
-function ReassignmentDialog({ detail, users, search, selectedOwnerId, loading, submitting, error, onSearch, onSelect, onSubmit, onClose }: {
-  detail: TranscriptDetail;
-  users: AdminUserSummary[];
-  search: string;
-  selectedOwnerId: string;
-  loading: boolean;
-  submitting: boolean;
-  error: string | null;
-  onSearch: (value: string) => void;
-  onSelect: (value: string) => void;
-  onSubmit: () => void;
-  onClose: () => void;
-}) {
-  const filtered = users.filter((user) => `${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase().trim()));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl border bg-card p-5 shadow-xl" role="dialog" aria-modal="true" aria-label="Reassign transcript">
-        <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Reassign transcript</h2><Button type="button" size="icon" variant="ghost" onClick={onClose} disabled={submitting} aria-label="Close"><X className="h-4 w-4" /></Button></div>
-        <div className="space-y-4 text-sm">
-          <div className="rounded-lg border p-3"><p className="text-muted-foreground">Current owner</p><p className="font-medium">{detail.ownerUserId ? ownerLabel(detail) : "No owner assigned"}</p></div>
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">The previous owner will lose access after reassignment. Administrators retain access.</p>
-          <Input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search active users" disabled={loading || submitting} />
-          <div className="max-h-64 space-y-2 overflow-auto rounded-lg border p-2">
-            {loading ? <p className="p-2 text-muted-foreground">Loading users...</p> : filtered.length === 0 ? <p className="p-2 text-muted-foreground">No active users found.</p> : filtered.map((user) => {
-              const current = user.id === detail.ownerUserId;
-              return (
-                <label key={user.id} className={cn("flex cursor-pointer items-start gap-3 rounded-md p-2", current ? "opacity-50" : "hover:bg-muted")}>
-                  <input type="radio" name="new-owner" value={user.id} checked={selectedOwnerId === user.id} disabled={current || submitting} onChange={() => onSelect(user.id)} className="mt-1" />
-                  <span className="min-w-0"><span className="block font-medium">{user.name}{current ? " (current owner)" : ""}</span><span className="block break-all text-xs text-muted-foreground">{user.email}</span></span>
-                </label>
-              );
-            })}
+    <>
+      <Button type="button" variant="outline" size="sm" className="inline-flex max-w-48 shrink-0 items-center gap-2" onClick={() => setOpen(true)} title={detail.folderName || "Add to folder"}>
+        <FolderIcon className={cn("h-4 w-4 shrink-0", sectionToneClasses.folder.text)} /> <span className="truncate">{detail.folderName || "Add to folder"}</span>
+      </Button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-md overflow-auto rounded-xl border bg-card p-4 shadow-xl" role="dialog" aria-modal="true" aria-label="Folder">
+            <div className="mb-3 flex items-center justify-between gap-3"><h2 className="font-semibold">Folder</h2><Button type="button" size="icon" variant="ghost" onClick={() => setOpen(false)} disabled={saving} aria-label="Close"><X className="h-4 w-4" /></Button></div>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">Current: {detail.folderName || "No folder"}</p>
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search existing folders" disabled={saving} />
+              <div className="max-h-48 space-y-1 overflow-auto rounded-lg border bg-popover p-2 text-popover-foreground shadow-sm">
+                {filteredFolders.length === 0 ? <p className="p-2 text-muted-foreground">No matching folders.</p> : filteredFolders.map((folder) => {
+                  const selected = selectedFolderId === folder.id;
+                  return <label key={folder.id} className={cn("flex cursor-pointer items-center gap-2 rounded-md p-2 text-popover-foreground focus-within:bg-accent focus-within:text-accent-foreground hover:bg-accent hover:text-accent-foreground", selected && "bg-accent text-accent-foreground", saving && "cursor-not-allowed opacity-50")}><input type="radio" name="folder" value={folder.id} checked={selected} onChange={() => setSelectedFolderId(folder.id)} disabled={saving} /><span>{folder.name}</span></label>;
+                })}
+              </div>
+              <div className="flex flex-wrap gap-2"><Button type="button" onClick={addOrMove} disabled={saving || !selectedFolderId}>{detail.folderId ? "Move here" : "Add transcript"}</Button><Button type="button" variant="outline" onClick={remove} disabled={saving || !detail.folderId}>Remove from folder</Button></div>
+              <button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => setCreateOpen((value) => !value)}>+ Create new folder</button>
+              {createOpen && <div className="space-y-2 rounded-lg border p-3"><label className="text-sm font-medium" htmlFor="new-folder-name">Name</label><Input id="new-folder-name" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Enter name" maxLength={120} disabled={saving} /><label className="text-sm font-medium" htmlFor="new-folder-description">Description</label><Textarea id="new-folder-description" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="Enter description" maxLength={500} disabled={saving} /><Button type="button" onClick={createAndAdd} disabled={saving || !newName.trim()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Create and add transcript</Button></div>}
+              {error && <p className="text-destructive">{error}</p>}
+            </div>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>Cancel</Button><Button type="button" onClick={onSubmit} disabled={submitting || loading || !selectedOwnerId || selectedOwnerId === detail.ownerUserId}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Reassign</Button></div>
         </div>
-      </div>
+      )}
+    </>
+  );
+}
+
+function OwnershipControl({ detail, onReassign }: { detail: TranscriptDetail; onReassign: () => void }) {
+  const [open, setOpen] = React.useState(false);
+  const hasOwner = Boolean(detail.ownerUserId);
+  const label = hasOwner ? `Owner: ${ownerLabel(detail)}` : "No owner";
+  return (
+    <div className="relative">
+      <Button type="button" variant="outline" size="sm" className="max-w-52 shrink-0 justify-start gap-2" onClick={() => setOpen((value) => !value)} title={label} aria-expanded={open}>
+        <UserRound className="h-4 w-4 shrink-0" />
+        <span className="truncate">{label}</span>
+      </Button>
+      {open && (
+        <div className="absolute right-0 z-40 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-xl border bg-popover p-3 text-sm text-popover-foreground shadow-lg">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">Ownership</p>
+              <p className="text-xs text-muted-foreground">Current transcript access</p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOpen(false)} aria-label="Close ownership details"><X className="h-4 w-4" /></Button>
+          </div>
+          {hasOwner ? (
+            <dl className="space-y-2">
+              <Meta label="Current owner" value={ownerLabel(detail)} />
+              <Meta label="Display name" value={detail.ownerDisplayName || "Not recorded"} />
+              <Meta label="Email" value={detail.ownerEmail || "Not recorded"} />
+            </dl>
+          ) : (
+            <p className={cn("rounded-lg border p-3", sectionToneClasses.warning.panel)}>No owner assigned</p>
+          )}
+          <Button type="button" variant="outline" size="sm" className="mt-3 w-full justify-start" onClick={() => { setOpen(false); void onReassign(); }}>{hasOwner ? "Reassign transcript" : "Assign transcript"}</Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -829,22 +979,22 @@ function TranscriptDeletionCard({ detail, preview, loading, submitting, confirma
   const owner = preview?.owner.displayName || preview?.owner.email || "Unknown owner";
   const blocked = preview && !preview.canDelete;
   return (
-    <Card className="border-destructive/30">
-      <CardHeader><CardTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-5 w-5" /> Danger zone</CardTitle></CardHeader>
+    <Card className="border-destructive/30 bg-destructive/5 shadow-none">
+      <CardHeader><CardTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-5 w-5" /> Delete transcript</CardTitle></CardHeader>
       <CardContent className="space-y-4 text-sm">
-        <p className="text-muted-foreground">Delete this transcript and its related media and transcript records. This action is permanent.</p>
+        <p className="text-muted-foreground">Permanently remove this transcript and its related media. This action cannot be undone.</p>
         {!preview ? (
           <Button type="button" variant="outline" onClick={onPreview} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Preview deletion</Button>
         ) : (
           <div className="space-y-4">
-            <dl className="space-y-2 rounded-lg border p-3">
+            <dl className="space-y-2 rounded-lg border border-destructive/20 bg-background/70 p-3">
               <PreviewRow label="Filename" value={preview.filename || detail.filename} />
               <PreviewRow label="Owner" value={owner} />
               <PreviewRow label="Segments" value={String(preview.segmentCount)} />
               <PreviewRow label="Media objects" value={String(preview.mediaObjects)} />
               <PreviewRow label="Status" value={preview.status} />
             </dl>
-            {blocked && <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">Deletion unavailable: {preview.blockingReason === "TRANSCRIPT_PROCESSING" ? "transcript is currently processing" : preview.blockingReason}</p>}
+            {blocked && <p className={cn("rounded-md border p-3", sectionToneClasses.warning.panel)}>Deletion unavailable: {preview.blockingReason === "TRANSCRIPT_PROCESSING" ? "transcript is currently processing" : preview.blockingReason}</p>}
             {!blocked && (
               <div className="space-y-2">
                 <label htmlFor="delete-confirmation" className="font-medium">Type <span className="font-mono">{detail.jobId}</span> to confirm</label>
@@ -874,17 +1024,6 @@ function deletionErrorMessage(error: unknown) {
     return error.message;
   }
   return "Transcript deletion failed.";
-}
-
-function reassignmentErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    if (error.code === "TARGET_USER_NOT_FOUND") return "The selected user was not found.";
-    if (error.code === "TARGET_USER_INACTIVE") return "The selected user is inactive.";
-    if (error.code === "TRANSCRIPT_OWNER_UNCHANGED") return "This transcript is already assigned to that user.";
-    if (error.status === 403) return "Only administrators can reassign transcripts.";
-    return error.message;
-  }
-  return "Transcript reassignment failed.";
 }
 
 function ownerLabel(detail: Pick<TranscriptDetail, "ownerDisplayName" | "ownerEmail" | "ownerUserId">) {
@@ -950,9 +1089,11 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
   );
 }
 
-function SegmentCard({ segment, speakerNames, active, highlighted, edit, audioAvailable, editable, refCallback, onPlay, onEdit, onCancel, onSave, onDraft }: {
+function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, highlighted, edit, audioAvailable, editable, refCallback, onPlay, onEdit, onCancel, onSave, onDraft }: {
   segment: TranscriptSegment;
   speakerNames: Record<string, string>;
+  speakerIndex: number;
+  isLast: boolean;
   active: boolean;
   highlighted: boolean;
   edit: SegmentEditState;
@@ -966,39 +1107,89 @@ function SegmentCard({ segment, speakerNames, active, highlighted, edit, audioAv
   onDraft: (value: string) => void;
 }) {
   const textProps = transcriptTextProps(edit.editing ? edit.draft : segment.transcriptText);
+  const displayName = getSpeakerDisplayName(segment.speaker, speakerNames);
+  const marker = speakerMarker(segment.speaker, speakerNames[segment.speaker], speakerIndex);
   return (
-    <Card ref={refCallback} className={cn(active && "border-primary shadow-sm", highlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background")}>
-      <CardHeader className="pb-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle className="text-base">{getSpeakerDisplayName(segment.speaker, speakerNames)}</CardTitle>
-            <p className="text-sm text-muted-foreground">{formatTimestamp(segment.startTime)} - {formatTimestamp(segment.endTime)} ({formatDuration(segment.startTime, segment.endTime)}) - {segment.speaker}</p>
+    <div
+      ref={refCallback}
+      className={cn(
+        "group relative overflow-visible rounded-xl bg-muted/25 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4",
+        active && "bg-[var(--accent-transcript-bg)] ring-1 ring-[var(--accent-transcript-border)]",
+        highlighted && "ring-2 ring-[var(--accent-warning-border)] ring-offset-2 ring-offset-background",
+      )}
+    >
+      <div className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-3">
+        <div className="relative flex justify-center">
+          <div className={cn("z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-1", marker.classes, active && "scale-105 ring-2")} title={displayName}>
+            {marker.label}
           </div>
-          <div className="flex flex-wrap gap-2"><StatusBadge status={segment.status} /></div>
+          {!isLast && <div className={cn("absolute bottom-[-1.125rem] left-1/2 top-10 -translate-x-1/2 border-l border-border", active && "border-[var(--accent-transcript-border)]")} aria-hidden="true" />}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {edit.editing ? (
-          <Textarea value={edit.draft} onChange={(event) => onDraft(event.target.value)} rows={5} dir={textProps.dir} className={cn("min-h-32", textProps.className)} disabled={edit.saving} />
-        ) : (
-          <div dir={textProps.dir} className={cn("rounded-lg border bg-muted/20 p-4 text-sm", textProps.className)}>{segment.transcriptText || <span className="text-muted-foreground">No text yet</span>}</div>
-        )}
-        {edit.error && <p className="text-sm text-destructive">{edit.error}</p>}
-        {edit.saved && <p className="flex items-center gap-1 text-sm text-emerald-600"><Check className="h-4 w-4" /> Saved</p>}
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onPlay} disabled={!audioAvailable}><Play className="h-4 w-4" /> Play segment</Button>
+
+        <div className="min-w-0 space-y-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold text-foreground" title={displayName}>{displayName}</h3>
+            <p className="text-xs text-muted-foreground">{segment.speaker}</p>
+          </div>
           {edit.editing ? (
-            <>
-              <Button type="button" size="sm" onClick={onSave} disabled={edit.saving}>{edit.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save</Button>
-              <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={edit.saving}><X className="h-4 w-4" /> Cancel</Button>
-            </>
+            <Textarea value={edit.draft} onChange={(event) => onDraft(event.target.value)} rows={5} dir={textProps.dir} className={cn("min-h-32 bg-background text-base leading-8", textProps.className)} disabled={edit.saving} />
           ) : (
-            <Button type="button" variant="ghost" size="sm" onClick={onEdit} disabled={!editable}><Edit3 className="h-4 w-4" /> Edit text</Button>
+            <div dir={textProps.dir} className={cn("text-base leading-8 text-foreground md:text-lg", textProps.className)}>{segment.transcriptText || <span className="text-muted-foreground">No text yet</span>}</div>
           )}
+          {edit.error && <p className="text-sm text-destructive">{edit.error}</p>}
+          {edit.saved && <p className="flex items-center gap-1 text-sm text-[var(--accent-success)]"><Check className="h-4 w-4" /> Saved</p>}
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">{formatTimestamp(segment.startTime)} - {formatTimestamp(segment.endTime)} · {formatDuration(segment.startTime, segment.endTime)}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={segment.status} />
+              <Button type="button" variant="outline" size="sm" onClick={onPlay} disabled={!audioAvailable}><Play className="h-4 w-4" /> Play segment</Button>
+              {edit.editing ? (
+                <>
+                  <Button type="button" size="sm" onClick={onSave} disabled={edit.saving}>{edit.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save</Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={edit.saving}><X className="h-4 w-4" /> Cancel</Button>
+                </>
+              ) : (
+                <Button type="button" variant="ghost" size="sm" onClick={onEdit} disabled={!editable}><Edit3 className="h-4 w-4" /> Edit text</Button>
+              )}
+            </div>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
+}
+
+const speakerMarkerClasses = [
+  "bg-[var(--accent-transcript-bg)] text-[var(--accent-transcript)] ring-[var(--accent-transcript-border)]",
+  "bg-[var(--accent-notification-bg)] text-[var(--accent-notification)] ring-[var(--accent-notification-border)]",
+  "bg-[var(--accent-analysis-bg)] text-[var(--accent-analysis)] ring-[var(--accent-analysis-border)]",
+  "bg-[var(--accent-folder-bg)] text-[var(--accent-folder)] ring-[var(--accent-folder-border)]",
+  "bg-[var(--accent-admin-bg)] text-[var(--accent-admin)] ring-[var(--accent-admin-border)]",
+  "bg-[var(--accent-neutral-bg)] text-[var(--accent-neutral)] ring-[var(--accent-neutral-border)]",
+];
+
+function speakerMarker(speakerKey: string, customDisplayName: string | undefined, speakerIndex: number) {
+  const suffix = speakerKey.match(/(\d+)$/)?.[1];
+  const index = suffix ? Number(suffix) : speakerIndex >= 0 ? speakerIndex : [...speakerKey].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  return {
+    classes: speakerMarkerClasses[index % speakerMarkerClasses.length],
+    label: getSpeakerMarkerLabel(speakerKey, customDisplayName, speakerIndex),
+  };
+}
+
+function getSpeakerMarkerLabel(speakerKey: string, customDisplayName: string | undefined, speakerIndex: number) {
+  const trimmedName = customDisplayName?.trim();
+  if (trimmedName) return speakerInitials(trimmedName);
+  const suffix = speakerKey.match(/(\d+)$/)?.[1];
+  if (suffix) return String(Number(suffix) + 1);
+  return String(Math.max(0, speakerIndex) + 1);
+}
+
+function speakerInitials(value: string) {
+  const words = value.replace(/_/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "1";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
 }
 
 function emptySegmentsMessage(status: string) {

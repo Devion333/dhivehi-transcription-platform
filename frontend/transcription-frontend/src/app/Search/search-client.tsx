@@ -137,50 +137,50 @@ export function SearchClient() {
 
       <Card className="mb-5">
         <CardContent className="p-4">
-          <form onSubmit={submitSearch} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px_160px_220px_220px_auto] lg:items-end">
-            <div className="grid gap-2">
+          <form onSubmit={submitSearch} className="grid gap-4 md:grid-cols-2 xl:grid-cols-12 xl:items-end">
+            <div className="grid min-w-0 gap-2 md:col-span-2 xl:col-span-4">
               <label htmlFor="transcript-search" className="text-sm font-medium">Search transcripts</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input id="transcript-search" value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} placeholder="Search text or metadata" dir="auto" className="pl-9" />
               </div>
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2 xl:col-span-2">
               <label htmlFor="search-status" className="text-sm font-medium">Status</label>
-              <select id="search-status" value={status} onChange={(event) => updateUrl({ q: query, page: 1, status: event.target.value, category })} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+              <select id="search-status" value={status} onChange={(event) => updateUrl({ q: query, page: 1, status: event.target.value, category })} className="h-9 min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                 {transcriptStatusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2 xl:col-span-2">
               <label htmlFor="search-category" className="text-sm font-medium">Category</label>
               <Input id="search-category" value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} placeholder="Any" />
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2 md:col-span-2 xl:col-span-2">
               <label className="text-sm font-medium">Date range</label>
               <div className="grid grid-cols-2 gap-2">
                 <Input type="date" value={createdFromDraft} onChange={(event) => setCreatedFromDraft(event.target.value)} aria-label="Created from" />
                 <Input type="date" value={createdToDraft} onChange={(event) => setCreatedToDraft(event.target.value)} aria-label="Created to" />
               </div>
             </div>
-            <div className="grid gap-2"><label htmlFor="search-folder" className="text-sm font-medium">Folder</label><select id="search-folder" value={folderId} onChange={(event) => updateUrl({ q: query, page: 1, folderId: event.target.value })} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"><option value="">All folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></div>
-            <div className="flex gap-2">
+            <div className="grid min-w-0 gap-2 xl:col-span-2"><label htmlFor="search-folder" className="text-sm font-medium">Folder</label><select id="search-folder" value={folderId} onChange={(event) => updateUrl({ q: query, page: 1, folderId: event.target.value })} className="h-9 min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"><option value="">All folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></div>
+            <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-full">
               <Button type="submit" disabled={loading}><Search className="h-4 w-4" /> Search</Button>
               <Button type="button" variant="ghost" onClick={clearSearch} disabled={!hasFilters}><X className="h-4 w-4" /> Reset</Button>
             </div>
             {auth.user?.role === "admin" && (
-              <div className="grid gap-2 lg:col-span-2">
+              <div className="grid min-w-0 gap-2 md:col-span-2 xl:col-span-4">
                 <label htmlFor="search-owner" className="text-sm font-medium">Owner</label>
                 <Input id="search-owner" value={ownerDraft} onChange={(event) => setOwnerDraft(event.target.value)} placeholder="Owner user ID" />
               </div>
             )}
-            <div className="lg:col-span-full">
+            <div className="md:col-span-2 xl:col-span-full">
               <Button type="button" variant="ghost" size="sm" onClick={() => setMoreOpen((value) => !value)}><SlidersHorizontal className="h-4 w-4" /> More filters</Button>
             </div>
             {moreOpen && (
-              <div className="grid gap-4 lg:col-span-full md:grid-cols-3">
-                <div className="grid gap-2"><label htmlFor="search-filename" className="text-sm font-medium">Filename</label><Input id="search-filename" value={filenameDraft} onChange={(event) => setFilenameDraft(event.target.value)} /></div>
-                <div className="grid gap-2"><label htmlFor="search-reference" className="text-sm font-medium">Reference</label><Input id="search-reference" value={referenceDraft} onChange={(event) => setReferenceDraft(event.target.value)} /></div>
-                <div className="grid gap-2"><label htmlFor="search-speaker" className="text-sm font-medium">Speaker</label><Input id="search-speaker" value={speakerDraft} onChange={(event) => setSpeakerDraft(event.target.value)} /></div>
+              <div className="grid gap-4 md:col-span-2 md:grid-cols-3 xl:col-span-full">
+                <div className="grid min-w-0 gap-2"><label htmlFor="search-filename" className="text-sm font-medium">Filename</label><Input id="search-filename" value={filenameDraft} onChange={(event) => setFilenameDraft(event.target.value)} /></div>
+                <div className="grid min-w-0 gap-2"><label htmlFor="search-reference" className="text-sm font-medium">Reference</label><Input id="search-reference" value={referenceDraft} onChange={(event) => setReferenceDraft(event.target.value)} /></div>
+                <div className="grid min-w-0 gap-2"><label htmlFor="search-speaker" className="text-sm font-medium">Speaker</label><Input id="search-speaker" value={speakerDraft} onChange={(event) => setSpeakerDraft(event.target.value)} /></div>
               </div>
             )}
           </form>

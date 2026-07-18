@@ -27,7 +27,7 @@ export function searchTextProps(text: string) {
 export function highlightedText(text: string, query: string) {
   const parts = splitMatches(text, query);
   if (parts.length === 1) return text;
-  return parts.map((part, index) => part.match ? <mark key={`${part.text}-${index}`} className="rounded bg-amber-200 px-0.5 text-amber-950 dark:bg-amber-800 dark:text-amber-50">{part.text}</mark> : <React.Fragment key={`${part.text}-${index}`}>{part.text}</React.Fragment>);
+  return parts.map((part, index) => part.match ? <mark key={`${part.text}-${index}`} className="rounded bg-[var(--accent-warning-bg)] px-0.5 text-[var(--accent-warning)] ring-1 ring-[var(--accent-warning-border)]">{part.text}</mark> : <React.Fragment key={`${part.text}-${index}`}>{part.text}</React.Fragment>);
 }
 
 function splitMatches(text: string, query: string) {

@@ -9,9 +9,10 @@ import { PageHeader } from "@/components/app/page-header";
 import { ErrorState, LoadingState } from "@/components/app/states";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { getAccountProfile, updateAccountProfile } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import type { AccountProfile } from "@/lib/api/types";
@@ -82,10 +83,10 @@ export default function AccountProfilePage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Profile" description="Manage your account display name." />
+      <PageHeader title="Profile" />
       <div className="max-w-2xl space-y-4">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><UserCircle className="h-5 w-5" /> Account information</CardTitle></CardHeader>
+          <CardHeader><SectionHeading title="Account information" icon={UserCircle} tone="admin" /></CardHeader>
           <CardContent className="space-y-5">
             <form onSubmit={handleSubmit} className="space-y-3" noValidate>
               <div className="space-y-2">
@@ -95,7 +96,7 @@ export default function AccountProfilePage() {
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="submit" disabled={submitting || !changed}>{submitting ? "Saving" : <><Save className="h-4 w-4" /> Save changes</>}</Button>
-                {success && <p className="text-sm text-emerald-600">{success}</p>}
+                {success && <p className="text-sm text-[var(--accent-success)]">{success}</p>}
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
             </form>
@@ -111,7 +112,7 @@ export default function AccountProfilePage() {
         </Card>
         <Card>
           <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="font-medium">Security</p><p className="text-sm text-muted-foreground">Password changes remain on the security page.</p></div>
+            <div><p className="font-medium">Password</p><p className="text-sm text-muted-foreground">Change your account password.</p></div>
             <Button asChild variant="outline"><Link href="/Account/Security"><ShieldCheck className="h-4 w-4" /> Change password</Link></Button>
           </CardContent>
         </Card>

@@ -7,9 +7,10 @@ import * as React from "react";
 import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { changePassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 
@@ -70,10 +71,10 @@ export default function AccountSecurityPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Account security" description="Change your password for this account." />
+      <PageHeader title="Change password" />
       <Card className="max-w-xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg"><ShieldCheck className="h-5 w-5" /> Password</CardTitle>
+          <SectionHeading title="Password" icon={ShieldCheck} tone="admin" />
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
@@ -104,7 +105,7 @@ export default function AccountSecurityPage() {
               disabled={submitting}
               onChange={(value) => updateField("confirmPassword", value)}
             />
-            {message && <p className={status === "success" ? "text-sm text-emerald-600" : "text-sm text-destructive"}>{message}</p>}
+            {message && <p className={status === "success" ? "text-sm text-[var(--accent-success)]" : "text-sm text-destructive"}>{message}</p>}
             <Button type="submit" disabled={submitting}>{submitting ? "Changing password" : "Change password"}</Button>
           </form>
         </CardContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, FileDown, FileText, Loader2, RefreshCcw, Sparkles } from "lucide-react";
+import { ArrowLeft, FileDown, FileText, Languages, ListChecks, Loader2, RefreshCcw, Sparkles, Tags } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -8,16 +8,19 @@ import * as React from "react";
 import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
+import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
 import { StatusBadge } from "@/components/app/status-badge";
 import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { analyseTranscript, getTranscript, getTranscriptAnalysis, updateAnalysisReview } from "@/lib/api/transcripts";
-import type { AnalysisReviewStatus, TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { analyseTranscript, getTranscript, getTranscriptAnalysis } from "@/lib/api/transcripts";
+import type { TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
+import { sectionToneClasses } from "@/lib/section-styles";
 import { analysisTextProps, canRunAnalysis, hasAnalysisContent, normalizeEntities } from "@/lib/transcript-analysis-utils";
-import { formatDetailDate, safeValue } from "@/lib/transcript-details-utils";
+import { safeValue } from "@/lib/transcript-details-utils";
 import { hasUsableAnalysis } from "@/lib/pdf-export-utils";
+import { cn } from "@/lib/utils";
 
 export function TranscriptAnalysisClient() {
   const searchParams = useSearchParams();
@@ -28,10 +31,6 @@ export function TranscriptAnalysisClient() {
   const [error, setError] = React.useState<string | null>(null);
   const [runError, setRunError] = React.useState<string | null>(null);
   const [running, setRunning] = React.useState(false);
-  const [reviewSaving, setReviewSaving] = React.useState(false);
-  const [reviewError, setReviewError] = React.useState<string | null>(null);
-  const [reviewStatus, setReviewStatus] = React.useState<AnalysisReviewStatus>("unreviewed");
-  const [reviewNote, setReviewNote] = React.useState("");
   const [retryToken, setRetryToken] = React.useState(0);
   const [exportOpen, setExportOpen] = React.useState(false);
 
@@ -55,12 +54,6 @@ export function TranscriptAnalysisClient() {
     return () => controller.abort();
   }, [jobId, retryToken]);
 
-  React.useEffect(() => {
-    setReviewStatus(analysis?.review?.status ?? "unreviewed");
-    setReviewNote(analysis?.review?.note ?? "");
-    setReviewError(null);
-  }, [analysis?.review?.status, analysis?.review?.note]);
-
   async function runAnalysis() {
     if (!jobId || running) return;
     setRunning(true);
@@ -77,24 +70,11 @@ export function TranscriptAnalysisClient() {
     }
   }
 
-  async function saveReview() {
-    if (!jobId || !analysis || reviewSaving) return;
-    setReviewSaving(true);
-    setReviewError(null);
-    try {
-      const response = await updateAnalysisReview(jobId, { status: reviewStatus, note: reviewNote });
-      setAnalysis({ ...analysis, review: response.review });
-    } catch (err) {
-      setReviewError(err instanceof Error ? err.message : "Failed to update review status");
-    } finally {
-      setReviewSaving(false);
-    }
-  }
-
   if (!jobId) {
     return (
       <PageContainer>
-        <PageHeader title="Analysis" actions={<BackToList />} />
+        <div className="mb-4"><BackToTranscript jobId="" /></div>
+        <PageHeader title="Analysis" />
         <EmptyState title="Invalid link" description="Open analysis from a transcript." />
       </PageContainer>
     );
@@ -103,7 +83,8 @@ export function TranscriptAnalysisClient() {
   if (loading) {
     return (
       <PageContainer>
-        <PageHeader title="Analysis" actions={<BackToList />} />
+        <div className="mb-4"><BackToTranscript jobId={jobId} /></div>
+        <PageHeader title="Analysis" />
         <LoadingState label="Loading analysis" />
       </PageContainer>
     );
@@ -113,7 +94,8 @@ export function TranscriptAnalysisClient() {
     const notFound = error?.toLowerCase().includes("not found");
     return (
       <PageContainer>
-        <PageHeader title="Analysis" actions={<BackToList />} />
+        <div className="mb-4"><BackToTranscript jobId={jobId} /></div>
+        <PageHeader title="Analysis" />
         <ErrorState title={notFound ? "Transcript not found" : "Could not load analysis"} description={error ?? "Analysis data was unavailable."} onRetry={() => setRetryToken((value) => value + 1)} />
       </PageContainer>
     );
@@ -126,16 +108,15 @@ export function TranscriptAnalysisClient() {
 
   return (
     <PageContainer>
+      <div className="mb-4"><BackToTranscript jobId={jobId} /></div>
       <PageHeader
         title="Analysis"
-        description={detail.filename}
         actions={
           <>
-            <BackToList />
-            <Button asChild variant="outline"><Link href={`/Transcripts/Details?job_id=${encodeURIComponent(detail.jobId)}`}><FileText className="h-4 w-4" /> Transcript details</Link></Button>
+            <Button asChild variant="outline"><Link href={transcriptReviewHref(detail.jobId)}><FileText className="h-4 w-4" /> View transcript review</Link></Button>
             <Button type="button" variant="outline" onClick={() => setExportOpen(true)} disabled={detail.segments.length === 0}><FileDown className="h-4 w-4" /> Export PDF</Button>
             <Button type="button" variant="outline" onClick={() => setRetryToken((value) => value + 1)} disabled={running}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
-            <Button type="button" onClick={runAnalysis} disabled={!ready || running}>
+            <Button type="button" onClick={runAnalysis} disabled={!ready || running} className="bg-[var(--accent-analysis)] text-background hover:bg-[var(--accent-analysis)] hover:opacity-90">
               {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {analysis.status === "complete" ? "Run again" : "Analyse"}
             </Button>
@@ -143,105 +124,27 @@ export function TranscriptAnalysisClient() {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="space-y-4">
-          <Card>
-            <CardHeader><CardTitle>Transcript</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <MetaRow label="Job ID" value={detail.jobId} />
-              <MetaRow label="Reference" value={safeValue(detail.referenceNumber, "No reference")} />
-              <MetaRow label="Category" value={safeValue(detail.category, "Uncategorized")} />
-              <MetaRow label="Created" value={formatDetailDate(detail.createdAt)} />
-              <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Transcript status</span><StatusBadge status={detail.status} /></div>
-              <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Analysis status</span><StatusBadge status={analysis.status} /></div>
-            </CardContent>
-          </Card>
-
-          {!ready && (
-            <Card className="border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/40">
-              <CardContent className="p-4 text-sm text-amber-800 dark:text-amber-200">
-                Transcript status: {detail.status.replace(/_/g, " ")}.
-              </CardContent>
-            </Card>
-          )}
-
-          {runError && <ErrorState title="Analysis failed" description={runError} />}
-
-          {analysis.status === "complete" && (
-            <Card>
-              <CardHeader><CardTitle>Review</CardTitle></CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground" htmlFor="analysis-review-status">Status</label>
-                  <select
-                    id="analysis-review-status"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={reviewStatus}
-                    onChange={(event) => setReviewStatus(event.target.value as AnalysisReviewStatus)}
-                    disabled={reviewSaving}
-                  >
-                    <option value="unreviewed">Unreviewed</option>
-                    <option value="reviewed">Reviewed</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground" htmlFor="analysis-review-note">Note</label>
-                  <textarea
-                    id="analysis-review-note"
-                    className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    maxLength={500}
-                    value={reviewNote}
-                    onChange={(event) => setReviewNote(event.target.value)}
-                    disabled={reviewSaving}
-                    placeholder="Optional review note"
-                  />
-                </div>
-                {analysis.review?.reviewedByDisplayName && <MetaRow label="Reviewer" value={analysis.review.reviewedByDisplayName} />}
-                {analysis.review?.reviewedAt && <MetaRow label="Reviewed" value={formatDetailDate(analysis.review.reviewedAt)} />}
-                {reviewError && <p className="text-sm text-destructive">{reviewError}</p>}
-                <Button type="button" className="w-full" onClick={saveReview} disabled={reviewSaving}>
-                  {reviewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Save review
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </aside>
-
-        <section className="space-y-4">
-          {!hasContent ? (
-            <EmptyState title="Analysis has not been run" />
-          ) : (
-            <>
-              <AnalysisTextCard title="Summary" value={analysis.summary} />
-              <AnalysisTextCard title="English Translation" value={analysis.englishTranslation} />
-              <Card>
-                <CardHeader><CardTitle>Classification</CardTitle></CardHeader>
-                <CardContent>{analysis.classification ? <Badge variant="secondary" className="text-sm">{analysis.classification}</Badge> : <MutedText />}</CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle>Keywords</CardTitle></CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                  {analysis.keywords.length > 0 ? analysis.keywords.map((keyword) => <Badge key={keyword} variant="outline">{keyword}</Badge>) : <MutedText />}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle>Entities</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  {entities.length > 0 ? entities.map((group) => (
-                    <div key={group.label} className="space-y-2">
-                      <h3 className="text-sm font-medium text-muted-foreground">{group.label}</h3>
-                      <div className="flex flex-wrap gap-2">{group.values.map((value) => <Badge key={`${group.label}-${value}`} variant="outline">{value}</Badge>)}</div>
-                    </div>
-                  )) : <MutedText />}
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </section>
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+        <span className="break-words font-medium text-foreground">{detail.filename}</span>
+        <span>{safeValue(detail.referenceNumber, "No reference")}</span>
+        <StatusBadge status={analysis.status} />
+        <span>Transcript review: <AnalysisReviewStatusBadge status={analysis.review?.status ?? detail.analysisReviewStatus} /></span>
       </div>
+
+      {!ready && <Card className={cn("mb-4", sectionToneClasses.warning.panel)}><CardContent className="p-4 text-sm">Transcript status: {detail.status.replace(/_/g, " ")}.</CardContent></Card>}
+      {runError && <div className="mb-4"><ErrorState title="Analysis failed" description={runError} /></div>}
+
+      {!hasContent ? (
+        <EmptyState title="Analysis has not been run" />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <AnalysisTextPanel className="lg:col-span-2" title="Summary" icon={Sparkles} value={analysis.summary} prominent />
+          <ClassificationPanel value={analysis.classification} />
+          <KeywordsPanel keywords={analysis.keywords} />
+          {entities.length > 0 && <EntitiesPanel entities={entities} />}
+          {analysis.englishTranslation.trim() && <AnalysisTextPanel className="lg:col-span-2" title="English translation" icon={Languages} value={analysis.englishTranslation} />}
+        </div>
+      )}
       <PdfExportDialog
         open={exportOpen}
         transcript={detail}
@@ -253,21 +156,29 @@ export function TranscriptAnalysisClient() {
   );
 }
 
-function BackToList() {
-  return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
+function BackToTranscript({ jobId }: { jobId: string }) {
+  const href = jobId ? `/Transcripts/Details?job_id=${encodeURIComponent(jobId)}` : "/Transcripts";
+  return <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2"><Link href={href}><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
-  return <div className="flex justify-between gap-3"><span className="text-muted-foreground">{label}</span><span className="break-all text-right font-medium">{value}</span></div>;
+function transcriptReviewHref(jobId: string) {
+  return `/Transcripts/Details?job_id=${encodeURIComponent(jobId)}&review=open`;
 }
 
-function AnalysisTextCard({ title, value }: { title: string; value: string }) {
-  return (
-    <Card>
-      <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
-      <CardContent>{value ? <p {...analysisTextProps(value)}>{value}</p> : <MutedText />}</CardContent>
-    </Card>
-  );
+function AnalysisTextPanel({ title, icon: Icon, value, className, prominent }: { title: string; icon: typeof Sparkles; value: string; className?: string; prominent?: boolean }) {
+  return <section className={cn("rounded-xl border bg-card p-4", className)}><div className="mb-3 flex items-center gap-2"><Icon className={cn("h-4 w-4", sectionToneClasses.analysis.text)} /><h2 className={cn("font-medium", prominent && "text-lg")}>{title}</h2></div>{value ? <p {...analysisTextProps(value)}>{value}</p> : <MutedText />}</section>;
+}
+
+function ClassificationPanel({ value }: { value: string }) {
+  return <section className="rounded-xl border bg-card p-4"><div className="mb-3 flex items-center gap-2"><ListChecks className={cn("h-4 w-4", sectionToneClasses.analysis.text)} /><h2 className="font-medium">Classification</h2></div>{value ? <Badge variant="secondary" className="text-sm">{value}</Badge> : <MutedText />}</section>;
+}
+
+function KeywordsPanel({ keywords }: { keywords: string[] }) {
+  return <section className="rounded-xl border bg-card p-4"><div className="mb-3 flex items-center gap-2"><Tags className={cn("h-4 w-4", sectionToneClasses.analysis.text)} /><h2 className="font-medium">Keywords</h2></div>{keywords.length > 0 ? <div className="flex flex-wrap gap-2">{keywords.map((keyword) => <Badge key={keyword} variant="outline">{keyword}</Badge>)}</div> : <MutedText />}</section>;
+}
+
+function EntitiesPanel({ entities }: { entities: ReturnType<typeof normalizeEntities> }) {
+  return <section className="rounded-xl border bg-card p-4 lg:col-span-2"><div className="mb-3 flex items-center gap-2"><FileText className={cn("h-4 w-4", sectionToneClasses.analysis.text)} /><h2 className="font-medium">Entities</h2></div><dl className="grid gap-3 text-sm sm:grid-cols-2">{entities.map((group) => <div key={group.label} className="grid gap-1 rounded-lg bg-muted/30 p-3"><dt className="font-medium text-muted-foreground">{group.label}</dt><dd className="break-words">{group.values.join(", ")}</dd></div>)}</dl></section>;
 }
 
 function MutedText() {

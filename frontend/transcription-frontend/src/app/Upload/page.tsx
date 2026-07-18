@@ -27,6 +27,7 @@ import {
   validateUploadMetadata,
   videoExtensions,
 } from "@/lib/upload-validation";
+import { sectionToneClasses } from "@/lib/section-styles";
 import { cn } from "@/lib/utils";
 
 type UploadState = "idle" | "validating" | "uploading" | "accepted" | "error";
@@ -238,7 +239,7 @@ export default function UploadTranscriptPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {fileValidation.valid ? (
-                        <span className="inline-flex items-center gap-1 text-sm text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Valid file</span>
+                        <span className="inline-flex items-center gap-1 text-sm text-[var(--accent-success)]"><CheckCircle2 className="h-4 w-4" /> Valid file</span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-sm text-destructive"><AlertCircle className="h-4 w-4" /> Needs attention</span>
                       )}
@@ -253,31 +254,33 @@ export default function UploadTranscriptPage() {
               )}
               {submitAttempted && !file && <ValidationList items={fileValidation.errors} tone="error" />}
               <div className="grid gap-4 md:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="referenceNumber">Reference number <span className="text-muted-foreground">(optional)</span></Label>
-                <Input
-                  id="referenceNumber"
-                  value={referenceNumber}
-                  maxLength={referenceNumberMaxLength}
-                  onChange={(event) => setReferenceNumber(event.target.value)}
-                  disabled={state === "uploading"}
-                  placeholder="Example: REF-2026-001"
-                />
-                <FieldHint current={referenceNumber.length} max={referenceNumberMaxLength} error={metadataErrors.referenceNumber} />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="referenceNumber" className="block leading-5">Reference number <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input
+                    id="referenceNumber"
+                    value={referenceNumber}
+                    maxLength={referenceNumberMaxLength}
+                    onChange={(event) => setReferenceNumber(event.target.value)}
+                    disabled={state === "uploading"}
+                    placeholder="Example: REF-2026-001"
+                    className="h-10"
+                  />
+                  <FieldHint current={referenceNumber.length} max={referenceNumberMaxLength} error={metadataErrors.referenceNumber} />
+                </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="category">Category <span className="text-muted-foreground">(optional)</span></Label>
-                <select
-                  id="category"
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  disabled={state === "uploading"}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="category" className="block leading-5">Category <span className="text-muted-foreground">(optional)</span></Label>
+                  <select
+                    id="category"
+                    value={category}
+                    onChange={(event) => setCategory(event.target.value)}
+                    disabled={state === "uploading"}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  <div className="h-4" aria-hidden="true" />
+                </div>
 
               <div className="grid gap-2">
                 <Label htmlFor="requestedSpeakers">Expected speakers <span className="text-muted-foreground">(optional)</span></Label>
@@ -337,7 +340,7 @@ export default function UploadTranscriptPage() {
   function SuccessPanel({ result, status, polling, onUploadAnother }: { result: UploadResult; status: TranscriptStatusResponse | null; polling: boolean; onUploadAnother: () => void }) {
     const currentStatus = status?.status ?? result.job.status;
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+      <div className={cn("rounded-xl border p-4", sectionToneClasses.success.panel)}>
         <div className="flex gap-3">
           <CheckCircle2 className="mt-0.5 h-5 w-5" />
           <div className="space-y-3">
@@ -349,7 +352,7 @@ export default function UploadTranscriptPage() {
               <StatusBadge status={currentStatus} />
               {polling && <span className="inline-flex items-center gap-1 text-xs opacity-75"><Loader2 className="h-3 w-3 animate-spin" /> Checking status</span>}
             </div>
-            {status?.failureMessage && <p className="text-sm text-red-700 dark:text-red-300">{status.failureMessage}</p>}
+            {status?.failureMessage && <p className="text-sm text-[var(--accent-danger)]">{status.failureMessage}</p>}
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" onClick={() => router.push(`/Transcripts/Details?job_id=${result.job.jobId}`)}>View transcript</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => router.push("/Transcripts")}>Transcripts</Button>
@@ -365,7 +368,7 @@ export default function UploadTranscriptPage() {
 function ValidationList({ items, tone }: { items: string[]; tone: "error" | "warning" }) {
   if (items.length === 0) return null;
   return (
-    <ul className={cn("mt-3 space-y-1 text-sm", tone === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-300")}>
+    <ul className={cn("mt-3 space-y-1 text-sm", tone === "error" ? "text-destructive" : "text-[var(--accent-warning)]")}>
       {items.map((item) => <li key={item}>- {item}</li>)}
     </ul>
   );

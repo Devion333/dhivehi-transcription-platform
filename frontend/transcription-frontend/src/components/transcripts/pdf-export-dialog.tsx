@@ -4,6 +4,7 @@ import { AlignLeft, FileDown, FileText, Loader2, X } from "lucide-react";
 import * as React from "react";
 
 import { ErrorState } from "@/components/app/states";
+import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
@@ -121,10 +122,10 @@ export function PdfExportDialog({ open, transcript, analysis, defaultIncludeAnal
               disabled={includeDisabled}
               onChange={(event) => void handleIncludeAnalysis(event.target.checked)}
             />
-            <span>
-              <span className="block font-medium">Include analysis</span>
-              {!canAttemptAnalysis && <span className="mt-1 block text-amber-700 dark:text-amber-300">Analysis unavailable</span>}
-            </span>
+              <span>
+                <span className="flex flex-wrap items-center gap-2 font-medium">Include analysis {loadedAnalysis?.review?.status && <AnalysisReviewStatusBadge status={loadedAnalysis.review.status} />}</span>
+                {!canAttemptAnalysis && <span className="mt-1 block text-[var(--accent-warning)]">Analysis unavailable</span>}
+              </span>
           </label>
 
           {error && <ErrorState title="PDF export failed" description={error} />}

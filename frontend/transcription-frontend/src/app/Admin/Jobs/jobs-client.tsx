@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Eye, RefreshCw, RotateCcw, Search, X } from "lucide-react";
+import { BriefcaseBusiness, ChevronLeft, ChevronRight, Eye, RefreshCw, RotateCcw, Search, ServerCog, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -11,11 +11,15 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { Input } from "@/components/ui/input";
 import { getAdminJob, getAdminJobHealth, getAdminJobs, retryAdminJob } from "@/lib/api/admin-jobs";
 import { ApiError } from "@/lib/api/client";
 import type { AdminJobDetail, AdminJobHealthResponse, AdminJobSummary, Pagination, WorkerHealthSummary } from "@/lib/api/types";
 import { adminJobStages, adminJobStatuses, adminJobsPageSize, buildAdminJobsPath, canRetryJob, formatJobDate, jobStatusLabel, normalizeAdminJobDate, normalizeAdminJobPage, normalizeAdminJobSearch, normalizeAdminJobStage, normalizeAdminJobStatus, retryCopy, stageLabel, toJobRFC3339Date } from "@/lib/admin-jobs-utils";
+import { sectionToneClasses } from "@/lib/section-styles";
+import { statusBadgeClass } from "@/lib/status-styles";
+import { cn } from "@/lib/utils";
 
 type ListState = { items: AdminJobSummary[]; pagination: Pagination | null };
 
@@ -104,6 +108,7 @@ export function AdminJobsClient() {
   const hasFilters = Boolean(search || status !== "all" || stage !== "all" || failedOnly || dateFrom || dateTo);
 
   return <PageContainer><PageHeader title="Jobs" actions={<Button variant="outline" onClick={() => setRefreshToken((value) => value + 1)}><RefreshCw className="h-4 w-4" /> Refresh</Button>} />
+    <div className="mb-4 rounded-lg border border-[var(--accent-admin-border)] bg-card p-3"><SectionHeading title="Administration" icon={BriefcaseBusiness} tone="admin" /></div>
     <HealthSummary health={health} />
     <Card className="mb-5"><CardContent className="p-4"><div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_auto_auto_auto] xl:items-end"><form onSubmit={submitSearch} className="grid min-w-0 gap-2 sm:col-span-2 xl:col-span-1"><label htmlFor="job-search" className="text-sm font-medium">Search</label><div className="flex w-full min-w-0 gap-2"><div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input id="job-search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="File, reference, job" className="w-full pl-9" /></div><Button type="submit" variant="outline" className="shrink-0">Search</Button></div></form><SelectFilter id="job-stage" label="Stage" value={stage} values={adminJobStages} onChange={(value) => navigate({ page: 1, stage: value as typeof stage })} /><SelectFilter id="job-status" label="Status" value={status} values={adminJobStatuses} onChange={(value) => navigate({ page: 1, status: value as typeof status })} /><Button type="button" variant="ghost" onClick={() => router.push(pathname)} disabled={!hasFilters} className="min-w-0 w-full shrink-0 sm:w-auto"><X className="h-4 w-4" /> Reset</Button></div></CardContent></Card>
     {message && <div className="mb-4 rounded-lg border bg-card px-4 py-3 text-sm">{message}</div>}
@@ -119,7 +124,7 @@ export function AdminJobsClient() {
 
 function HealthSummary({ health }: { health: AdminJobHealthResponse | null }) {
   if (!health) return null;
-  return <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><HealthCard label="Redis" value={health.redis} /><HealthCard label="Qdrant" value={health.qdrant} /><HealthCard label="MinIO" value={health.minio} /><Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Queues</p><p className="mt-1 text-sm">{Object.entries(health.queues).map(([name, counts]) => `${stageLabel(name)} ${counts.queued}/${counts.processing}/${counts.failed}`).join(" · ")}</p></CardContent></Card><Card className="md:col-span-2 xl:col-span-4"><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Workers</p><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(health.workers).map(([name, worker]) => <WorkerHealth key={name} name={name} worker={worker} />)}</div></CardContent></Card></div>;
+  return <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><HealthCard label="Redis" value={health.redis} /><HealthCard label="Qdrant" value={health.qdrant} /><HealthCard label="MinIO" value={health.minio} /><Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Queues</p><p className="mt-1 text-sm">{Object.entries(health.queues).map(([name, counts]) => `${stageLabel(name)} ${counts.queued}/${counts.processing}/${counts.failed}`).join(" · ")}</p></CardContent></Card><Card className={cn("md:col-span-2 xl:col-span-4", sectionToneClasses.admin.border)}><CardContent className="p-4"><SectionHeading title="Workers" icon={ServerCog} tone="admin" /><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(health.workers).map(([name, worker]) => <WorkerHealth key={name} name={name} worker={worker} />)}</div></CardContent></Card></div>;
 }
 
 function HealthCard({ label, value }: { label: string; value: string }) {
@@ -155,8 +160,7 @@ function SelectFilter({ id, label, value, values, onChange }: { id: string; labe
 }
 
 function JobStatusBadge({ status }: { status: string }) {
-  const failed = status.includes("failed") || status === "failed";
-  return <Badge variant={failed ? "destructive" : status.includes("processing") || status.endsWith("ing") ? "default" : "secondary"}>{jobStatusLabel(status)}</Badge>;
+  return <Badge variant="outline" className={statusBadgeClass(status)}>{jobStatusLabel(status)}</Badge>;
 }
 
 function Detail({ label, value }: { label: string; value?: string }) {

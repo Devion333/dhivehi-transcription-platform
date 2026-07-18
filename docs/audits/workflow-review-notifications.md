@@ -4,9 +4,9 @@ Date: 2026-07-18
 
 Branch: `feature/workflow-review-notifications`
 
-## Analysis Review
+## Transcript Review
 
-Generated analysis supports human review states: `unreviewed`, `reviewed`, `approved`, and `rejected`.
+The frontend presents review states as Transcript Review because the reviewer is assessing transcript accuracy and completeness. The persisted backend fields and endpoint retain their existing `analysis_review_*` names to avoid migration risk. Supported states are `unreviewed`, `reviewed`, `approved`, and `rejected`.
 
 Review metadata is stored on the parent transcript payload in Qdrant:
 

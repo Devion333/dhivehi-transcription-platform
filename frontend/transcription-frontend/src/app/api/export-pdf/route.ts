@@ -7,6 +7,7 @@ import puppeteer, { type Browser, type Page } from "puppeteer";
 import type { PdfExportPayload, PdfExportSegment } from "@/lib/pdf-export-types";
 import { escapeHtml, formatPdfTimestamp, groupSegmentsBySpeaker, hasUsableAnalysis, pdfDownloadFilename, sortPdfSegments, toPdfAnalysis } from "@/lib/pdf-export-utils";
 import { BACKEND_URL } from "@/config";
+import { analysisReviewStatusLabel } from "@/lib/analysis-review-status";
 import type { TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
 import { getSpeakerDisplayName } from "@/lib/transcript-details-utils";
 
@@ -315,7 +316,7 @@ function metadataHtml(payload: PdfExportPayload) {
 
 function buildAnalysisHtml(analysis: NonNullable<PdfExportPayload["analysis"]>) {
   const review = analysis.review;
-  const reviewDetails = review.status === "approved" || review.status === "reviewed"
+  const reviewDetails = review.status !== "unreviewed"
     ? [
         review.reviewedByDisplayName ? `Reviewer: ${review.reviewedByDisplayName}` : "",
         review.reviewedAt ? `Reviewed: ${formatDate(review.reviewedAt)}` : "",
@@ -323,7 +324,7 @@ function buildAnalysisHtml(analysis: NonNullable<PdfExportPayload["analysis"]>) 
       ].filter(Boolean).join("\n")
     : "";
   const sections = [
-    `<div class="analysis-card"><h3>Review Status</h3><span class="pill">${escapeHtml(formatLabel(review.status))}</span>${reviewDetails ? `<p>${escapeHtml(reviewDetails)}</p>` : ""}</div>`,
+    `<div class="analysis-card"><h3>Transcript Review</h3><span class="pill">${escapeHtml(analysisReviewStatusLabel(review.status))}</span>${reviewDetails ? `<p>${escapeHtml(reviewDetails)}</p>` : ""}</div>`,
     analysis.summary.trim() ? `<div class="analysis-card"><h3>Summary</h3><p>${escapeHtml(analysis.summary.trim())}</p></div>` : "",
     analysis.classification.trim() ? `<div class="analysis-card"><h3>Classification</h3><span class="pill">${escapeHtml(formatLabel(analysis.classification.trim()))}</span></div>` : "",
     analysis.keywords.length > 0 ? `<div class="analysis-card"><h3>Keywords</h3><div class="pills">${analysis.keywords.map((keyword) => `<span class="pill">${escapeHtml(keyword)}</span>`).join("")}</div></div>` : "",

@@ -8,6 +8,7 @@ import * as React from "react";
 import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
+import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,6 @@ import {
   normalizePageParam,
   normalizeSearchParam,
   normalizeStatusParam,
-  resultSummary,
   segmentCountLabel,
   transcriptDetailPath,
   transcriptPageSize,
@@ -153,61 +153,56 @@ export function TranscriptListClient() {
     <PageContainer>
       <PageHeader
         title="Transcripts"
-        actions={<Button asChild><Link href="/Upload"><UploadCloud className="h-4 w-4" /> Upload</Link></Button>}
+        actions={<><span className="inline-flex h-9 items-center text-sm text-muted-foreground">{loading ? "Refreshing" : transcriptCountLabel(total)}</span><Button asChild><Link href="/Upload"><UploadCloud className="h-4 w-4" /> Upload</Link></Button></>}
       />
 
-      <Card className="mb-5">
-        <CardContent className="p-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_220px_auto] lg:items-end">
-            <form onSubmit={submitSearch} className="grid gap-2">
-              <label htmlFor="transcript-search" className="text-sm font-medium">Search</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="transcript-search"
-                    value={searchDraft}
-                    onChange={(event) => setSearchDraft(event.target.value)}
-                    placeholder="Filename, reference, or category"
-                    className="pl-9"
-                  />
-                </div>
-                <Button type="submit" variant="outline">Search</Button>
+      <div className="mb-4 rounded-lg border border-[var(--accent-transcript-border)] bg-card/70 p-3 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto] lg:items-end">
+          <form onSubmit={submitSearch} className="grid min-w-0 gap-2">
+            <label htmlFor="transcript-search" className="text-sm font-medium">Search</label>
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="transcript-search"
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
+                  placeholder="Filename, reference, or category"
+                  className="pl-9"
+                />
               </div>
-            </form>
-
-            <div className="grid gap-2">
-              <label htmlFor="status-filter" className="text-sm font-medium">Status</label>
-              <div className="relative">
-                <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <select
-                  id="status-filter"
-                  value={status}
-                  onChange={(event) => navigate({ page: 1, status: event.target.value, search })}
-                  className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  {transcriptStatusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </div>
+              <Button type="submit" variant="outline">Search</Button>
             </div>
+          </form>
 
-            <div className="grid gap-2">
-              <label htmlFor="folder-filter" className="text-sm font-medium">Folder</label>
-              <select id="folder-filter" value={folderId} onChange={(event) => navigate({ page: 1, folderId: event.target.value, search, status })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                <option value="">All folders</option>
-                {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+          <div className="grid min-w-0 gap-2">
+            <label htmlFor="status-filter" className="text-sm font-medium">Status</label>
+            <div className="relative">
+              <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <select
+                id="status-filter"
+                value={status}
+                onChange={(event) => navigate({ page: 1, status: event.target.value, search })}
+                className="h-9 w-full min-w-0 rounded-md border border-input bg-background pl-9 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {transcriptStatusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </div>
+          </div>
 
-            <Button type="button" variant="ghost" onClick={clearFilters} disabled={!hasFilters}>
-              <X className="h-4 w-4" /> Clear filters
-            </Button>
+          <div className="grid min-w-0 gap-2">
+            <label htmlFor="folder-filter" className="text-sm font-medium">Folder</label>
+            <select id="folder-filter" value={folderId} onChange={(event) => navigate({ page: 1, folderId: event.target.value, search, status })} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+              <option value="">All folders</option>
+              {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+            </select>
           </div>
-          <div className="mt-3 text-sm text-muted-foreground">
-            <span>{loading ? "Refreshing" : resultSummary(total, search, status)}</span>
-          </div>
-        </CardContent>
-      </Card>
+
+          <Button type="button" variant="ghost" onClick={clearFilters} disabled={!hasFilters} className="justify-start lg:justify-center">
+            <X className="h-4 w-4" /> Clear filters
+          </Button>
+        </div>
+      </div>
 
       {loading && <LoadingState label="Loading transcripts" />}
       {!loading && error && <ErrorState title="Could not load transcripts" description={error} onRetry={retry} />}
@@ -256,6 +251,7 @@ function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
             <th className="w-[13%] px-4 py-3 font-medium">Status</th>
             <th className="w-[10%] px-4 py-3 font-medium">Segments</th>
             <th className="hidden w-[12%] px-4 py-3 font-medium 2xl:table-cell">Analysis</th>
+            <th className="hidden w-[12%] px-4 py-3 font-medium 2xl:table-cell">Review</th>
             {isAdmin && <th className="hidden w-[14%] px-4 py-3 font-medium 2xl:table-cell">Owner</th>}
             <th className="w-[14%] px-4 py-3 font-medium">Created</th>
             <th className="w-[9%] px-4 py-3 text-right font-medium">Action</th>
@@ -275,6 +271,7 @@ function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
               <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
               <td className="px-4 py-4 text-muted-foreground">{segmentCountLabel(item.segmentCount)}</td>
               <td className="hidden px-4 py-4 2xl:table-cell"><StatusBadge status={item.analysisStatus} /></td>
+              <td className="hidden px-4 py-4 2xl:table-cell"><span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span></td>
               {isAdmin && <td className="hidden min-w-0 px-4 py-4 text-muted-foreground 2xl:table-cell"><div className="truncate" title={ownerLabel(item)}>{ownerLabel(item)}</div></td>}
               <td className="px-4 py-4 text-muted-foreground">{formatTranscriptDate(item.createdAt)}</td>
               <td className="px-4 py-4 text-right"><Button asChild size="sm" variant="outline"><Link href={transcriptDetailPath(item.jobId)}>View</Link></Button></td>
@@ -302,7 +299,7 @@ function TranscriptCards({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2"><StatusBadge status={item.status} /><StatusBadge status={item.analysisStatus} /></div>
+            <div className="flex flex-wrap items-center gap-2"><StatusBadge status={item.status} /><StatusBadge status={item.analysisStatus} /><span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span></div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div><dt className="text-muted-foreground">Reference</dt><dd>{fallbackText(item.referenceNumber, "No reference")}</dd></div>
               <div><dt className="text-muted-foreground">Category</dt><dd>{fallbackText(item.category, "Uncategorized")}</dd></div>
@@ -320,4 +317,8 @@ function TranscriptCards({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
 
 function ownerLabel(item: Pick<TranscriptSummary, "ownerDisplayName" | "ownerEmail" | "ownerUserId">) {
   return item.ownerDisplayName || item.ownerEmail || item.ownerUserId || "Legacy ownerless";
+}
+
+function transcriptCountLabel(total: number) {
+  return `${total} transcript${total === 1 ? "" : "s"}`;
 }

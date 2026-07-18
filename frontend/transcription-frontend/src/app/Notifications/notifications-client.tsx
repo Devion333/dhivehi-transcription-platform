@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCheck, ExternalLink } from "lucide-react";
+import { Bell, CheckCheck, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -9,8 +9,10 @@ import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/api/notifications";
 import type { NotificationItem } from "@/lib/api/types";
+import { sectionToneClasses } from "@/lib/section-styles";
 import { cn } from "@/lib/utils";
 
 export function NotificationsClient() {
@@ -57,9 +59,11 @@ export function NotificationsClient() {
     <PageContainer>
       <PageHeader
         title="Notifications"
-        description="Review workflow updates and transcript assignments."
         actions={<Button type="button" variant="outline" onClick={markAll} disabled={items.every((item) => item.isRead)}><CheckCheck className="h-4 w-4" /> Mark all read</Button>}
       />
+      <div className="mb-4 rounded-lg border border-[var(--accent-notification-border)] bg-card p-3">
+        <SectionHeading title="Workflow updates" description={`${total} notification${total === 1 ? "" : "s"}`} icon={Bell} tone="notification" />
+      </div>
       <div className="mb-4 flex flex-wrap gap-2">
         <Button type="button" variant={!unreadOnly ? "default" : "outline"} onClick={() => { setUnreadOnly(false); setPage(1); }}>All</Button>
         <Button type="button" variant={unreadOnly ? "default" : "outline"} onClick={() => { setUnreadOnly(true); setPage(1); }}>Unread</Button>
@@ -70,12 +74,12 @@ export function NotificationsClient() {
       {!loading && !error && items.length > 0 && (
         <div className="space-y-3">
           {items.map((item) => (
-            <Card key={item.id} className={cn(!item.isRead && "border-primary/40 bg-primary/5")}>
+            <Card key={item.id} className={cn(!item.isRead && "border-[var(--accent-notification-border)] bg-[var(--accent-notification-bg)]")}>
               <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-semibold">{item.title}</h2>
-                    {!item.isRead && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">Unread</span>}
+                    {!item.isRead && <span className={cn("rounded-full border px-2 py-0.5 text-xs", sectionToneClasses.notification.panel)}>Unread</span>}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{item.message}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{formatDate(item.createdAt)}</p>

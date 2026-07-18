@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Download, Eye, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eye, Search, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { exportAuditEvents, getAuditEvent, getAuditEvents } from "@/lib/api/admin-audit";
 import { ApiError } from "@/lib/api/client";
 import type { AuditEventDetail, AuditEventSummary, Pagination } from "@/lib/api/types";
@@ -19,6 +20,7 @@ import {
   auditActionLabel,
   auditActorLabel,
   auditActions,
+  auditCategories,
   auditCategoryLabel,
   auditOutcomeLabel,
   auditOutcomes,
@@ -121,15 +123,18 @@ export function AdminAuditClient() {
   const pagination = data.pagination;
   const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 0;
-  const hasFilters = Boolean(search || action !== "all" || outcome !== "all" || dateFrom || dateTo);
+  const hasFilters = Boolean(search || category !== "all" || action !== "all" || outcome !== "all" || dateFrom || dateTo);
 
   return (
     <PageContainer>
       <PageHeader title="Audit" actions={<Button type="button" variant="outline" onClick={exportCsv} disabled={exporting}>{exporting ? "Exporting" : <><Download className="h-4 w-4" /> Export CSV</>}</Button>} />
-
       <Card className="mb-5">
-        <CardContent className="p-4">
-          <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_repeat(5,auto)] xl:items-end">
+        <CardContent className="space-y-3 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <SectionHeading title="Audit events" icon={ShieldCheck} tone="admin" />
+            <p className="text-sm text-muted-foreground">{loading ? "Refreshing" : resultCountLabel(total)}</p>
+          </div>
+          <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_repeat(6,auto)] xl:items-end">
             <form onSubmit={submitSearch} className="grid min-w-0 gap-2 sm:col-span-2 xl:col-span-1">
               <label htmlFor="audit-search" className="text-sm font-medium">Search</label>
               <div className="flex w-full min-w-0 gap-2">
@@ -140,13 +145,13 @@ export function AdminAuditClient() {
                 <Button type="submit" variant="outline" className="shrink-0">Search</Button>
               </div>
             </form>
+            <SelectFilter id="audit-category" label="Category" value={category} values={auditCategories} onChange={(value) => navigate({ page: 1, category: value as typeof category })} />
             <SelectFilter id="audit-action" label="Action" value={action} values={auditActions} onChange={(value) => navigate({ page: 1, action: value as typeof action })} />
             <SelectFilter id="audit-outcome" label="Outcome" value={outcome} values={auditOutcomes} onChange={(value) => navigate({ page: 1, outcome: value as typeof outcome })} />
             <DateFilter id="audit-from" label="Start date" value={dateFrom} onChange={(value) => navigate({ page: 1, dateFrom: value })} />
             <DateFilter id="audit-to" label="End date" value={dateTo} onChange={(value) => navigate({ page: 1, dateTo: value })} />
             <Button type="button" variant="ghost" onClick={() => router.push(pathname)} disabled={!hasFilters} className="min-w-0 w-full shrink-0 sm:w-auto"><X className="h-4 w-4" /> Reset</Button>
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">{loading ? "Refreshing" : `Showing ${total.toLocaleString()} audit ${total === 1 ? "event" : "events"}`}</p>
         </CardContent>
       </Card>
 
@@ -190,7 +195,18 @@ function Detail({ label, value }: { label: string; value?: string }) {
 }
 
 function SelectFilter({ id, label, value, values, onChange }: { id: string; label: string; value: string; values: readonly string[]; onChange: (value: string) => void }) {
-  return <div className="grid min-w-0 gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:min-w-36 xl:w-40">{values.map((item) => <option key={item} value={item}>{item === "all" ? "All" : label === "Action" ? auditActionLabel(item) : auditCategoryLabel(item)}</option>)}</select></div>;
+  return <div className="grid min-w-0 gap-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><select id={id} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:min-w-36 xl:w-40">{values.map((item) => <option key={item} value={item}>{auditFilterLabel(label, item)}</option>)}</select></div>;
+}
+
+function auditFilterLabel(label: string, item: string) {
+  if (item === "all") return "All";
+  if (label === "Action") return auditActionLabel(item);
+  if (label === "Outcome") return auditOutcomeLabel(item);
+  return auditCategoryLabel(item);
+}
+
+function resultCountLabel(total: number) {
+  return `${total.toLocaleString()} ${total === 1 ? "result" : "results"}`;
 }
 
 function DateFilter({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
