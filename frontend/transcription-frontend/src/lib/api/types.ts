@@ -363,6 +363,16 @@ export interface TranscriptDeletionResponse {
   partialCleanupCategories?: string[];
 }
 
+export interface TranscriptReassignmentOptionsResponse {
+  users: AdminUserSummary[];
+}
+
+export interface TranscriptReassignmentResponse {
+  jobId: string;
+  previousOwnerUserId: string;
+  newOwner: { displayName: string; email: string };
+}
+
 export interface TranscriptAnalysis {
   status: AnalysisStatus;
   keywords: string[];

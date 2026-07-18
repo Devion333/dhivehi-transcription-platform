@@ -1,14 +1,20 @@
 package services
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"transcript_app/backend/internal/dtos"
+
+	"github.com/DATA-DOG/go-sqlmock"
 )
 
 func TestNormalizePagination(t *testing.T) {
@@ -424,6 +430,61 @@ func TestUpdateSpeakerNameResetRemovesMappingAndSegmentsRemainUnchanged(t *testi
 	stored, ok := payload["speaker_names"].(map[string]interface{})
 	if !ok || stored["SPEAKER_00"] != nil {
 		t.Fatalf("expected mapping removal, got %+v", payload)
+	}
+}
+
+func TestReassignTranscriptOwnerAssignsOwnerlessTranscript(t *testing.T) {
+	var payload map[string]interface{}
+	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job"}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+	mock := withMockDatabase(t)
+	now := time.Now()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1`)).
+		WithArgs("target").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).AddRow("target", "Target User", "target@example.com", "hash", "user", true, now, now, sql.NullTime{}))
+
+	result, err := ReassignTranscriptOwner(context.Background(), "job", "target")
+	if err != nil {
+		t.Fatalf("ReassignTranscriptOwner failed: %v", err)
+	}
+	if result.PreviousOwnerUserID != "" || payload["owner_user_id"] != "target" || payload["owner_display_name"] != "Target User" || payload["owner_email"] != "target@example.com" {
+		t.Fatalf("unexpected reassignment result=%+v payload=%+v", result, payload)
+	}
+}
+
+func TestReassignTranscriptOwnerRejectsSameOwnerAndInactiveTarget(t *testing.T) {
+	var payload map[string]interface{}
+	server := speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job", "owner_user_id": "target"}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+	mock := withMockDatabase(t)
+	now := time.Now()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1`)).
+		WithArgs("target").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).AddRow("target", "Target User", "target@example.com", "hash", "user", true, now, now, sql.NullTime{}))
+	_, err := ReassignTranscriptOwner(context.Background(), "job", "target")
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeTranscriptOwnerUnchanged {
+		t.Fatalf("expected owner unchanged error, got %#v", err)
+	}
+
+	server = speakerRenameQdrantServer(t, map[string]interface{}{"job_id": "job", "owner_user_id": "owner"}, &payload)
+	t.Setenv("QDRANT_HOST", server.URL)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, name, email, password_hash, role, is_active, created_at, updated_at, last_login_at FROM users WHERE id = $1`)).
+		WithArgs("inactive").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "email", "password_hash", "role", "is_active", "created_at", "updated_at", "last_login_at"}).AddRow("inactive", "Inactive", "inactive@example.com", "hash", "user", false, now, now, sql.NullTime{}))
+	_, err = ReassignTranscriptOwner(context.Background(), "job", "inactive")
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeTargetUserInactive {
+		t.Fatalf("expected inactive target error, got %#v", err)
+	}
+}
+
+func TestTranscriptReassignmentAuditMetadataExcludesSnapshots(t *testing.T) {
+	metadata, err := SanitizeAuditMetadata("transcript_reassignment_succeeded", map[string]interface{}{"jobId": "job", "previousOwnerUserId": "old", "newOwnerUserId": "new", "ownerEmail": "new@example.com", "ownerDisplayName": "New"})
+	if err != nil {
+		t.Fatalf("sanitize failed: %v", err)
+	}
+	if metadata["ownerEmail"] != nil || metadata["ownerDisplayName"] != nil || metadata["newOwnerUserId"] != "new" {
+		t.Fatalf("unexpected audit metadata: %+v", metadata)
 	}
 }
 

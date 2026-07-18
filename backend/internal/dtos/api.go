@@ -225,6 +225,20 @@ type TranscriptDeletionResponse struct {
 	PartialCleanupCategories []string `json:"partialCleanupCategories,omitempty"`
 }
 
+type TranscriptReassignmentOptionsResponse struct {
+	Users []AdminUserSummary `json:"users"`
+}
+
+type TranscriptReassignmentRequest struct {
+	NewOwnerUserID string `json:"newOwnerUserId"`
+}
+
+type TranscriptReassignmentResponse struct {
+	JobID               string                  `json:"jobId"`
+	PreviousOwnerUserID string                  `json:"previousOwnerUserId"`
+	NewOwner            TranscriptDeletionOwner `json:"newOwner"`
+}
+
 type QueueCounts struct {
 	Queued     int `json:"queued"`
 	Processing int `json:"processing"`

@@ -87,6 +87,8 @@ func main() {
 			admin.GET("/audit/:eventId", handlers.APIAdminGetAuditEvent)
 			admin.GET("/jobs", handlers.APIAdminListJobs)
 			admin.GET("/jobs/health", handlers.APIAdminJobHealth)
+			admin.GET("/transcripts/:jobId/reassignment-options", handlers.APIAdminTranscriptReassignmentOptions)
+			admin.POST("/transcripts/:jobId/reassign", handlers.APIAdminReassignTranscript)
 			admin.GET("/transcripts/:jobId/deletion-preview", handlers.APIAdminTranscriptDeletionPreview)
 			admin.DELETE("/transcripts/:jobId", handlers.APIAdminDeleteTranscript)
 			admin.GET("/jobs/:jobId", handlers.APIAdminGetJob)

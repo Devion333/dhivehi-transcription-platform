@@ -72,6 +72,12 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusTooManyRequests, serviceErr.Code, "Too many password change attempts. Try again later.", nil)
 		case services.ErrCodeUserNotFound:
 			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "User was not found", nil)
+		case services.ErrCodeTargetUserNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Target user was not found", nil)
+		case services.ErrCodeTargetUserInactive:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Target user is inactive", nil)
+		case services.ErrCodeTranscriptOwnerUnchanged:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Transcript is already assigned to this owner", nil)
 		case services.ErrCodeCannotDeactivateSelf:
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "You cannot deactivate your own account", nil)
 		case services.ErrCodeLastActiveAdmin:

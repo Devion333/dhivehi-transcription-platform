@@ -518,6 +518,43 @@ func BuildTranscriptDownload(scope TranscriptAccessScope, jobID, format string) 
 	return TranscriptDownload{Filename: base + "." + format, ContentType: contentType, Body: body}, nil
 }
 
+func ReassignTranscriptOwner(ctx context.Context, jobID, newOwnerUserID string) (dtos.TranscriptReassignmentResponse, error) {
+	jobID = strings.TrimSpace(jobID)
+	newOwnerUserID = strings.TrimSpace(newOwnerUserID)
+	if jobID == "" || newOwnerUserID == "" {
+		return dtos.TranscriptReassignmentResponse{}, newServiceError(ErrCodeBadRequest, errors.New("job ID and new owner are required"))
+	}
+	parent, err := GetParentTranscriptPoint(jobID)
+	if err != nil {
+		return dtos.TranscriptReassignmentResponse{}, err
+	}
+	target, err := GetUserByID(ctx, newOwnerUserID)
+	if err != nil {
+		var serviceErr *ServiceError
+		if errors.As(err, &serviceErr) && serviceErr.Code == ErrCodeUserNotFound {
+			return dtos.TranscriptReassignmentResponse{}, newServiceError(ErrCodeTargetUserNotFound, errors.New("target user not found"))
+		}
+		return dtos.TranscriptReassignmentResponse{}, err
+	}
+	if !target.IsActive {
+		return dtos.TranscriptReassignmentResponse{}, newServiceError(ErrCodeTargetUserInactive, errors.New("target user inactive"))
+	}
+	previousOwnerUserID := parentOwnerUserID(parent.Payload)
+	if previousOwnerUserID != "" && previousOwnerUserID == target.ID {
+		return dtos.TranscriptReassignmentResponse{}, newServiceError(ErrCodeTranscriptOwnerUnchanged, errors.New("owner unchanged"))
+	}
+	payload := map[string]interface{}{
+		"owner_user_id":      target.ID,
+		"owner_display_name": target.Name,
+		"owner_email":        target.Email,
+		"updated_at":         time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := updateParentPayloadByJobID(jobID, payload); err != nil {
+		return dtos.TranscriptReassignmentResponse{}, err
+	}
+	return dtos.TranscriptReassignmentResponse{JobID: jobID, PreviousOwnerUserID: previousOwnerUserID, NewOwner: dtos.TranscriptDeletionOwner{DisplayName: target.Name, Email: target.Email}}, nil
+}
+
 func supportedTranscriptDownloadFormat(format string) bool {
 	switch format {
 	case "txt", "json", "srt", "vtt":
@@ -1192,6 +1229,10 @@ func SpeakerDisplayName(speakerKey string, speakerNames map[string]string) strin
 
 func parentOwnerUserID(payload map[string]interface{}) string {
 	return getString(payload, "owner_user_id", "")
+}
+
+func ParentOwnerUserIDForAudit(payload map[string]interface{}) string {
+	return parentOwnerUserID(payload)
 }
 
 func MapSegment(parent, payload map[string]interface{}) dtos.Segment {
