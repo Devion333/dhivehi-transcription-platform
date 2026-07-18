@@ -77,6 +77,40 @@ type AccountActivityResponse struct {
 	Pagination Pagination            `json:"pagination"`
 }
 
+type Folder struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	OwnerUserID      string `json:"ownerUserId"`
+	OwnerDisplayName string `json:"ownerDisplayName"`
+	TranscriptCount  int    `json:"transcriptCount"`
+	CreatedAt        string `json:"createdAt"`
+	UpdatedAt        string `json:"updatedAt"`
+}
+
+type FolderListResponse struct {
+	Items      []Folder   `json:"items"`
+	Pagination Pagination `json:"pagination"`
+}
+
+type FolderDetailResponse struct {
+	Folder      Folder              `json:"folder"`
+	Transcripts []TranscriptSummary `json:"transcripts"`
+}
+
+type FolderRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type FolderTranscriptRequest struct {
+	JobID string `json:"jobId"`
+}
+
+type FolderResponse struct {
+	Folder Folder `json:"folder"`
+}
+
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`
@@ -327,6 +361,8 @@ type TranscriptSummary struct {
 	UpdatedAt            string `json:"updatedAt"`
 	AnalysisStatus       string `json:"analysisStatus"`
 	AnalysisReviewStatus string `json:"analysisReviewStatus"`
+	FolderID             string `json:"folderId"`
+	FolderName           string `json:"folderName"`
 	OwnerUserID          string `json:"ownerUserId"`
 	OwnerDisplayName     string `json:"ownerDisplayName"`
 	OwnerEmail           string `json:"ownerEmail"`
@@ -356,6 +392,8 @@ type TranscriptDetail struct {
 	CreatedAt        string            `json:"createdAt"`
 	UpdatedAt        string            `json:"updatedAt"`
 	AnalysisStatus   string            `json:"analysisStatus"`
+	FolderID         string            `json:"folderId"`
+	FolderName       string            `json:"folderName"`
 	OwnerUserID      string            `json:"ownerUserId"`
 	OwnerDisplayName string            `json:"ownerDisplayName"`
 	OwnerEmail       string            `json:"ownerEmail"`
@@ -433,6 +471,8 @@ type TranscriptSearchResult struct {
 	OwnerUserID        string  `json:"ownerUserId,omitempty"`
 	OwnerDisplayName   string  `json:"ownerDisplayName,omitempty"`
 	OwnerEmail         string  `json:"ownerEmail,omitempty"`
+	FolderID           string  `json:"folderId,omitempty"`
+	FolderName         string  `json:"folderName,omitempty"`
 	SegmentIndex       int     `json:"segmentIndex"`
 	Speaker            string  `json:"speaker"`
 	SpeakerDisplayName string  `json:"speakerDisplayName"`
