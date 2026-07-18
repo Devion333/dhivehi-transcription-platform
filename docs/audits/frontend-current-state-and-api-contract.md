@@ -746,3 +746,11 @@ GET /api/transcripts/:jobId/status
 ```
 
 The endpoint returns `jobId`, normalized `status`, `stage`, `isTerminal`, `updatedAt`, and nullable safe failure fields. Standard users can only access owned transcript status; admins can access all transcript status. Upload, Transcript List, and Transcript Details poll this endpoint or refresh the current list page approximately every 3 seconds while work is non-terminal, abort on unmount, skip hidden-tab requests, and stop on terminal status.
+
+## Transcript Discovery And Export Addition
+
+Search endpoint remains `GET /api/search/transcripts` and now accepts optional `q`, `filename`, `reference`, `category`, `status`, `ownerUserId`, `createdFrom`, `createdTo`, `speaker`, `page`, and `pageSize`. Standard users search owned transcripts only. Admins may search all transcripts and use `ownerUserId`. Invalid dates/status values return safe `400` errors.
+
+Search results include public metadata and, for segment matches, `segmentId`, `segmentIndex`, `speaker`, `speakerDisplayName`, `startTime`, `endTime`, and `matchedText`. Metadata-only results omit `segmentId`. Segment result links use `/Transcripts/Details?job_id=<jobId>&segment_id=<segmentId>`; Details scrolls/highlights the stable segment ID once after load without autoplay.
+
+Authenticated downloads are available at `GET /api/transcripts/:jobId/download?format=txt|json|srt|vtt`. The backend generates UTF-8 TXT, JSON, SRT, and WebVTT from authorized transcript data only, with safe filenames and appropriate content types. Download audit actions are `transcript_download_succeeded` and `transcript_download_failed` with safe metadata limited to `jobId` and `format`.

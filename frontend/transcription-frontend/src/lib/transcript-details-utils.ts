@@ -59,3 +59,9 @@ export function safeValue(value: string | number | null | undefined, fallback: s
 export function isProcessingStatus(status: string) {
   return isProcessingTranscriptStatus(status);
 }
+
+export function findTargetSegment(segments: TranscriptSegment[], segmentId: string) {
+  const target = segmentId.trim();
+  if (!target) return null;
+  return segments.find((segment) => segment.id === target) ?? null;
+}

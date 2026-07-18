@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { deleteTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
+import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
 import type { TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
 import { transcriptStatusLabel } from "@/lib/transcript-status";
@@ -24,6 +24,7 @@ import {
   formatDetailDate,
   formatDuration,
   formatTimestamp,
+  findTargetSegment,
   getSpeakerDisplayName,
   isProcessingStatus,
   safeValue,
@@ -50,10 +51,13 @@ type SpeakerEditState = {
 export function TranscriptDetailsClient() {
 	const auth = useAuth();
 	const router = useRouter();
-	const searchParams = useSearchParams();
+  const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
+  const targetSegmentId = (searchParams.get("segment_id") ?? "").trim();
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const stopAtRef = React.useRef<number | null>(null);
+  const segmentRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const scrolledTargetRef = React.useRef("");
   const [detail, setDetail] = React.useState<TranscriptDetail | null>(null);
   const [liveStatus, setLiveStatus] = React.useState<TranscriptStatusResponse | null>(null);
   const [loading, setLoading] = React.useState(Boolean(jobId));
@@ -68,6 +72,7 @@ export function TranscriptDetailsClient() {
   const [previousVolume, setPreviousVolume] = React.useState(1);
   const [playbackRate, setPlaybackRate] = React.useState(1);
   const [activeSegmentId, setActiveSegmentId] = React.useState<string | null>(null);
+  const [highlightedSegmentId, setHighlightedSegmentId] = React.useState<string | null>(null);
   const [edits, setEdits] = React.useState<Record<string, SegmentEditState>>({});
 	const [speakerEdit, setSpeakerEdit] = React.useState<SpeakerEditState | null>(null);
 	const [deletePreview, setDeletePreview] = React.useState<TranscriptDeletionPreview | null>(null);
@@ -76,6 +81,9 @@ export function TranscriptDetailsClient() {
 	const [deleteConfirmation, setDeleteConfirmation] = React.useState("");
 	const [deleteError, setDeleteError] = React.useState<string | null>(null);
 	const [exportOpen, setExportOpen] = React.useState(false);
+  const [downloadFormat, setDownloadFormat] = React.useState<"txt" | "json" | "srt" | "vtt" | "pdf">("txt");
+  const [downloadLoading, setDownloadLoading] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const [exportAnalysis, setExportAnalysis] = React.useState<TranscriptAnalysis | null>(null);
   const reloadedReadyRef = React.useRef(false);
 
@@ -100,6 +108,7 @@ export function TranscriptDetailsClient() {
 				setDeletePreview(null);
 				setDeleteConfirmation("");
 				setDeleteError(null);
+				setDownloadError(null);
 			})
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -110,6 +119,20 @@ export function TranscriptDetailsClient() {
       });
     return () => controller.abort();
   }, [jobId, retryToken]);
+
+  React.useEffect(() => {
+    if (!detail || !targetSegmentId || scrolledTargetRef.current === `${detail.jobId}:${targetSegmentId}`) return;
+    const target = findTargetSegment(detail.segments, targetSegmentId);
+    if (!target) return;
+    const element = segmentRefs.current[target.id];
+    if (!element) return;
+    scrolledTargetRef.current = `${detail.jobId}:${targetSegmentId}`;
+    setActiveSegmentId(target.id);
+    setHighlightedSegmentId(target.id);
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timeoutId = setTimeout(() => setHighlightedSegmentId((current) => current === target.id ? null : current), 2500);
+    return () => clearTimeout(timeoutId);
+  }, [detail, targetSegmentId]);
 
   useTranscriptStatusPolling({
     jobId,
@@ -322,6 +345,31 @@ export function TranscriptDetailsClient() {
 		}
 	}
 
+  async function startDownload() {
+    if (!detail || downloadLoading || !transcriptReady) return;
+    setDownloadError(null);
+    if (downloadFormat === "pdf") {
+      setExportOpen(true);
+      return;
+    }
+    setDownloadLoading(true);
+    try {
+      const result = await downloadTranscript(detail.jobId, downloadFormat);
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setDownloadLoading(false);
+    }
+  }
+
   return (
     <PageContainer>
       <PageHeader
@@ -329,7 +377,7 @@ export function TranscriptDetailsClient() {
         actions={
           <>
             <BackToList />
-            <Button type="button" variant="outline" onClick={() => setExportOpen(true)} disabled={!transcriptReady || detail.segments.length === 0}><FileDown className="h-4 w-4" /> Export PDF</Button>
+            <DownloadMenu format={downloadFormat} loading={downloadLoading} disabled={!transcriptReady || detail.segments.length === 0} onFormat={setDownloadFormat} onDownload={startDownload} />
             {transcriptReady ? (
               <Button asChild variant="outline"><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {detail.analysisStatus === "complete" ? "View analysis" : "Analyse"}</Link></Button>
             ) : (
@@ -357,6 +405,8 @@ export function TranscriptDetailsClient() {
         onToggleMute={toggleMute}
         onRate={setPlaybackRate}
       />
+
+      {downloadError && <p className="mt-3 text-sm text-destructive">{downloadError}</p>}
 
       <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
 		<aside className="space-y-4">
@@ -418,6 +468,8 @@ export function TranscriptDetailsClient() {
                   speakerNames={detail.speakerNames}
                   active={activeSegmentId === segment.id}
                   edit={edits[segment.id] ?? initialEditState(segment.transcriptText)}
+                  highlighted={highlightedSegmentId === segment.id}
+                  refCallback={(element) => { segmentRefs.current[segment.id] = element; }}
                   audioAvailable={Boolean(detail.mediaUrl) && !audioError}
                   editable={transcriptReady}
                   onPlay={() => playSegment(segment)}
@@ -530,6 +582,36 @@ function hasControlCharacters(value: string) {
 
 function BackToList() {
   return <Button asChild variant="outline"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
+}
+
+function DownloadMenu({ format, loading, disabled, onFormat, onDownload }: {
+  format: "txt" | "json" | "srt" | "vtt" | "pdf";
+  loading: boolean;
+  disabled: boolean;
+  onFormat: (format: "txt" | "json" | "srt" | "vtt" | "pdf") => void;
+  onDownload: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border bg-background p-1">
+      <select
+        value={format}
+        onChange={(event) => onFormat(event.target.value as "txt" | "json" | "srt" | "vtt" | "pdf")}
+        disabled={disabled || loading}
+        aria-label="Download format"
+        className="h-8 rounded-md border-0 bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <option value="txt">Plain text</option>
+        <option value="json">JSON</option>
+        <option value="srt">SRT subtitles</option>
+        <option value="vtt">WebVTT subtitles</option>
+        <option value="pdf">PDF</option>
+      </select>
+      <Button type="button" size="sm" variant="outline" onClick={onDownload} disabled={disabled || loading}>
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+        Download
+      </Button>
+    </div>
+  );
 }
 
 function MetadataCard({ detail, status, isAdmin }: { detail: TranscriptDetail; status: string; isAdmin: boolean }) {
@@ -675,13 +757,15 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
   );
 }
 
-function SegmentCard({ segment, speakerNames, active, edit, audioAvailable, editable, onPlay, onEdit, onCancel, onSave, onDraft }: {
+function SegmentCard({ segment, speakerNames, active, highlighted, edit, audioAvailable, editable, refCallback, onPlay, onEdit, onCancel, onSave, onDraft }: {
   segment: TranscriptSegment;
   speakerNames: Record<string, string>;
   active: boolean;
+  highlighted: boolean;
   edit: SegmentEditState;
   audioAvailable: boolean;
   editable: boolean;
+  refCallback: (element: HTMLDivElement | null) => void;
   onPlay: () => void;
   onEdit: () => void;
   onCancel: () => void;
@@ -690,7 +774,7 @@ function SegmentCard({ segment, speakerNames, active, edit, audioAvailable, edit
 }) {
   const textProps = transcriptTextProps(edit.editing ? edit.draft : segment.transcriptText);
   return (
-    <Card className={cn(active && "border-primary shadow-sm")}>
+    <Card ref={refCallback} className={cn(active && "border-primary shadow-sm", highlighted && "ring-2 ring-amber-400 ring-offset-2 ring-offset-background")}>
       <CardHeader className="pb-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>

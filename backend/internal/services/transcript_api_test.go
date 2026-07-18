@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"transcript_app/backend/internal/dtos"
 )
 
 func TestNormalizePagination(t *testing.T) {
@@ -120,14 +122,14 @@ func TestFindSegmentForUpdateSupportsDeterministicID(t *testing.T) {
 	}
 }
 
-func TestSearchTranscriptTextRejectsEmptyQuery(t *testing.T) {
-	_, err := SearchTranscriptText(TranscriptAccessScope{UserID: "user-1"}, "   ", 1, 20, "", "")
+func TestSearchTranscriptsRejectsInvalidStatus(t *testing.T) {
+	_, err := SearchTranscripts(TranscriptAccessScope{UserID: "user-1"}, TranscriptSearchFilters{Status: "unsupported"})
 	if err == nil {
-		t.Fatal("expected empty query error")
+		t.Fatal("expected invalid status error")
 	}
 	var serviceErr *ServiceError
-	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeSearchQueryRequired {
-		t.Fatalf("expected search query required error, got %#v", err)
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeInvalidSearchFilter {
+		t.Fatalf("expected invalid search filter error, got %#v", err)
 	}
 }
 
@@ -175,7 +177,7 @@ func TestBuildTranscriptSearchResponseEnrichesParentsAndOrdersResults(t *testing
 		{Payload: map[string]interface{}{"job_id": "new", "filename": "new.wav", "reference_number": "NEW", "category": "meeting", "status": "transcribed", "timestamp": "2026-07-15T00:00:00Z"}},
 	}
 
-	result := BuildTranscriptSearchResponse("ALPHA", 1, 20, "transcribed", "meeting", segments, parents)
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "ALPHA", Page: 1, PageSize: 20, Status: "transcribed", Category: "meeting"}, segments, parents)
 	if result.Query != "ALPHA" || result.Pagination.Total != 3 {
 		t.Fatalf("unexpected response: %+v", result)
 	}
@@ -189,13 +191,9 @@ func TestBuildTranscriptSearchResponseEnrichesParentsAndOrdersResults(t *testing
 
 func TestBuildTranscriptSearchResponseMissingParentFallback(t *testing.T) {
 	segments := []QdrantPoint{{Payload: map[string]interface{}{"parent_job_id": "missing", "segment_index": float64(3), "transcript_text": "ދިވެހި text"}}}
-	result := BuildTranscriptSearchResponse("ދިވެހި", 1, 20, "", "", segments, nil)
-	if len(result.Items) != 1 {
-		t.Fatalf("expected one result, got %+v", result)
-	}
-	item := result.Items[0]
-	if item.Filename != "Unknown" || item.ReferenceNumber != "N/A" || item.TranscriptStatus != "uploaded" {
-		t.Fatalf("fallbacks not applied: %+v", item)
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "ދިވެހި", Page: 1, PageSize: 20}, segments, nil)
+	if len(result.Items) != 0 {
+		t.Fatalf("expected orphaned segment to be excluded, got %+v", result)
 	}
 }
 
@@ -206,12 +204,84 @@ func TestBuildTranscriptSearchResponsePaginates(t *testing.T) {
 		{Payload: map[string]interface{}{"parent_job_id": "job", "segment_index": float64(2), "transcript_text": "alpha two"}},
 	}
 	parents := []QdrantPoint{{Payload: map[string]interface{}{"job_id": "job", "timestamp": "2026-07-15T00:00:00Z"}}}
-	result := BuildTranscriptSearchResponse("alpha", 2, 2, "", "", segments, parents)
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "alpha", Page: 2, PageSize: 2}, segments, parents)
 	if result.Pagination.Total != 3 || result.Pagination.TotalPages != 2 || len(result.Items) != 1 || result.Pagination.HasNextPage {
 		t.Fatalf("unexpected pagination: %+v", result.Pagination)
 	}
 	if result.Items[0].SegmentIndex != 2 {
 		t.Fatalf("expected page two item index 2, got %+v", result.Items[0])
+	}
+}
+
+func TestBuildTranscriptSearchResponseMetadataOnlyResultOmitsSegment(t *testing.T) {
+	parents := []QdrantPoint{{Payload: map[string]interface{}{"job_id": "job", "filename": "case-file.wav", "reference_number": "REF-1", "status": "transcribed", "timestamp": "2026-07-15T00:00:00Z"}}}
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "case-file", Page: 1, PageSize: 20}, nil, parents)
+	if len(result.Items) != 1 || result.Items[0].SegmentID != "" || result.Items[0].JobID != "job" {
+		t.Fatalf("expected metadata-only result without segment id, got %+v", result.Items)
+	}
+}
+
+func TestBuildTranscriptSearchResponseAdminOwnerFilter(t *testing.T) {
+	parents := []QdrantPoint{
+		{Payload: map[string]interface{}{"job_id": "owned", "filename": "one.wav", "owner_user_id": "user-1", "timestamp": "2026-07-15T00:00:00Z"}},
+		{Payload: map[string]interface{}{"job_id": "other", "filename": "two.wav", "owner_user_id": "user-2", "timestamp": "2026-07-15T00:00:00Z"}},
+	}
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{OwnerUserID: "user-1", Page: 1, PageSize: 20}, nil, parents)
+	if len(result.Items) != 1 || result.Items[0].JobID != "owned" {
+		t.Fatalf("expected owner-filtered result, got %+v", result.Items)
+	}
+}
+
+func TestValidateTranscriptSearchFiltersRejectsInvalidDate(t *testing.T) {
+	err := validateTranscriptSearchFilters(TranscriptSearchFilters{CreatedFrom: "not-a-date"})
+	var serviceErr *ServiceError
+	if !errors.As(err, &serviceErr) || serviceErr.Code != ErrCodeInvalidSearchFilter {
+		t.Fatalf("expected invalid search filter, got %#v", err)
+	}
+}
+
+func TestBuildTranscriptSearchResponseTranscriptTextIncludesSegmentID(t *testing.T) {
+	parents := []QdrantPoint{{Payload: map[string]interface{}{"job_id": "job", "filename": "case.wav", "status": "transcribed", "timestamp": "2026-07-15T00:00:00Z", "speaker_names": map[string]interface{}{"SPEAKER_00": "Officer Ahmed"}}}}
+	segments := []QdrantPoint{{Payload: map[string]interface{}{"parent_job_id": "job", "segment_index": float64(0), "speaker": "SPEAKER_00", "start_time": float64(12.5), "end_time": float64(18.2), "transcript_text": "ދިވެހި text"}}}
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "ދިވެހި", Page: 1, PageSize: 20}, segments, parents)
+	if len(result.Items) != 1 || result.Items[0].SegmentID != "job_seg_000" || result.Items[0].SpeakerDisplayName != "Officer Ahmed" {
+		t.Fatalf("expected segment result with speaker display name, got %+v", result.Items)
+	}
+}
+
+func TestTranscriptDownloadRenderers(t *testing.T) {
+	detail := dtos.TranscriptDetail{JobID: "job", Filename: "case.wav", ReferenceNumber: "REF/Unsafe", Category: "Call", SpeakerNames: map[string]string{"SPEAKER_00": "Officer Ahmed"}, Segments: []dtos.Segment{{ID: "seg", SegmentIndex: 0, Speaker: "SPEAKER_00", StartTime: 12.5, EndTime: 18.2, TranscriptText: "ދިވެހި text", Status: "transcribed"}}}
+	if txt := renderTranscriptTXT(detail); !strings.Contains(txt, "ދިވެހި") || !strings.Contains(txt, "Officer Ahmed") {
+		t.Fatalf("txt did not preserve unicode/speaker: %q", txt)
+	}
+	if srt := renderTranscriptSubtitles(detail, "srt"); !strings.Contains(srt, "1\n00:00:12,500 --> 00:00:18,200") || !strings.Contains(srt, "Officer Ahmed") {
+		t.Fatalf("unexpected srt: %q", srt)
+	}
+	if vtt := renderTranscriptSubtitles(detail, "vtt"); !strings.HasPrefix(vtt, "WEBVTT\n\n00:00:12.500 --> 00:00:18.200") {
+		t.Fatalf("unexpected vtt: %q", vtt)
+	}
+	if safeDownloadBaseName(detail.ReferenceNumber) != "REFUnsafe" {
+		t.Fatalf("unsafe filename was not cleaned: %q", safeDownloadBaseName(detail.ReferenceNumber))
+	}
+	jsonDoc := MapTranscriptDownloadDocument(TranscriptAccessScope{}, detail)
+	if jsonDoc.Segments[0].SpeakerDisplayName != "Officer Ahmed" || jsonDoc.OwnerUserID != "" {
+		t.Fatalf("unexpected json document: %+v", jsonDoc)
+	}
+}
+
+func TestTranscriptDownloadValidationAndAuditSafety(t *testing.T) {
+	if supportedTranscriptDownloadFormat("exe") {
+		t.Fatal("unsupported format should be rejected")
+	}
+	if err := validateDownloadSegments([]dtos.Segment{{StartTime: 10, EndTime: 1}}); err == nil {
+		t.Fatal("expected invalid timestamp error")
+	}
+	metadata, err := SanitizeAuditMetadata("transcript_download_succeeded", map[string]interface{}{"jobId": "job", "format": "txt", "content": "secret transcript"})
+	if err != nil {
+		t.Fatalf("sanitize failed: %v", err)
+	}
+	if metadata["jobId"] != "job" || metadata["format"] != "txt" || metadata["content"] != nil {
+		t.Fatalf("unexpected audit metadata: %+v", metadata)
 	}
 }
 
