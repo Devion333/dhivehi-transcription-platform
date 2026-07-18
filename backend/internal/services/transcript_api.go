@@ -1096,19 +1096,20 @@ func MapParentSummary(payload map[string]interface{}) dtos.TranscriptSummary {
 	createdAt := getString(payload, "timestamp", "")
 	updatedAt := firstString(payload, "updated_at", "transcription_completed_at", "diarization_completed_at", "timestamp")
 	return dtos.TranscriptSummary{
-		JobID:            getString(payload, "job_id", ""),
-		Filename:         getString(payload, "filename", "Unknown"),
-		Category:         getString(payload, "category", "Uncategorized"),
-		ReferenceNumber:  getString(payload, "reference_number", "N/A"),
-		Notes:            getString(payload, "notes", ""),
-		Status:           publicParentStatus(getString(payload, "status", "uploaded")),
-		SegmentCount:     parentSegmentCount(payload),
-		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
-		AnalysisStatus:   publicAnalysisStatus(getString(payload, "analysis_status", "not_started")),
-		OwnerUserID:      parentOwnerUserID(payload),
-		OwnerDisplayName: getString(payload, "owner_display_name", ""),
-		OwnerEmail:       getString(payload, "owner_email", ""),
+		JobID:                getString(payload, "job_id", ""),
+		Filename:             getString(payload, "filename", "Unknown"),
+		Category:             getString(payload, "category", "Uncategorized"),
+		ReferenceNumber:      getString(payload, "reference_number", "N/A"),
+		Notes:                getString(payload, "notes", ""),
+		Status:               publicParentStatus(getString(payload, "status", "uploaded")),
+		SegmentCount:         parentSegmentCount(payload),
+		CreatedAt:            createdAt,
+		UpdatedAt:            updatedAt,
+		AnalysisStatus:       publicAnalysisStatus(getString(payload, "analysis_status", "not_started")),
+		AnalysisReviewStatus: MapAnalysisReview(payload).Status,
+		OwnerUserID:          parentOwnerUserID(payload),
+		OwnerDisplayName:     getString(payload, "owner_display_name", ""),
+		OwnerEmail:           getString(payload, "owner_email", ""),
 	}
 }
 

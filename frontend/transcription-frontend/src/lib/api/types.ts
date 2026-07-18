@@ -117,6 +117,27 @@ export interface NotificationReadAllResponse {
   updated: number;
 }
 
+export interface AccountActivityItem {
+  id: string;
+  action: string;
+  title: string;
+  description: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  createdAt: string;
+}
+
+export interface AccountActivityResponse {
+  items: AccountActivityItem[];
+  pagination: Pagination;
+}
+
+export interface HealthResponse {
+  status: string;
+  service: string;
+  dependencies: Record<string, string>;
+}
+
 export interface AdminUserSummary {
   id: string;
   name: string;
@@ -330,6 +351,7 @@ export interface TranscriptSummary {
   updatedAt: string;
   segmentCount: number;
   analysisStatus: AnalysisStatus;
+  analysisReviewStatus: AnalysisReviewStatus;
   ownerUserId: string;
   ownerDisplayName: string;
   ownerEmail: string;
@@ -359,6 +381,7 @@ export interface TranscriptDetail {
   createdAt: string;
   updatedAt: string;
   analysisStatus: AnalysisStatus;
+  analysisReviewStatus: AnalysisReviewStatus;
   ownerUserId: string;
   ownerDisplayName: string;
   ownerEmail: string;

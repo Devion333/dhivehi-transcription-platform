@@ -60,6 +60,7 @@ func main() {
 			protected.POST("/uploads", handlers.APIUploadFile)
 			protected.GET("/account/profile", handlers.APIGetAccountProfile)
 			protected.PATCH("/account/profile", handlers.APIUpdateAccountProfile)
+			protected.GET("/account/activity", handlers.APIGetAccountActivity)
 			protected.GET("/stats", handlers.APIStats)
 			protected.GET("/search/transcripts", handlers.APISearchTranscripts)
 			protected.GET("/notifications", handlers.APIListNotifications)

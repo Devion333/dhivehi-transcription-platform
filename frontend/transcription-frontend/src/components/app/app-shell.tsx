@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BriefcaseBusiness, CheckCheck, FileText, History, Home, LogOut, Menu, Search, ShieldCheck, UploadCloud, UserCircle, Users } from "lucide-react";
+import { Activity, Bell, BriefcaseBusiness, CheckCheck, CircleHelp, FileText, HeartPulse, History, Home, Inbox, LogOut, Menu, Search, ShieldCheck, UploadCloud, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -21,9 +21,15 @@ const mainNavItems = [
   { href: "/Upload", label: "Upload", icon: UploadCloud },
   { href: "/Transcripts", label: "Transcripts", icon: FileText },
   { href: "/Search", label: "Search", icon: Search },
+  { href: "/Notifications", label: "Notifications", icon: Inbox },
+  { href: "/Activity", label: "Activity", icon: Activity },
+  { href: "/Help", label: "Help", icon: CircleHelp },
 ];
 
 const adminNavItems = [
+  { href: "/Admin/Transcripts", label: "Transcripts", icon: FileText },
+  { href: "/Admin/System-Health", label: "System Health", icon: HeartPulse },
+  { href: "/Analysis/Review-Queue", label: "Review Queue", icon: CheckCheck },
   { href: "/Admin/Users", label: "Users", icon: Users },
   { href: "/Admin/Audit", label: "Audit", icon: History },
   { href: "/Admin/Jobs", label: "Jobs", icon: BriefcaseBusiness },
@@ -57,6 +63,7 @@ function isActiveNavItem(href: string, pathname: string) {
   if (href === "/Upload") return pathname === "/Upload";
   if (href === "/Transcripts") return pathname === "/Transcripts" || pathname.startsWith("/Transcripts/Details") || pathname.startsWith("/Transcripts/Analysis");
   if (href === "/Search") return pathname === "/Search";
+  if (href === "/Analysis/Review-Queue") return pathname === "/Analysis/Review-Queue";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -213,6 +220,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
                       <Link href="/Account/Security"><ShieldCheck className="h-4 w-4" /> Security</Link>
                     </Button>
+                    <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
+                      <Link href="/Supported-Formats"><FileText className="h-4 w-4" /> Supported formats</Link>
+                    </Button>
+                    <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
+                      <Link href="/About"><CircleHelp className="h-4 w-4" /> About</Link>
+                    </Button>
                     <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
                       <LogOut className="h-4 w-4" /> Sign out
                     </Button>
@@ -256,6 +269,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Button>
                 <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
                   <Link href="/Account/Security"><ShieldCheck className="h-4 w-4" /> Security</Link>
+                </Button>
+                <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
+                  <Link href="/Supported-Formats"><FileText className="h-4 w-4" /> Formats</Link>
+                </Button>
+                <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
+                  <Link href="/About"><CircleHelp className="h-4 w-4" /> About</Link>
                 </Button>
                 <Button variant="outline" className="mt-3 w-full justify-start gap-2" onClick={handleSignOut}>
                   <LogOut className="h-4 w-4" /> Sign out
@@ -384,6 +403,9 @@ function NotificationBell() {
               ))}
             </div>
           )}
+          <Button asChild variant="ghost" className="mt-2 w-full justify-start" onClick={() => setOpen(false)}>
+            <Link href="/Notifications">View all notifications</Link>
+          </Button>
         </div>
       )}
     </div>

@@ -62,6 +62,21 @@ type NotificationReadAllResponse struct {
 	Updated int `json:"updated"`
 }
 
+type AccountActivityItem struct {
+	ID           string  `json:"id"`
+	Action       string  `json:"action"`
+	Title        string  `json:"title"`
+	Description  string  `json:"description"`
+	ResourceType *string `json:"resourceType"`
+	ResourceID   *string `json:"resourceId"`
+	CreatedAt    string  `json:"createdAt"`
+}
+
+type AccountActivityResponse struct {
+	Items      []AccountActivityItem `json:"items"`
+	Pagination Pagination            `json:"pagination"`
+}
+
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`
@@ -301,19 +316,20 @@ type Pagination struct {
 }
 
 type TranscriptSummary struct {
-	JobID            string `json:"jobId"`
-	Filename         string `json:"filename"`
-	Category         string `json:"category"`
-	ReferenceNumber  string `json:"referenceNumber"`
-	Notes            string `json:"notes"`
-	Status           string `json:"status"`
-	SegmentCount     int    `json:"segmentCount"`
-	CreatedAt        string `json:"createdAt"`
-	UpdatedAt        string `json:"updatedAt"`
-	AnalysisStatus   string `json:"analysisStatus"`
-	OwnerUserID      string `json:"ownerUserId"`
-	OwnerDisplayName string `json:"ownerDisplayName"`
-	OwnerEmail       string `json:"ownerEmail"`
+	JobID                string `json:"jobId"`
+	Filename             string `json:"filename"`
+	Category             string `json:"category"`
+	ReferenceNumber      string `json:"referenceNumber"`
+	Notes                string `json:"notes"`
+	Status               string `json:"status"`
+	SegmentCount         int    `json:"segmentCount"`
+	CreatedAt            string `json:"createdAt"`
+	UpdatedAt            string `json:"updatedAt"`
+	AnalysisStatus       string `json:"analysisStatus"`
+	AnalysisReviewStatus string `json:"analysisReviewStatus"`
+	OwnerUserID          string `json:"ownerUserId"`
+	OwnerDisplayName     string `json:"ownerDisplayName"`
+	OwnerEmail           string `json:"ownerEmail"`
 }
 
 type Segment struct {
