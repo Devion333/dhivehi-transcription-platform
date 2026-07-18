@@ -7,6 +7,7 @@ export type TranscriptListParams = {
   pageSize?: number;
   search?: string;
   status?: string;
+  folderId?: string;
 };
 
 export function transcriptListQuery(params: TranscriptListParams = {}) {
@@ -15,6 +16,7 @@ export function transcriptListQuery(params: TranscriptListParams = {}) {
   if (params.pageSize) searchParams.set("pageSize", String(params.pageSize));
   if (params.search?.trim()) searchParams.set("search", params.search.trim());
   if (params.status?.trim() && params.status !== "all") searchParams.set("status", params.status.trim());
+  if (params.folderId?.trim()) searchParams.set("folderId", params.folderId.trim());
   return searchParams.toString();
 }
 

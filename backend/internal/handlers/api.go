@@ -71,7 +71,7 @@ func APIListTranscripts(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	page, pageSize = services.NormalizePagination(page, pageSize)
 
-	result, err := services.GetAPITranscripts(transcriptAccessScope(c), page, pageSize, c.Query("search"), c.Query("status"))
+	result, err := services.GetAPITranscripts(c.Request.Context(), transcriptAccessScope(c), page, pageSize, c.Query("search"), c.Query("status"), c.Query("folderId"))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -84,7 +84,7 @@ func APISearchTranscripts(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	page, pageSize = services.NormalizePagination(page, pageSize)
 
-	filters := services.TranscriptSearchFilters{Query: c.Query("q"), Filename: c.Query("filename"), Reference: c.Query("reference"), Category: c.Query("category"), Status: c.Query("status"), OwnerUserID: c.Query("ownerUserId"), CreatedFrom: c.Query("createdFrom"), CreatedTo: c.Query("createdTo"), Speaker: c.Query("speaker"), Page: page, PageSize: pageSize}
+	filters := services.TranscriptSearchFilters{Query: c.Query("q"), Filename: c.Query("filename"), Reference: c.Query("reference"), Category: c.Query("category"), Status: c.Query("status"), OwnerUserID: c.Query("ownerUserId"), FolderID: c.Query("folderId"), CreatedFrom: c.Query("createdFrom"), CreatedTo: c.Query("createdTo"), Speaker: c.Query("speaker"), Page: page, PageSize: pageSize}
 	result, err := services.SearchTranscripts(transcriptAccessScope(c), filters)
 	if err != nil {
 		writeServiceError(c, err)

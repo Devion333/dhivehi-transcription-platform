@@ -10,6 +10,7 @@ export type TranscriptSearchParams = {
   status?: string;
   category?: string;
   ownerUserId?: string;
+  folderId?: string;
   createdFrom?: string;
   createdTo?: string;
   speaker?: string;
@@ -25,6 +26,7 @@ export function transcriptSearchQuery(params: TranscriptSearchParams) {
   if (params.status?.trim() && params.status !== "all") searchParams.set("status", params.status.trim());
   if (params.category?.trim()) searchParams.set("category", params.category.trim());
   if (params.ownerUserId?.trim()) searchParams.set("ownerUserId", params.ownerUserId.trim());
+  if (params.folderId?.trim()) searchParams.set("folderId", params.folderId.trim());
   if (params.createdFrom?.trim()) searchParams.set("createdFrom", params.createdFrom.trim());
   if (params.createdTo?.trim()) searchParams.set("createdTo", params.createdTo.trim());
   if (params.speaker?.trim()) searchParams.set("speaker", params.speaker.trim());

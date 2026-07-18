@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Bell, BriefcaseBusiness, CheckCheck, CircleHelp, FileText, HeartPulse, History, Home, Inbox, LogOut, Menu, Search, ShieldCheck, UploadCloud, UserCircle, Users } from "lucide-react";
+import { Activity, Bell, BriefcaseBusiness, CheckCheck, CircleHelp, FileText, FolderOpen, HeartPulse, History, Home, Inbox, LogOut, Menu, Search, ShieldCheck, UploadCloud, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -20,6 +20,7 @@ const mainNavItems = [
   { href: "/", label: "Dashboard", icon: Home },
   { href: "/Upload", label: "Upload", icon: UploadCloud },
   { href: "/Transcripts", label: "Transcripts", icon: FileText },
+  { href: "/Folders", label: "Folders", icon: FolderOpen },
   { href: "/Search", label: "Search", icon: Search },
   { href: "/Notifications", label: "Notifications", icon: Inbox },
   { href: "/Activity", label: "Activity", icon: Activity },

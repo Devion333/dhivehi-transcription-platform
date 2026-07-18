@@ -47,6 +47,7 @@ type TranscriptSearchFilters struct {
 	Category    string
 	Status      string
 	OwnerUserID string
+	FolderID    string
 	CreatedFrom string
 	CreatedTo   string
 	Speaker     string
@@ -81,8 +82,16 @@ func NormalizePagination(page, pageSize int) (int, int) {
 	return page, pageSize
 }
 
-func GetAPITranscripts(scope TranscriptAccessScope, page, pageSize int, search, status string) (dtos.TranscriptListResponse, error) {
+func GetAPITranscripts(ctx context.Context, scope TranscriptAccessScope, page, pageSize int, search, status, folderID string) (dtos.TranscriptListResponse, error) {
 	page, pageSize = NormalizePagination(page, pageSize)
+	var folderJobIDs map[string]struct{}
+	if strings.TrimSpace(folderID) != "" {
+		var err error
+		folderJobIDs, err = FolderJobIDSetForFilter(ctx, scope, folderID)
+		if err != nil {
+			return dtos.TranscriptListResponse{}, err
+		}
+	}
 	parents, err := ListParentTranscriptPointsForScope(scope)
 	if err != nil {
 		return dtos.TranscriptListResponse{}, err
@@ -93,6 +102,11 @@ func GetAPITranscripts(scope TranscriptAccessScope, page, pageSize int, search, 
 	items := make([]dtos.TranscriptSummary, 0, len(parents))
 	for _, point := range parents {
 		payload := point.Payload
+		if folderJobIDs != nil {
+			if _, ok := folderJobIDs[getString(payload, "job_id", "")]; !ok {
+				continue
+			}
+		}
 		if status != "" && status != "all" && publicParentStatus(getString(payload, "status", "uploaded")) != status {
 			continue
 		}
@@ -101,6 +115,7 @@ func GetAPITranscripts(scope TranscriptAccessScope, page, pageSize int, search, 
 		}
 		items = append(items, MapParentSummary(payload))
 	}
+	items = EnrichTranscriptSummariesWithFolders(ctx, scope, items)
 
 	sort.SliceStable(items, func(i, j int) bool {
 		left := parseTimeOrZero(items[i].CreatedAt)
@@ -149,6 +164,7 @@ func SearchTranscripts(scope TranscriptAccessScope, filters TranscriptSearchFilt
 	filters.Category = strings.TrimSpace(filters.Category)
 	filters.Status = strings.TrimSpace(filters.Status)
 	filters.OwnerUserID = strings.TrimSpace(filters.OwnerUserID)
+	filters.FolderID = strings.TrimSpace(filters.FolderID)
 	filters.Speaker = strings.TrimSpace(filters.Speaker)
 	filters.IsAdmin = scope.IsAdmin
 	if err := validateTranscriptSearchFilters(filters); err != nil {
@@ -156,6 +172,14 @@ func SearchTranscripts(scope TranscriptAccessScope, filters TranscriptSearchFilt
 	}
 	if filters.OwnerUserID != "" && !scope.IsAdmin {
 		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeForbidden, ErrForbidden)
+	}
+	var folderJobIDs map[string]struct{}
+	if filters.FolderID != "" {
+		var err error
+		folderJobIDs, err = FolderJobIDSetForFilter(context.Background(), scope, filters.FolderID)
+		if err != nil {
+			return dtos.TranscriptSearchResponse{}, err
+		}
 	}
 
 	parents, err := ListParentTranscriptPointsForScope(scope)
@@ -166,7 +190,18 @@ func SearchTranscripts(scope TranscriptAccessScope, filters TranscriptSearchFilt
 	if err != nil {
 		return dtos.TranscriptSearchResponse{}, newServiceError(ErrCodeSearchUnavailable, err)
 	}
-	return BuildTranscriptSearchResponse(filters, segments, parents), nil
+	if folderJobIDs != nil {
+		filtered := parents[:0]
+		for _, parent := range parents {
+			if _, ok := folderJobIDs[getString(parent.Payload, "job_id", "")]; ok {
+				filtered = append(filtered, parent)
+			}
+		}
+		parents = filtered
+	}
+	result := BuildTranscriptSearchResponse(filters, segments, parents)
+	result.Items = EnrichSearchResultsWithFolders(context.Background(), scope, result.Items)
+	return result, nil
 }
 
 func BuildTranscriptSearchResponse(filters TranscriptSearchFilters, segments, parents []QdrantPoint) dtos.TranscriptSearchResponse {
@@ -472,6 +507,12 @@ func GetAPITranscriptDetail(scope TranscriptAccessScope, jobID string) (dtos.Tra
 	}
 
 	detail := MapTranscriptDetail(parent.Payload, segmentDTOs)
+	if memberships := folderMemberships(context.Background(), scope, []string{jobID}); len(memberships) > 0 {
+		if membership, ok := memberships[jobID]; ok {
+			detail.FolderID = membership.ID
+			detail.FolderName = membership.Name
+		}
+	}
 	if detail.SegmentCount == 0 {
 		detail.SegmentCount = len(segmentDTOs)
 	}
@@ -556,6 +597,7 @@ func ReassignTranscriptOwner(ctx context.Context, jobID, newOwnerUserID string) 
 	if err := updateParentPayloadByJobID(jobID, payload); err != nil {
 		return dtos.TranscriptReassignmentResponse{}, err
 	}
+	_ = RemoveTranscriptFolderMembership(ctx, jobID)
 	NotifyTranscriptAssigned(ctx, jobID, target.ID, updatedAt)
 	return dtos.TranscriptReassignmentResponse{JobID: jobID, PreviousOwnerUserID: previousOwnerUserID, NewOwner: dtos.TranscriptDeletionOwner{DisplayName: target.Name, Email: target.Email}}, nil
 }

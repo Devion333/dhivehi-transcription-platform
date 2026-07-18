@@ -50,6 +50,18 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Review note is invalid", nil)
 		case services.ErrCodeNotificationNotFound:
 			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Notification was not found", nil)
+		case services.ErrCodeFolderNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Folder was not found", nil)
+		case services.ErrCodeFolderNameRequired:
+			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Folder name is required", nil)
+		case services.ErrCodeFolderNameExists:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Folder name already exists", nil)
+		case services.ErrCodeFolderNotEmpty:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Folder must be empty before deletion", nil)
+		case services.ErrCodeTranscriptAlreadyInFolder:
+			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Transcript is already in a folder", nil)
+		case services.ErrCodeTranscriptNotInFolder:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Transcript is not in this folder", nil)
 		case services.ErrCodeInvalidUserInput:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "User input is invalid", nil)
 		case services.ErrCodeEmailExists:

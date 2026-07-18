@@ -27,15 +27,18 @@ export function buildTranscriptListPath({
   page = 1,
   search = "",
   status = "all",
+  folderId = "",
 }: {
   page?: number;
   search?: string;
   status?: string;
+  folderId?: string;
 }) {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
   if (search.trim()) params.set("search", search.trim());
   if (status && status !== "all") params.set("status", status);
+  if (folderId.trim()) params.set("folderId", folderId.trim());
   const query = params.toString();
   return `/Transcripts${query ? `?${query}` : ""}`;
 }

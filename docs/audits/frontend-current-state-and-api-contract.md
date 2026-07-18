@@ -215,6 +215,13 @@ Endpoint list:
 | POST | `/api/notifications/{notificationId}/read` | Mark one current-user notification as read; users cannot mark another user's notification. |
 | POST | `/api/notifications/read-all` | Mark all current-user notifications as read. |
 | GET | `/api/account/activity` | Return the authenticated user's safe own activity feed. Excludes IP addresses, user agents, audit metadata, transcript text, raw search text, failure internals, and other users. |
+| GET | `/api/folders` | List folders visible to the current user; `ownerUserId` filter is admin-only. |
+| POST | `/api/folders` | Create an authenticated user's folder. |
+| GET | `/api/folders/{folderId}` | Return folder metadata and transcripts inside the folder. |
+| PATCH | `/api/folders/{folderId}` | Rename/update folder description. |
+| DELETE | `/api/folders/{folderId}` | Delete an empty folder only. |
+| POST | `/api/folders/{folderId}/transcripts` | Add an authorized transcript to a folder. |
+| DELETE | `/api/folders/{folderId}/transcripts/{jobId}` | Remove a transcript from a folder. |
 | DELETE | `/api/admin/transcripts/{jobId}` | Admin-only confirmed deletion of transcript Qdrant points, referenced media objects, and safe job-scoped queue metadata. |
 | POST | `/api/transcripts/{jobId}/analyse` | Run analysis for transcribed transcript and persist result. |
 | GET | `/api/transcripts/{jobId}/analysis` | Return stored analysis without rerunning analysis worker. |

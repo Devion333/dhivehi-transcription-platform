@@ -16,9 +16,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { addTranscriptToFolder, listFolders, removeTranscriptFromFolder } from "@/lib/api/folders";
 import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, getTranscriptReassignmentOptions, reassignTranscript, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
-import type { AdminUserSummary, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
+import type { AdminUserSummary, Folder, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
 import { transcriptStatusLabel } from "@/lib/transcript-status";
 import {
   formatDetailDate,
@@ -451,6 +452,7 @@ export function TranscriptDetailsClient() {
       <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
 		<aside className="space-y-4">
 			<MetadataCard detail={detail} status={currentStatus} isAdmin={isAdmin} />
+			<TranscriptFolderCard detail={detail} onChanged={() => setRetryToken((value) => value + 1)} />
 			{isAdmin && <OwnershipCard detail={detail} onReassign={openReassignment} />}
 			{isAdmin && (
 				<TranscriptDeletionCard
@@ -682,8 +684,70 @@ function MetadataCard({ detail, status, isAdmin }: { detail: TranscriptDetail; s
         <Meta label="Segments" value={String(detail.segmentCount)} />
         <Meta label="Created" value={formatDetailDate(detail.createdAt)} />
         <Meta label="Updated" value={formatDetailDate(detail.updatedAt)} />
+        {detail.folderName && <Meta label="Folder" value={detail.folderName} />}
         {isAdmin && <Meta label="Owner" value={ownerLabel(detail)} />}
         <div><p className="text-muted-foreground">Notes</p><p className="mt-1 whitespace-pre-wrap">{safeValue(detail.notes, "No notes")}</p></div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TranscriptFolderCard({ detail, onChanged }: { detail: TranscriptDetail; onChanged: () => void }) {
+  const [folders, setFolders] = React.useState<Folder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    listFolders({ page: 1, pageSize: 100 }, controller.signal).then((response) => setFolders(response.items)).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  async function addOrMove() {
+    if (!selectedFolderId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (detail.folderId) await removeTranscriptFromFolder(detail.folderId, detail.jobId);
+      await addTranscriptToFolder(selectedFolderId, detail.jobId);
+      setSelectedFolderId("");
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Folder update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (!detail.folderId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await removeTranscriptFromFolder(detail.folderId, detail.jobId);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Folder update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Folder</CardTitle></CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p className="text-muted-foreground">Current: {detail.folderName || "No folder"}</p>
+        <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)} disabled={saving}>
+          <option value="">Select folder</option>
+          {folders.filter((folder) => folder.id !== detail.folderId).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+        </select>
+        {error && <p className="text-destructive">{error}</p>}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={addOrMove} disabled={saving || !selectedFolderId}>{detail.folderId ? "Move" : "Add to folder"}</Button>
+          <Button type="button" variant="ghost" onClick={remove} disabled={saving || !detail.folderId}>Remove</Button>
+        </div>
       </CardContent>
     </Card>
   );

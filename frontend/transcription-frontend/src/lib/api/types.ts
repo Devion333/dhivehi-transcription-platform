@@ -132,6 +132,31 @@ export interface AccountActivityResponse {
   pagination: Pagination;
 }
 
+export interface Folder {
+  id: string;
+  name: string;
+  description: string;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  transcriptCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FolderListResponse {
+  items: Folder[];
+  pagination: Pagination;
+}
+
+export interface FolderDetailResponse {
+  folder: Folder;
+  transcripts: TranscriptSummary[];
+}
+
+export interface FolderResponse {
+  folder: Folder;
+}
+
 export interface HealthResponse {
   status: string;
   service: string;
@@ -352,6 +377,8 @@ export interface TranscriptSummary {
   segmentCount: number;
   analysisStatus: AnalysisStatus;
   analysisReviewStatus: AnalysisReviewStatus;
+  folderId: string;
+  folderName: string;
   ownerUserId: string;
   ownerDisplayName: string;
   ownerEmail: string;
@@ -382,6 +409,8 @@ export interface TranscriptDetail {
   updatedAt: string;
   analysisStatus: AnalysisStatus;
   analysisReviewStatus: AnalysisReviewStatus;
+  folderId: string;
+  folderName: string;
   ownerUserId: string;
   ownerDisplayName: string;
   ownerEmail: string;
@@ -485,6 +514,8 @@ export interface TranscriptSearchResult {
   ownerUserId?: string;
   ownerDisplayName?: string;
   ownerEmail?: string;
+  folderId?: string;
+  folderName?: string;
   segmentIndex: number;
   speaker: string;
   speakerDisplayName: string;

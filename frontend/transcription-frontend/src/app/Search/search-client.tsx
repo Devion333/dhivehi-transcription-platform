@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
+import { listFolders } from "@/lib/api/folders";
 import { searchTranscripts } from "@/lib/api/search";
-import type { Pagination, TranscriptSearchResult } from "@/lib/api/types";
+import type { Folder, Pagination, TranscriptSearchResult } from "@/lib/api/types";
 import { highlightedText, normalizeSearchPage, normalizeSearchStatus, normalizeSearchText, searchPageSize, searchTextProps } from "@/lib/search-utils";
 import { formatTimestamp, safeValue, speakerLabel } from "@/lib/transcript-details-utils";
 import { transcriptStatusFilters } from "@/lib/transcript-list-utils";
@@ -37,6 +38,7 @@ export function SearchClient() {
   const createdFrom = normalizeSearchText(searchParams.get("createdFrom"));
   const createdTo = normalizeSearchText(searchParams.get("createdTo"));
   const ownerUserId = normalizeSearchText(searchParams.get("ownerUserId"));
+  const folderId = normalizeSearchText(searchParams.get("folderId"));
   const filename = normalizeSearchText(searchParams.get("filename"));
   const reference = normalizeSearchText(searchParams.get("reference"));
   const speaker = normalizeSearchText(searchParams.get("speaker"));
@@ -45,6 +47,7 @@ export function SearchClient() {
   const [createdFromDraft, setCreatedFromDraft] = React.useState(createdFrom);
   const [createdToDraft, setCreatedToDraft] = React.useState(createdTo);
   const [ownerDraft, setOwnerDraft] = React.useState(ownerUserId);
+  const [folders, setFolders] = React.useState<Folder[]>([]);
   const [filenameDraft, setFilenameDraft] = React.useState(filename);
   const [referenceDraft, setReferenceDraft] = React.useState(reference);
   const [speakerDraft, setSpeakerDraft] = React.useState(speaker);
@@ -59,12 +62,13 @@ export function SearchClient() {
   React.useEffect(() => setCreatedFromDraft(createdFrom), [createdFrom]);
   React.useEffect(() => setCreatedToDraft(createdTo), [createdTo]);
   React.useEffect(() => setOwnerDraft(ownerUserId), [ownerUserId]);
+  React.useEffect(() => { const controller = new AbortController(); listFolders({ page: 1, pageSize: 100 }, controller.signal).then((response) => setFolders(response.items)).catch(() => undefined); return () => controller.abort(); }, []);
   React.useEffect(() => setFilenameDraft(filename), [filename]);
   React.useEffect(() => setReferenceDraft(reference), [reference]);
   React.useEffect(() => setSpeakerDraft(speaker), [speaker]);
 
   React.useEffect(() => {
-    if (!hasSearchFilters({ query, status, category, createdFrom, createdTo, ownerUserId, filename, reference, speaker })) {
+    if (!hasSearchFilters({ query, status, category, createdFrom, createdTo, ownerUserId, folderId, filename, reference, speaker })) {
       setData({ query: "", items: [], pagination: null });
       setLoading(false);
       setError(null);
@@ -73,7 +77,7 @@ export function SearchClient() {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    searchTranscripts({ q: query, page, pageSize: searchPageSize, status, category, createdFrom, createdTo, ownerUserId, filename, reference, speaker }, controller.signal)
+    searchTranscripts({ q: query, page, pageSize: searchPageSize, status, category, createdFrom, createdTo, ownerUserId, folderId, filename, reference, speaker }, controller.signal)
       .then((response) => setData({ query: response.query, items: response.items, pagination: response.pagination }))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -83,9 +87,9 @@ export function SearchClient() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [query, page, status, category, createdFrom, createdTo, ownerUserId, filename, reference, speaker, retryToken]);
+  }, [query, page, status, category, createdFrom, createdTo, ownerUserId, folderId, filename, reference, speaker, retryToken]);
 
-  function updateUrl(next: { q?: string; page?: number; status?: string; category?: string; createdFrom?: string; createdTo?: string; ownerUserId?: string; filename?: string; reference?: string; speaker?: string }) {
+  function updateUrl(next: { q?: string; page?: number; status?: string; category?: string; createdFrom?: string; createdTo?: string; ownerUserId?: string; folderId?: string; filename?: string; reference?: string; speaker?: string }) {
     const params = new URLSearchParams();
     const nextQuery = next.q ?? query;
     const nextStatus = next.status ?? status;
@@ -93,6 +97,7 @@ export function SearchClient() {
     const nextCreatedFrom = next.createdFrom ?? createdFrom;
     const nextCreatedTo = next.createdTo ?? createdTo;
     const nextOwnerUserId = next.ownerUserId ?? ownerUserId;
+    const nextFolderId = next.folderId ?? folderId;
     const nextFilename = next.filename ?? filename;
     const nextReference = next.reference ?? reference;
     const nextSpeaker = next.speaker ?? speaker;
@@ -104,6 +109,7 @@ export function SearchClient() {
     if (nextCreatedFrom.trim()) params.set("createdFrom", nextCreatedFrom.trim());
     if (nextCreatedTo.trim()) params.set("createdTo", nextCreatedTo.trim());
     if (auth.user?.role === "admin" && nextOwnerUserId.trim()) params.set("ownerUserId", nextOwnerUserId.trim());
+    if (nextFolderId.trim()) params.set("folderId", nextFolderId.trim());
     if (nextFilename.trim()) params.set("filename", nextFilename.trim());
     if (nextReference.trim()) params.set("reference", nextReference.trim());
     if (nextSpeaker.trim()) params.set("speaker", nextSpeaker.trim());
@@ -112,7 +118,7 @@ export function SearchClient() {
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    updateUrl({ q: queryDraft.trim(), page: 1, status, category: categoryDraft.trim(), createdFrom: createdFromDraft, createdTo: createdToDraft, ownerUserId: ownerDraft, filename: filenameDraft, reference: referenceDraft, speaker: speakerDraft });
+    updateUrl({ q: queryDraft.trim(), page: 1, status, category: categoryDraft.trim(), createdFrom: createdFromDraft, createdTo: createdToDraft, ownerUserId: ownerDraft, folderId, filename: filenameDraft, reference: referenceDraft, speaker: speakerDraft });
   }
 
   function clearSearch() {
@@ -123,7 +129,7 @@ export function SearchClient() {
   const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 0;
   const showPagination = !loading && !error && pagination && totalPages > 0;
-  const hasFilters = hasSearchFilters({ query, status, category, createdFrom, createdTo, ownerUserId, filename, reference, speaker });
+  const hasFilters = hasSearchFilters({ query, status, category, createdFrom, createdTo, ownerUserId, folderId, filename, reference, speaker });
 
   return (
     <PageContainer>
@@ -131,7 +137,7 @@ export function SearchClient() {
 
       <Card className="mb-5">
         <CardContent className="p-4">
-          <form onSubmit={submitSearch} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px_160px_220px_auto] lg:items-end">
+          <form onSubmit={submitSearch} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px_160px_220px_220px_auto] lg:items-end">
             <div className="grid gap-2">
               <label htmlFor="transcript-search" className="text-sm font-medium">Search transcripts</label>
               <div className="relative">
@@ -156,6 +162,7 @@ export function SearchClient() {
                 <Input type="date" value={createdToDraft} onChange={(event) => setCreatedToDraft(event.target.value)} aria-label="Created to" />
               </div>
             </div>
+            <div className="grid gap-2"><label htmlFor="search-folder" className="text-sm font-medium">Folder</label><select id="search-folder" value={folderId} onChange={(event) => updateUrl({ q: query, page: 1, folderId: event.target.value })} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"><option value="">All folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></div>
             <div className="flex gap-2">
               <Button type="submit" disabled={loading}><Search className="h-4 w-4" /> Search</Button>
               <Button type="button" variant="ghost" onClick={clearSearch} disabled={!hasFilters}><X className="h-4 w-4" /> Reset</Button>
@@ -192,10 +199,10 @@ export function SearchClient() {
           <p className="text-sm text-muted-foreground">Page {pagination.page} of {Math.max(totalPages, 1)} - {pagination.total} total</p>
           <div className="flex gap-2">
             <Button asChild variant="outline" aria-disabled={pagination.page <= 1} className={pagination.page <= 1 ? "pointer-events-none opacity-50" : ""}>
-              <Link href={searchPath({ q: query, page: pagination.page - 1, status, category, createdFrom, createdTo, ownerUserId, filename, reference, speaker })}><ChevronLeft className="h-4 w-4" /> Previous</Link>
+              <Link href={searchPath({ q: query, page: pagination.page - 1, status, category, createdFrom, createdTo, ownerUserId, folderId, filename, reference, speaker })}><ChevronLeft className="h-4 w-4" /> Previous</Link>
             </Button>
             <Button asChild variant="outline" aria-disabled={!pagination.hasNextPage} className={!pagination.hasNextPage ? "pointer-events-none opacity-50" : ""}>
-              <Link href={searchPath({ q: query, page: pagination.page + 1, status, category, createdFrom, createdTo, ownerUserId, filename, reference, speaker })}>Next <ChevronRight className="h-4 w-4" /></Link>
+              <Link href={searchPath({ q: query, page: pagination.page + 1, status, category, createdFrom, createdTo, ownerUserId, folderId, filename, reference, speaker })}>Next <ChevronRight className="h-4 w-4" /></Link>
             </Button>
           </div>
         </nav>
@@ -216,7 +223,7 @@ function SearchResults({ items, query }: { items: TranscriptSearchResult[]; quer
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <CardTitle className="truncate text-base"><Link className="hover:underline" href={detailsPath(item.jobId, item.segmentId)}>{item.filename}</Link></CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">{safeValue(item.referenceNumber, "No reference")} · {safeValue(item.category, "Uncategorized")}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{safeValue(item.referenceNumber, "No reference")} · {safeValue(item.category, "Uncategorized")}{item.folderName ? ` · Folder: ${item.folderName}` : ""}</p>
                 </div>
                 <StatusBadge status={item.transcriptStatus} />
               </div>
@@ -237,7 +244,7 @@ function SearchResults({ items, query }: { items: TranscriptSearchResult[]; quer
   );
 }
 
-function searchPath(params: { q: string; page: number; status: string; category: string; createdFrom: string; createdTo: string; ownerUserId: string; filename: string; reference: string; speaker: string }) {
+function searchPath(params: { q: string; page: number; status: string; category: string; createdFrom: string; createdTo: string; ownerUserId: string; folderId: string; filename: string; reference: string; speaker: string }) {
   const searchParams = new URLSearchParams();
   if (params.q.trim()) searchParams.set("q", params.q.trim());
   if (params.page > 1) searchParams.set("page", String(params.page));
@@ -246,6 +253,7 @@ function searchPath(params: { q: string; page: number; status: string; category:
   if (params.createdFrom.trim()) searchParams.set("createdFrom", params.createdFrom.trim());
   if (params.createdTo.trim()) searchParams.set("createdTo", params.createdTo.trim());
   if (params.ownerUserId.trim()) searchParams.set("ownerUserId", params.ownerUserId.trim());
+  if (params.folderId.trim()) searchParams.set("folderId", params.folderId.trim());
   if (params.filename.trim()) searchParams.set("filename", params.filename.trim());
   if (params.reference.trim()) searchParams.set("reference", params.reference.trim());
   if (params.speaker.trim()) searchParams.set("speaker", params.speaker.trim());
