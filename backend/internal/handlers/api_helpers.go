@@ -48,6 +48,8 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Review status is invalid", nil)
 		case services.ErrCodeInvalidReviewNote:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Review note is invalid", nil)
+		case services.ErrCodeNotificationNotFound:
+			writeAPIError(c, http.StatusNotFound, serviceErr.Code, "Notification was not found", nil)
 		case services.ErrCodeInvalidUserInput:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "User input is invalid", nil)
 		case services.ErrCodeEmailExists:

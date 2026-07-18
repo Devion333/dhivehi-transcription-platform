@@ -30,6 +30,38 @@ type AuthMessageResponse struct {
 	Message string `json:"message"`
 }
 
+type Notification struct {
+	ID           string  `json:"id"`
+	Type         string  `json:"type"`
+	Title        string  `json:"title"`
+	Message      string  `json:"message"`
+	ResourceType string  `json:"resourceType"`
+	ResourceID   string  `json:"resourceId"`
+	EventKey     string  `json:"eventKey"`
+	IsRead       bool    `json:"isRead"`
+	CreatedAt    string  `json:"createdAt"`
+	ReadAt       *string `json:"readAt"`
+}
+
+type NotificationListResponse struct {
+	Items    []Notification `json:"items"`
+	Page     int            `json:"page"`
+	PageSize int            `json:"pageSize"`
+	Total    int            `json:"total"`
+}
+
+type NotificationUnreadCountResponse struct {
+	Count int `json:"count"`
+}
+
+type NotificationReadResponse struct {
+	Notification Notification `json:"notification"`
+}
+
+type NotificationReadAllResponse struct {
+	Updated int `json:"updated"`
+}
+
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`

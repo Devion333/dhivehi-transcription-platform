@@ -22,6 +22,7 @@ const (
 	ErrCodeAnalysisNotComplete        = "ANALYSIS_NOT_COMPLETE"
 	ErrCodeInvalidReviewStatus        = "INVALID_REVIEW_STATUS"
 	ErrCodeInvalidReviewNote          = "INVALID_REVIEW_NOTE"
+	ErrCodeNotificationNotFound       = "NOTIFICATION_NOT_FOUND"
 	ErrCodeInvalidUserInput           = "INVALID_USER_INPUT"
 	ErrCodeEmailExists                = "EMAIL_ALREADY_EXISTS"
 	ErrCodeInvalidRole                = "INVALID_ROLE"

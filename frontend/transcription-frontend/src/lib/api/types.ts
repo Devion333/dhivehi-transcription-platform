@@ -78,6 +78,45 @@ export interface CurrentUserResponse {
   user: AuthUser;
 }
 
+export type NotificationType =
+  | "transcript_processing_completed"
+  | "transcript_processing_failed"
+  | "analysis_completed"
+  | "analysis_failed"
+  | "transcript_assigned";
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  resourceType: string;
+  resourceId: string;
+  eventKey: string;
+  isRead: boolean;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface NotificationListResponse {
+  items: NotificationItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface NotificationUnreadCountResponse {
+  count: number;
+}
+
+export interface NotificationReadResponse {
+  notification: NotificationItem;
+}
+
+export interface NotificationReadAllResponse {
+  updated: number;
+}
+
 export interface AdminUserSummary {
   id: string;
   name: string;
