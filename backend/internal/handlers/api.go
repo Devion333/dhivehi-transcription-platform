@@ -117,7 +117,7 @@ func APIGetTranscriptStatus(c *gin.Context) {
 		return
 	}
 
-	status, err := services.GetAPITranscriptStatus(transcriptAccessScope(c), jobID)
+	status, err := services.GetAPITranscriptStatus(c.Request.Context(), transcriptAccessScope(c), jobID)
 	if err != nil {
 		writeServiceError(c, err)
 		return

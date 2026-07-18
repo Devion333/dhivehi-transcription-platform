@@ -481,7 +481,7 @@ func GetAPITranscriptDetail(scope TranscriptAccessScope, jobID string) (dtos.Tra
 	return detail, nil
 }
 
-func GetAPITranscriptStatus(scope TranscriptAccessScope, jobID string) (dtos.TranscriptStatusResponse, error) {
+func GetAPITranscriptStatus(ctx context.Context, scope TranscriptAccessScope, jobID string) (dtos.TranscriptStatusResponse, error) {
 	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
 	if err != nil {
 		return dtos.TranscriptStatusResponse{}, err
@@ -490,7 +490,9 @@ func GetAPITranscriptStatus(scope TranscriptAccessScope, jobID string) (dtos.Tra
 	if err != nil {
 		return dtos.TranscriptStatusResponse{}, err
 	}
-	return MapTranscriptStatus(parent.Payload, segments, scope.IsAdmin), nil
+	status := MapTranscriptStatus(parent.Payload, segments, scope.IsAdmin)
+	NotifyTranscriptStatusObserved(ctx, parent.Payload, status)
+	return status, nil
 }
 
 func BuildTranscriptDownload(scope TranscriptAccessScope, jobID, format string) (TranscriptDownload, error) {
@@ -544,15 +546,17 @@ func ReassignTranscriptOwner(ctx context.Context, jobID, newOwnerUserID string) 
 	if previousOwnerUserID != "" && previousOwnerUserID == target.ID {
 		return dtos.TranscriptReassignmentResponse{}, newServiceError(ErrCodeTranscriptOwnerUnchanged, errors.New("owner unchanged"))
 	}
+	updatedAt := time.Now().UTC().Format(time.RFC3339)
 	payload := map[string]interface{}{
 		"owner_user_id":      target.ID,
 		"owner_display_name": target.Name,
 		"owner_email":        target.Email,
-		"updated_at":         time.Now().UTC().Format(time.RFC3339),
+		"updated_at":         updatedAt,
 	}
 	if err := updateParentPayloadByJobID(jobID, payload); err != nil {
 		return dtos.TranscriptReassignmentResponse{}, err
 	}
+	NotifyTranscriptAssigned(ctx, jobID, target.ID, updatedAt)
 	return dtos.TranscriptReassignmentResponse{JobID: jobID, PreviousOwnerUserID: previousOwnerUserID, NewOwner: dtos.TranscriptDeletionOwner{DisplayName: target.Name, Email: target.Email}}, nil
 }
 

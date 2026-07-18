@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -90,6 +91,7 @@ func APIAnalyseTranscript(c *gin.Context) {
 	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "started", "provider": "analysis"}})
 	result, analysisErr := runTranscriptAnalysis(jobID, services.MapSpeakerNames(parent.Payload))
 	if analysisErr != nil {
+		services.NotifyAnalysisFailed(c.Request.Context(), parent.Payload, jobID, started.UTC().Format(time.RFC3339Nano))
 		auditRequestEvent(c, services.AuditEventInput{Action: "analysis.failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"analysisStatus": "failed", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
 		writeAPIError(c, analysisErr.status, analysisErr.code, analysisErr.message, nil)
 		return
@@ -168,6 +170,7 @@ func runTranscriptAnalysis(jobID string, speakerNames map[string]string) (Analys
 	}
 
 	go func() {
+		completedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		parentPayload := map[string]interface{}{
 			"analysis_keywords":            result.Keywords,
 			"analysis_entities":            result.Entities,
@@ -175,10 +178,14 @@ func runTranscriptAnalysis(jobID string, speakerNames map[string]string) (Analys
 			"analysis_classification":      result.Classification,
 			"analysis_english_translation": result.EnglishTranslation,
 			"analysis_status":              "complete",
+			"analysis_completed_at":        completedAt,
 		}
 		if err := services.UpdateParentPayload(jobID, parentPayload); err != nil {
 			log.Printf("Warning: failed to update parent payload with analysis for %s: %v", jobID, err)
 		} else {
+			if parent, err := services.GetParentTranscriptPoint(jobID); err == nil {
+				services.NotifyAnalysisCompleted(context.Background(), parent.Payload, jobID, completedAt)
+			}
 			log.Printf("Saved analysis results to Qdrant for job %s", jobID)
 		}
 	}()

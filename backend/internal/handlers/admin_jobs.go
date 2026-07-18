@@ -166,11 +166,17 @@ func retryAnalysisJob(c *gin.Context, jobID string, before dtos.AdminJobDetail) 
 	}
 	result, analysisErr := runTranscriptAnalysis(jobID, services.MapSpeakerNames(parent.Payload))
 	if analysisErr != nil {
-		_ = services.UpdateParentPayload(jobID, map[string]interface{}{"analysis_status": "failed", "analysis_error": services.SafeFailureMessage(analysisErr.message), "updated_at": time.Now().UTC().Format(time.RFC3339)})
+		failedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		_ = services.UpdateParentPayload(jobID, map[string]interface{}{"analysis_status": "failed", "analysis_error": services.SafeFailureMessage(analysisErr.message), "updated_at": failedAt})
+		services.NotifyAnalysisFailed(c.Request.Context(), parent.Payload, jobID, failedAt)
 		return dtos.AdminJobDetail{}, services.NewJobNotRetryableError(analysisErr)
 	}
-	if err := services.UpdateParentPayload(jobID, map[string]interface{}{"analysis_keywords": result.Keywords, "analysis_entities": result.Entities, "analysis_summary": result.Summary, "analysis_classification": result.Classification, "analysis_english_translation": result.EnglishTranslation, "analysis_status": "complete", "updated_at": time.Now().UTC().Format(time.RFC3339)}); err != nil {
+	completedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := services.UpdateParentPayload(jobID, map[string]interface{}{"analysis_keywords": result.Keywords, "analysis_entities": result.Entities, "analysis_summary": result.Summary, "analysis_classification": result.Classification, "analysis_english_translation": result.EnglishTranslation, "analysis_status": "complete", "analysis_completed_at": completedAt, "updated_at": completedAt}); err != nil {
 		return dtos.AdminJobDetail{}, err
+	}
+	if parent, err := services.GetParentTranscriptPoint(jobID); err == nil {
+		services.NotifyAnalysisCompleted(c.Request.Context(), parent.Payload, jobID, completedAt)
 	}
 	return services.GetAdminJob(c.Request.Context(), jobID)
 }
