@@ -187,6 +187,17 @@ Deletion/search are current features, but they are not listed in this rebuild st
 
 Base path: `/api`
 
+Current workflow notification additions on `feature/workflow-review-notifications`:
+
+| Area | Contract |
+| --- | --- |
+| Storage | PostgreSQL `notifications` table with per-user read state and `UNIQUE (user_id, event_key)`. |
+| Polling | Authenticated app shell polls `/api/notifications/unread-count` every 45 seconds. |
+| List UI | Top-bar bell opens a compact popover backed by `/api/notifications`. |
+| Destinations | Processing and assignment notifications route to `/Transcripts/Details?job_id=<jobId>`; analysis notifications route to `/Transcripts/Analysis?job_id=<jobId>`. |
+| Event source limitation | Worker processing completion/failure is observed from the backend status endpoint because workers write Qdrant directly and have no backend callback. Idempotent event keys prevent duplicate notifications from repeated observations. |
+| Retention | `NOTIFICATION_RETENTION_DAYS`, default 90; cleanup command `cd backend && go run ./cmd/notification-cleanup`. |
+
 Endpoint list:
 
 | Method | Path | Purpose |
@@ -198,6 +209,10 @@ Endpoint list:
 | PATCH | `/api/transcripts/{jobId}/speakers` | Persist a display name mapping for a generated speaker key on the parent transcript payload. |
 | PATCH | `/api/transcripts/{jobId}/segments/{segmentId}` | Update editable segment fields, initially only `transcript_text`, after validating ownership. |
 | GET | `/api/admin/transcripts/{jobId}/deletion-preview` | Admin-only safe preview for transcript deletion, including counts and blocking state. |
+| GET | `/api/notifications` | Authenticated current-user notification list, newest first, with `page`, `pageSize`, and `unreadOnly`. |
+| GET | `/api/notifications/unread-count` | Authenticated current-user unread notification count for top-bar badge polling. |
+| POST | `/api/notifications/{notificationId}/read` | Mark one current-user notification as read; users cannot mark another user's notification. |
+| POST | `/api/notifications/read-all` | Mark all current-user notifications as read. |
 | DELETE | `/api/admin/transcripts/{jobId}` | Admin-only confirmed deletion of transcript Qdrant points, referenced media objects, and safe job-scoped queue metadata. |
 | POST | `/api/transcripts/{jobId}/analyse` | Run analysis for transcribed transcript and persist result. |
 | GET | `/api/transcripts/{jobId}/analysis` | Return stored analysis without rerunning analysis worker. |
