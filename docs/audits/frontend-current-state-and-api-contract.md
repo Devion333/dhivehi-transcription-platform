@@ -197,6 +197,7 @@ Current workflow notification additions on `feature/workflow-review-notification
 | Destinations | Processing and assignment notifications route to `/Transcripts/Details?job_id=<jobId>`; analysis notifications route to `/Transcripts/Analysis?job_id=<jobId>`. |
 | Event source limitation | Worker processing completion/failure is observed from the backend status endpoint because workers write Qdrant directly and have no backend callback. Idempotent event keys prevent duplicate notifications from repeated observations. |
 | Retention | `NOTIFICATION_RETENTION_DAYS`, default 90; cleanup command `cd backend && go run ./cmd/notification-cleanup`. |
+| Application pages | `/Notifications`, `/Activity`, `/Analysis/Review-Queue`, `/Admin/Transcripts`, `/Admin/System-Health`, `/Help`, `/Supported-Formats`, and `/About` were added on `feature/application-pages`. `GET /api/transcripts` summaries now include `analysisReviewStatus`. |
 
 Endpoint list:
 
@@ -213,6 +214,7 @@ Endpoint list:
 | GET | `/api/notifications/unread-count` | Authenticated current-user unread notification count for top-bar badge polling. |
 | POST | `/api/notifications/{notificationId}/read` | Mark one current-user notification as read; users cannot mark another user's notification. |
 | POST | `/api/notifications/read-all` | Mark all current-user notifications as read. |
+| GET | `/api/account/activity` | Return the authenticated user's safe own activity feed. Excludes IP addresses, user agents, audit metadata, transcript text, raw search text, failure internals, and other users. |
 | DELETE | `/api/admin/transcripts/{jobId}` | Admin-only confirmed deletion of transcript Qdrant points, referenced media objects, and safe job-scoped queue metadata. |
 | POST | `/api/transcripts/{jobId}/analyse` | Run analysis for transcribed transcript and persist result. |
 | GET | `/api/transcripts/{jobId}/analysis` | Return stored analysis without rerunning analysis worker. |
