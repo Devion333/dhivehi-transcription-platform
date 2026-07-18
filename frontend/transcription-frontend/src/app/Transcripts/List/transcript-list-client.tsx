@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
+import { listFolders } from "@/lib/api/folders";
 import { getTranscripts } from "@/lib/api/transcripts";
-import type { Pagination, TranscriptSummary } from "@/lib/api/types";
+import type { Folder, Pagination, TranscriptSummary } from "@/lib/api/types";
 import { isProcessingTranscriptStatus } from "@/lib/transcript-status";
 import {
   buildTranscriptListPath,
@@ -43,7 +44,9 @@ export function TranscriptListClient() {
   const page = normalizePageParam(searchParams.get("page"));
   const search = normalizeSearchParam(searchParams.get("search"));
   const status = normalizeStatusParam(searchParams.get("status"));
+  const folderId = normalizeSearchParam(searchParams.get("folderId"));
   const [searchDraft, setSearchDraft] = React.useState(search);
+  const [folders, setFolders] = React.useState<Folder[]>([]);
   const [data, setData] = React.useState<ListState>({ items: [], pagination: null });
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -53,14 +56,20 @@ export function TranscriptListClient() {
     setSearchDraft(search);
   }, [search]);
 
-  const loadKey = `${page}:${search}:${status}:${retryToken}`;
+  const loadKey = `${page}:${search}:${status}:${folderId}:${retryToken}`;
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    listFolders({ page: 1, pageSize: 100 }, controller.signal).then((response) => setFolders(response.items)).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   React.useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
 
-    getTranscripts({ page, pageSize: transcriptPageSize, search, status }, controller.signal)
+    getTranscripts({ page, pageSize: transcriptPageSize, search, status, folderId }, controller.signal)
       .then((response) => {
         setData({ items: response.items, pagination: response.pagination });
       })
@@ -73,7 +82,7 @@ export function TranscriptListClient() {
       });
 
     return () => controller.abort();
-  }, [loadKey, page, search, status]);
+  }, [folderId, loadKey, page, search, status]);
 
   React.useEffect(() => {
     if (loading || error || !data.items.some((item) => isProcessingTranscriptStatus(item.status))) return;
@@ -92,7 +101,7 @@ export function TranscriptListClient() {
       inFlight = true;
       controller = new AbortController();
       try {
-        const response = await getTranscripts({ page, pageSize: transcriptPageSize, search, status }, controller.signal);
+        const response = await getTranscripts({ page, pageSize: transcriptPageSize, search, status, folderId }, controller.signal);
         if (!disposed) setData({ items: response.items, pagination: response.pagination });
       } catch (err) {
         if (!(err instanceof DOMException && err.name === "AbortError")) setError(err instanceof Error ? err.message : "Failed to refresh transcripts");
@@ -114,10 +123,10 @@ export function TranscriptListClient() {
       if (timeoutId) clearTimeout(timeoutId);
       controller?.abort();
     };
-  }, [data.items, error, loading, page, search, status]);
+  }, [data.items, error, folderId, loading, page, search, status]);
 
-  function navigate(next: { page?: number; search?: string; status?: string }) {
-    router.push(buildTranscriptListPath({ page, search, status, ...next }));
+  function navigate(next: { page?: number; search?: string; status?: string; folderId?: string }) {
+    router.push(buildTranscriptListPath({ page, search, status, folderId, ...next }));
   }
 
   function retry() {
@@ -126,7 +135,7 @@ export function TranscriptListClient() {
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    navigate({ page: 1, search: searchDraft.trim(), status });
+    navigate({ page: 1, search: searchDraft.trim(), status, folderId });
   }
 
   function clearFilters() {
@@ -136,7 +145,7 @@ export function TranscriptListClient() {
   const pagination = data.pagination;
   const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 0;
-  const hasFilters = Boolean(search || status !== "all");
+  const hasFilters = Boolean(search || status !== "all" || folderId);
   const showPagination = !loading && !error && pagination && totalPages > 0;
   const isAdmin = auth.user?.role === "admin";
 
@@ -149,7 +158,7 @@ export function TranscriptListClient() {
 
       <Card className="mb-5">
         <CardContent className="p-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-end">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_220px_auto] lg:items-end">
             <form onSubmit={submitSearch} className="grid gap-2">
               <label htmlFor="transcript-search" className="text-sm font-medium">Search</label>
               <div className="flex gap-2">
@@ -180,6 +189,14 @@ export function TranscriptListClient() {
                   {transcriptStatusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div className="grid gap-2">
+              <label htmlFor="folder-filter" className="text-sm font-medium">Folder</label>
+              <select id="folder-filter" value={folderId} onChange={(event) => navigate({ page: 1, folderId: event.target.value, search, status })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <option value="">All folders</option>
+                {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+              </select>
             </div>
 
             <Button type="button" variant="ghost" onClick={clearFilters} disabled={!hasFilters}>
@@ -215,10 +232,10 @@ export function TranscriptListClient() {
           </p>
           <div className="flex gap-2">
             <Button asChild variant="outline" aria-disabled={pagination.page <= 1} className={pagination.page <= 1 ? "pointer-events-none opacity-50" : ""}>
-              <Link href={buildTranscriptListPath({ page: pagination.page - 1, search, status })}><ChevronLeft className="h-4 w-4" /> Previous</Link>
+              <Link href={buildTranscriptListPath({ page: pagination.page - 1, search, status, folderId })}><ChevronLeft className="h-4 w-4" /> Previous</Link>
             </Button>
             <Button asChild variant="outline" aria-disabled={!pagination.hasNextPage} className={!pagination.hasNextPage ? "pointer-events-none opacity-50" : ""}>
-              <Link href={buildTranscriptListPath({ page: pagination.page + 1, search, status })}>Next <ChevronRight className="h-4 w-4" /></Link>
+              <Link href={buildTranscriptListPath({ page: pagination.page + 1, search, status, folderId })}>Next <ChevronRight className="h-4 w-4" /></Link>
             </Button>
           </div>
         </nav>
@@ -249,6 +266,7 @@ function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
             <tr key={item.jobId} className="bg-card">
               <td className="min-w-0 px-4 py-4">
                 <Link className="block truncate font-medium hover:underline" href={transcriptDetailPath(item.jobId)} title={item.filename}>{item.filename}</Link>
+                {item.folderName && <p className="mt-1 truncate text-xs text-muted-foreground">Folder: {item.folderName}</p>}
                 <p className="mt-1 truncate text-xs text-muted-foreground xl:hidden">{fallbackText(item.category, "Uncategorized")}</p>
                 {item.notes && <p className="mt-1 truncate text-xs text-muted-foreground" title={item.notes}>{item.notes}</p>}
               </td>
@@ -278,6 +296,7 @@ function TranscriptCards({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
               <div className="min-w-0">
                 <CardTitle className="truncate text-base"><Link className="hover:underline" href={transcriptDetailPath(item.jobId)}>{item.filename}</Link></CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">{formatTranscriptDate(item.createdAt)}</p>
+                {item.folderName && <p className="mt-1 text-xs text-muted-foreground">Folder: {item.folderName}</p>}
               </div>
               <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
             </div>
