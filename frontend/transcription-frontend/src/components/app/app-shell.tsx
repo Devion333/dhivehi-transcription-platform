@@ -203,6 +203,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <p className="text-xs text-muted-foreground">{auth.user.role}</p>
                     </div>
                     <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
+                      <Link href="/Account/Profile"><UserCircle className="h-4 w-4" /> Profile</Link>
+                    </Button>
+                    <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
                       <Link href="/Account/Security"><ShieldCheck className="h-4 w-4" /> Security</Link>
                     </Button>
                     <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
@@ -243,6 +246,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="mt-6 border-t pt-4">
                 <p className="text-sm font-medium">{auth.user.name}</p>
                 <p className="text-xs text-muted-foreground">{auth.user.role}</p>
+                <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
+                  <Link href="/Account/Profile"><UserCircle className="h-4 w-4" /> Profile</Link>
+                </Button>
                 <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
                   <Link href="/Account/Security"><ShieldCheck className="h-4 w-4" /> Security</Link>
                 </Button>

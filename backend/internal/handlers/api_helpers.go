@@ -29,6 +29,8 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Request is invalid", nil)
 		case services.ErrCodeForbidden:
 			writeAPIError(c, http.StatusForbidden, serviceErr.Code, "You do not have permission to access this transcript", nil)
+		case services.ErrCodeInactiveUser:
+			writeAPIError(c, http.StatusUnauthorized, services.ErrCodeUnauthenticated, "Authentication is required", nil)
 		case services.ErrCodeSearchQueryRequired:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Search query is required", nil)
 		case services.ErrCodeSearchUnavailable:

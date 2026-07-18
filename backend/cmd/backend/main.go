@@ -58,6 +58,8 @@ func main() {
 		protected.Use(handlers.RequireAuth())
 		{
 			protected.POST("/uploads", handlers.APIUploadFile)
+			protected.GET("/account/profile", handlers.APIGetAccountProfile)
+			protected.PATCH("/account/profile", handlers.APIUpdateAccountProfile)
 			protected.GET("/stats", handlers.APIStats)
 			protected.GET("/search/transcripts", handlers.APISearchTranscripts)
 			protected.GET("/transcripts", handlers.APIListTranscripts)

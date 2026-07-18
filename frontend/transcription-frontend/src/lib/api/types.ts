@@ -56,6 +56,24 @@ export interface ChangePasswordResponse {
   reauthenticationRequired: boolean;
 }
 
+export interface AccountProfile {
+  id: string;
+  displayName: string;
+  email: string;
+  role: AuthRole;
+  status: "active" | "inactive";
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AccountProfileResponse {
+  profile: AccountProfile;
+}
+
+export interface UpdateAccountProfileInput {
+  displayName: string;
+}
+
 export interface CurrentUserResponse {
   user: AuthUser;
 }
