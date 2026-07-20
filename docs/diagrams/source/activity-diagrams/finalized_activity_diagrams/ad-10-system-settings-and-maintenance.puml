@@ -1,0 +1,92 @@
+@startuml AD_10_System_Settings_And_Maintenance
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_10 Configure System Settings and Maintenance Mode
+
+|Administrator|
+start
+:Open System Settings;
+
+|System|
+:Verify Administrator Access;
+if (Authorized?) then ([Yes])
+  :Load and Display Settings Categories;
+else ([No])
+  :Deny Settings Access;
+  stop
+endif
+
+|Administrator|
+:Select Category and Edit Values;
+
+|System|
+:Retain Unsaved Changes Across Categories;
+
+|Administrator|
+switch (Selected action)
+case (Save Changes)
+  |System|
+  :Validate Changed Settings;
+  if (Settings valid?) then ([Yes])
+    :Persist Settings and Record Audit Event;
+    :Refresh Public Settings and Banners;
+    :Confirm Success;
+  else ([No])
+    :Display Validation Error;
+  endif
+case (Restore Defaults)
+  |System|
+  :Display Restore Confirmation;
+  |Administrator|
+  if (Restore confirmed?) then ([Yes])
+    |System|
+    :Restore and Persist Defaults;
+    :Record Audit Event and Refresh Public Settings;
+  else ([No])
+    :Cancel Restore;
+  endif
+case (Configure Maintenance)
+  |Administrator|
+  :Set Maintenance State and Message;
+  |System|
+  :Validate and Persist Maintenance Settings;
+  if (Settings valid?) then ([Yes])
+    :Refresh Maintenance Banner;
+    :Keep Administrator Access;
+    |Standard User|
+    :View Existing Read-Only Content;
+    :Attempt Action;
+    |System|
+    if (Action read-only?) then ([Yes])
+      :Allow Action;
+    else ([No])
+      :Reject Mutation with Maintenance Response;
+    endif
+  else ([No])
+    :Display Maintenance Validation Error;
+  endif
+case (Cancel)
+  :Leave Without Saving;
+endswitch
+stop
+@enduml

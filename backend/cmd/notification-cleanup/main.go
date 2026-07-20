@@ -20,9 +20,9 @@ func main() {
 	if err := services.RunMigrations(ctx, services.Database); err != nil {
 		log.Fatalf("run migrations: %v", err)
 	}
-	deleted, err := services.DeleteExpiredNotifications(ctx, time.Now())
+	result, err := services.RunScheduledCleanup(ctx, time.Now().UTC(), services.CleanupTriggerManual)
 	if err != nil {
 		log.Fatalf("cleanup notifications: %v", err)
 	}
-	fmt.Printf("notification_retention_days=%d deleted=%d\n", services.NotificationRetentionDays(), deleted)
+	fmt.Printf("notification_retention_days=%d notifications_deleted=%d\n", result.NotificationRetentionDays, result.NotificationsDeleted)
 }

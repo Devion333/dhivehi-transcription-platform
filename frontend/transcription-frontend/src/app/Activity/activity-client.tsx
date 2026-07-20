@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAccountActivity } from "@/lib/api/account";
 import type { AccountActivityItem, Pagination } from "@/lib/api/types";
+import { withReturnTo } from "@/lib/navigation-utils";
+import { transcriptReferenceLabel } from "@/lib/transcript-identity";
 
 export function ActivityClient() {
   const [items, setItems] = React.useState<AccountActivityItem[]>([]);
@@ -49,13 +51,18 @@ export function ActivityClient() {
           {items.map((item) => (
             <Card key={item.id}>
               <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+                <div className="min-w-0">
                   <h2 className="font-semibold">{item.title}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{formatDate(item.createdAt)}</p>
+                  {item.resourceType === "transcript" ? (
+                    <>
+                      <p className="mt-1 font-medium">{transcriptReferenceLabel(item.referenceNumber)}</p>
+                      {item.filename && <p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p>}
+                    </>
+                  ) : <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>}
+                  <p className="mt-1 text-xs text-muted-foreground">{item.detail || item.description} · {formatDate(item.createdAt)}</p>
                 </div>
                 {item.resourceType === "transcript" && item.resourceId && (
-                  <Button asChild variant="outline" size="sm"><Link href={`/Transcripts/Details?job_id=${encodeURIComponent(item.resourceId)}`}><ExternalLink className="h-4 w-4" /> Open transcript</Link></Button>
+                  <Button asChild variant="outline" size="sm"><Link href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.resourceId)}`, activityPath(page))}><ExternalLink className="h-4 w-4" /> Open transcript</Link></Button>
                 )}
               </CardContent>
             </Card>
@@ -73,6 +80,10 @@ export function ActivityClient() {
       )}
     </PageContainer>
   );
+}
+
+function activityPath(page: number) {
+  return page > 1 ? `/Activity?page=${page}` : "/Activity";
 }
 
 function formatDate(value: string) {

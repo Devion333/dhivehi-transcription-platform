@@ -15,6 +15,8 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { AnalysisReviewStatus, TranscriptSummary } from "@/lib/api/types";
 import { analysisReviewStatusLabel } from "@/lib/analysis-review-status";
+import { withReturnTo } from "@/lib/navigation-utils";
+import { transcriptReferenceLabel } from "@/lib/transcript-identity";
 
 const reviewStatuses: Array<"all" | AnalysisReviewStatus> = ["all", "unreviewed", "reviewed", "approved", "rejected"];
 
@@ -62,17 +64,17 @@ export function ReviewQueueClient() {
               <CardContent className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="break-words font-semibold">{item.filename}</h2>
+                    <h2 className="break-words font-semibold">{transcriptReferenceLabel(item.referenceNumber)}</h2>
                     <span className="flex items-center gap-2 text-sm text-muted-foreground">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span>
                   </div>
                   <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-                    <span>Reference: {item.referenceNumber || "N/A"}</span>
+                    <span className="truncate" title={item.filename}>{item.filename}</span>
                     <span>Updated: {formatDate(item.updatedAt || item.createdAt)}</span>
                     {auth.user?.role === "admin" && <span>Owner: {item.ownerDisplayName || "Unassigned"}</span>}
                     <span>Transcript: {item.status}</span>
                   </div>
                 </div>
-                <Button asChild><Link href={`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}&review=open`}><ExternalLink className="h-4 w-4" /> Review transcript</Link></Button>
+                <Button asChild><Link href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}&review=open`, "/Analysis/Review-Queue")}><ExternalLink className="h-4 w-4" /> Review transcript</Link></Button>
               </CardContent>
             </Card>
           ))}

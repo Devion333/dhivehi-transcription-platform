@@ -56,6 +56,57 @@ export interface ChangePasswordResponse {
   reauthenticationRequired: boolean;
 }
 
+export interface PublicSystemSettings {
+  uploadsEnabled: boolean;
+  maximumUploadSizeMb: number;
+  allowedUploadFormats: string[];
+  requireCategory: boolean;
+  processingEnabled: boolean;
+  automaticProcessing: boolean;
+  transcriptEditingEnabled: boolean;
+  speakerRenamingEnabled: boolean;
+  transcriptDownloadsEnabled: boolean;
+  enabledDownloadFormats: string[];
+  requireApprovalBeforeDownload: boolean;
+  analysisEnabled: boolean;
+  enabledAnalysisOutputs: string[];
+  requireApprovalBeforeAnalysis: boolean;
+  usersCanRerunAnalysis: boolean;
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  announcementEnabled: boolean;
+  announcementMessage: string;
+  announcementExpiresAt: string | null;
+  organisationName: string;
+  pdfHeaderText: string;
+}
+
+export interface SystemSettings extends PublicSystemSettings {
+  id: number;
+  automaticAnalysis: boolean;
+  maximumProcessingRetries: number;
+  retryDelayMinutes: number;
+  cleanupEnabled: boolean;
+  notificationRetentionDays: number;
+  auditRetentionDays: number;
+  sessionDurationMinutes: number;
+  maximumFailedLoginAttempts: number;
+  accountLockoutMinutes: number;
+  notifyTranscriptionComplete: boolean;
+  notifyProcessingFailed: boolean;
+  notifyAnalysisComplete: boolean;
+  notifyTranscriptAssigned: boolean;
+  notifyReviewStatusChanged: boolean;
+  updatedAt: string;
+  updatedBy: string | null;
+  updatedByDisplayName: string | null;
+}
+
+export interface AdminSystemSettingsResponse {
+  settings: SystemSettings;
+  changedFields?: string[];
+}
+
 export interface AccountProfile {
   id: string;
   displayName: string;
@@ -124,6 +175,9 @@ export interface AccountActivityItem {
   description: string;
   resourceType: string | null;
   resourceId: string | null;
+  referenceNumber: string;
+  filename: string;
+  detail: string;
   createdAt: string;
 }
 

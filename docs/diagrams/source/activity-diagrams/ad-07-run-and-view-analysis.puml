@@ -1,0 +1,77 @@
+@startuml AD_07_Run_And_View_Analysis
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_07 Run and View Transcript Analysis
+
+|User|
+start
+:Open Transcript Analysis;
+
+|System|
+:Retrieve Transcript and Stored Analysis;
+if (Analysis already complete?) then ([Yes])
+  :Display Stored Results;
+  |User|
+  :Export or Return to Transcript Details;
+  stop
+else ([No])
+  :Check Analysis Policy, Transcript State,\nApproval, Rerun, and Maintenance;
+  if (Analysis allowed?) then ([Yes])
+    :Display Analyse Action;
+  else ([No])
+    :Display Analysis Restriction;
+    stop
+  endif
+endif
+
+|User|
+:Select Analyse;
+
+|System|
+:Set Status to Processing;
+:Prepare and Submit Transcript Content;
+
+|Analysis Service|
+:Generate Summary, Keywords, Entities,\nClassification, and English Translation;
+if (Analysis successful?) then ([Yes])
+  |System|
+  :Store Analysis Results;
+  if (Storage successful?) then ([Yes])
+    :Mark Analysis Complete;
+    :Create Notification When Enabled;
+    :Display Results;
+    |User|
+    :Export or Return to Transcript Details;
+    stop
+  else ([No])
+    :Mark Analysis Failed;
+    :Display Storage Failure;
+    stop
+  endif
+else ([No])
+  |System|
+  :Mark Analysis Failed;
+  :Display Analysis Service Failure;
+  stop
+endif
+@enduml

@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 
-Status: implemented for backend auth, read/update/upload/analysis/search support. Implemented endpoints include auth (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`), `POST /api/uploads`, `GET /api/health`, `GET /api/stats`, `GET /api/transcripts`, `GET /api/search/transcripts`, `GET /api/transcripts/{jobId}`, `PATCH /api/transcripts/{jobId}/segments/{segmentId}`, `GET /api/transcripts/{jobId}/analysis`, and `POST /api/transcripts/{jobId}/analyse`.
+Status: implemented for backend auth, read/update/upload/analysis/search/settings support. Implemented endpoints include auth (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`), settings (`GET /api/settings/public`, `GET /api/admin/settings`, `PUT /api/admin/settings`, `POST /api/admin/settings/restore-defaults`), `POST /api/uploads`, `GET /api/health`, `GET /api/stats`, `GET /api/transcripts`, `GET /api/search/transcripts`, `GET /api/transcripts/{jobId}`, `PATCH /api/transcripts/{jobId}/segments/{segmentId}`, `GET /api/transcripts/{jobId}/analysis`, and `POST /api/transcripts/{jobId}/analyse`.
 
 Current legacy routes preserved and protected by the same authentication middleware: `POST /upload`, `GET /transcripts`, `GET /transcripts/stats`, and `POST /transcripts/:job_id/analyse`.
 
@@ -30,8 +30,12 @@ JSON style: camelCase for frontend-facing request and response bodies.
 | GET | `/api/admin/jobs/{jobId}` | Admin-only job detail with pipeline and queue state. |
 | POST | `/api/admin/jobs/{jobId}/retry` | Admin-only controlled retry for supported failed stages. |
 | GET | `/api/admin/jobs/health` | Admin-only safe dependency and queue health summary. |
+| GET | `/api/settings/public` | Public-safe runtime settings for upload rules and banners. |
+| GET | `/api/admin/settings` | Admin-only full system settings read. |
+| PUT | `/api/admin/settings` | Admin-only full system settings update. |
+| POST | `/api/admin/settings/restore-defaults` | Admin-only restore defaults action. |
 | POST | `/api/audit/pdf-export` | Authenticated controlled PDF export audit recording endpoint. |
-| POST | `/api/uploads` | Upload media using the existing upload flow and return a frontend-friendly job envelope. |
+| POST | `/api/uploads` | Upload media using the existing upload flow and return a frontend-friendly job envelope. New uploads require `referenceNumber`. |
 | GET | `/api/transcripts` | List parent transcript jobs with pagination/filtering. |
 | GET | `/api/search/transcripts` | Literal transcript segment text search with parent context. |
 | GET | `/api/transcripts/{jobId}` | Get one transcript with ordered segments. |
@@ -57,6 +61,23 @@ Common error codes: `bad_request`, `not_found`, `conflict`, `validation_error`, 
 
 Auth error codes are uppercase in the implemented auth handlers: `UNAUTHENTICATED`, `FORBIDDEN`, `TOO_MANY_LOGIN_ATTEMPTS`. Unauthenticated protected requests return `401`; role failures return `403`.
 
+Maintenance-mode mutation failures use a flat response for compatibility with route-aware middleware:
+
+```json
+{
+  "error": "maintenance_mode",
+  "message": "The system is currently in maintenance mode. Viewing existing content is available, but changes are temporarily disabled."
+}
+```
+
+During maintenance mode, standard-user `GET`, `HEAD`, and `OPTIONS` requests remain available. Standard-user mutations such as upload, edit, speaker rename, folder changes, analysis trigger, review status change, delete, and reassignment return `503`. Existing transcript downloads remain allowed because they are read-only.
+
+`GET /api/admin/settings` and `PUT /api/admin/settings` no longer expose or accept transcript, original media, or failed-upload retention fields. Existing database columns named `transcript_retention_days`, `media_retention_days`, and `failed_upload_retention_days` are deprecated compatibility columns and are ignored at runtime. The active retention payload contains only `auditRetentionDays` and `notificationRetentionDays`, both measured in days. `0` means retain indefinitely.
+
+The backend maintenance scheduler reads `auditRetentionDays` and `notificationRetentionDays` from the current System Settings record once per cleanup run. Records with `created_at` strictly older than the UTC cutoff are deleted. Cleanup affects only audit events and notifications.
+
+After admin Save changes or Restore defaults succeeds, the frontend refreshes `GET /api/settings/public` through the shared public settings provider so maintenance and announcement banners update immediately.
+
 ## Authentication
 
 Public backend endpoints:
@@ -65,10 +86,13 @@ Public backend endpoints:
 | --- | --- |
 | GET | `/api/health` |
 | POST | `/api/auth/login` |
+| GET | `/api/settings/public` |
 
 All other Go backend workflow endpoints require authentication, including transcript, search, stats, upload, analysis, and preserved legacy routes.
 
 Sessions use an opaque server-generated token. The browser receives only an HttpOnly cookie named `transcript_session` by default. The backend stores only the SHA-256 hash of the token in PostgreSQL. Session cookies use `Path=/`, `SameSite=Lax`, `HttpOnly=true`, and `Secure=false` locally unless `SESSION_SECURE=true`.
+
+Fresh successful frontend login always navigates to dashboard `/`. The Login page ignores stale `returnTo` values so a new user is not sent back to a prior user's admin route. Logout clears known redirect/return-location browser storage keys and navigates to `/Login` with route replacement.
 
 CORS is credentialed and must use an explicit origin. The local default is `FRONTEND_ORIGIN=http://localhost:3000`; wildcard origins are not valid with credentials.
 
@@ -712,7 +736,7 @@ Request: `multipart/form-data`
 | --- | --- | --- | --- |
 | `file` | file | yes | Audio/video file. |
 | `category` | string | no | Current values include `meeting`, `interview`, `lecture`, `podcast`, `presentation`, `conference`, `webinar`, `other`. |
-| `referenceNumber` | string | no | New camelCase field. Backend also accepts `reference_number` during migration. |
+| `referenceNumber` | string | yes | Primary transcript identifier. Trimmed, required, max 100 characters. Backend also accepts `reference_number` during migration. |
 | `notes` | string | no | Free text. |
 | `requestedSpeakers` | integer | no | Existing speaker metadata value. Backend also accepts legacy `speakers`. |
 

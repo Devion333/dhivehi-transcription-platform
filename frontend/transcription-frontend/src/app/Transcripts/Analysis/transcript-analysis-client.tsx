@@ -16,15 +16,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { analyseTranscript, getTranscript, getTranscriptAnalysis } from "@/lib/api/transcripts";
 import type { TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
+import { getSafeInternalReturnPath } from "@/lib/navigation-utils";
 import { sectionToneClasses } from "@/lib/section-styles";
+import { transcriptReferenceLabel } from "@/lib/transcript-identity";
 import { analysisTextProps, canRunAnalysis, hasAnalysisContent, normalizeEntities } from "@/lib/transcript-analysis-utils";
-import { safeValue } from "@/lib/transcript-details-utils";
 import { hasUsableAnalysis } from "@/lib/pdf-export-utils";
 import { cn } from "@/lib/utils";
 
 export function TranscriptAnalysisClient() {
   const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
+  const returnTo = getSafeInternalReturnPath(searchParams.get("returnTo"), jobId ? `/Transcripts/Details?job_id=${encodeURIComponent(jobId)}` : "/Transcripts");
   const [detail, setDetail] = React.useState<TranscriptDetail | null>(null);
   const [analysis, setAnalysis] = React.useState<TranscriptAnalysis | null>(null);
   const [loading, setLoading] = React.useState(Boolean(jobId));
@@ -73,7 +75,7 @@ export function TranscriptAnalysisClient() {
   if (!jobId) {
     return (
       <PageContainer>
-        <div className="mb-4"><BackToTranscript jobId="" /></div>
+        <div className="mb-4"><BackToTranscript href={returnTo} /></div>
         <PageHeader title="Analysis" />
         <EmptyState title="Invalid link" description="Open analysis from a transcript." />
       </PageContainer>
@@ -83,7 +85,7 @@ export function TranscriptAnalysisClient() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="mb-4"><BackToTranscript jobId={jobId} /></div>
+        <div className="mb-4"><BackToTranscript href={returnTo} /></div>
         <PageHeader title="Analysis" />
         <LoadingState label="Loading analysis" />
       </PageContainer>
@@ -94,7 +96,7 @@ export function TranscriptAnalysisClient() {
     const notFound = error?.toLowerCase().includes("not found");
     return (
       <PageContainer>
-        <div className="mb-4"><BackToTranscript jobId={jobId} /></div>
+        <div className="mb-4"><BackToTranscript href={returnTo} /></div>
         <PageHeader title="Analysis" />
         <ErrorState title={notFound ? "Transcript not found" : "Could not load analysis"} description={error ?? "Analysis data was unavailable."} onRetry={() => setRetryToken((value) => value + 1)} />
       </PageContainer>
@@ -108,7 +110,7 @@ export function TranscriptAnalysisClient() {
 
   return (
     <PageContainer>
-      <div className="mb-4"><BackToTranscript jobId={jobId} /></div>
+      <div className="mb-4"><BackToTranscript href={returnTo} /></div>
       <PageHeader
         title="Analysis"
         actions={
@@ -125,8 +127,8 @@ export function TranscriptAnalysisClient() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <span className="break-words font-medium text-foreground">{detail.filename}</span>
-        <span>{safeValue(detail.referenceNumber, "No reference")}</span>
+        <span className="break-words font-medium text-foreground">{transcriptReferenceLabel(detail.referenceNumber)}</span>
+        <span title={detail.filename}>{detail.filename}</span>
         <StatusBadge status={analysis.status} />
         <span>Transcript review: <AnalysisReviewStatusBadge status={analysis.review?.status ?? detail.analysisReviewStatus} /></span>
       </div>
@@ -156,8 +158,7 @@ export function TranscriptAnalysisClient() {
   );
 }
 
-function BackToTranscript({ jobId }: { jobId: string }) {
-  const href = jobId ? `/Transcripts/Details?job_id=${encodeURIComponent(jobId)}` : "/Transcripts";
+function BackToTranscript({ href }: { href: string }) {
   return <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2"><Link href={href}><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 

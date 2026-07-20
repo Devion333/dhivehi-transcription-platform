@@ -1,0 +1,75 @@
+@startuml AD_06_Download_Transcript
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_06 Download Transcript
+
+|User|
+start
+:Open Transcript Details;
+:Open Download Menu;
+
+|System|
+:Check Download Policy and Transcript State;
+if (Downloads enabled?) then ([Yes])
+  if (Transcript available?) then ([Yes])
+    if (Approval required?) then ([Yes])
+      if (Transcript approved?) then ([Yes])
+        :Display Enabled Formats;
+      else ([No])
+        :Display Approval Required Message;
+        stop
+      endif
+    else ([No])
+      :Display Enabled Formats;
+    endif
+  else ([No])
+    :Display Incomplete Transcript Message;
+    stop
+  endif
+else ([No])
+  :Display Downloads Disabled Message;
+  stop
+endif
+
+|User|
+:Select TXT, JSON, SRT, WebVTT, or PDF;
+
+|System|
+:Check Selected Format Setting;
+if (Format enabled?) then ([Yes])
+  :Generate Export;
+  if (Export successful?) then ([Yes])
+    :Send File to Browser;
+    :Record Activity or Audit Data;
+    |User|
+    :Receive Downloaded File;
+    stop
+  else ([No])
+    :Display Export Failure;
+    stop
+  endif
+else ([No])
+  :Display Disabled Format Message;
+  stop
+endif
+@enduml

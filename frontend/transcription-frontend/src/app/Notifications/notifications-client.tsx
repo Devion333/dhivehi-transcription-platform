@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/api/notifications";
 import type { NotificationItem } from "@/lib/api/types";
+import { withReturnTo } from "@/lib/navigation-utils";
 import { sectionToneClasses } from "@/lib/section-styles";
 import { cn } from "@/lib/utils";
 
@@ -106,8 +107,8 @@ export function NotificationsClient() {
 
 function notificationHref(item: NotificationItem) {
   const jobId = encodeURIComponent(item.resourceId);
-  if (item.type === "analysis_completed" || item.type === "analysis_failed") return `/Transcripts/Analysis?job_id=${jobId}`;
-  return `/Transcripts/Details?job_id=${jobId}`;
+  if (item.type === "analysis_completed" || item.type === "analysis_failed") return withReturnTo(`/Transcripts/Analysis?job_id=${jobId}`, "/Notifications");
+  return withReturnTo(`/Transcripts/Details?job_id=${jobId}`, "/Notifications");
 }
 
 function formatDate(value: string) {

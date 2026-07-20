@@ -1,0 +1,100 @@
+@startuml AD_02_Media_Upload_And_Processing
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_02 Media Upload and Processing
+
+|User|
+start
+:Open Upload Page;
+
+|System|
+:Check Maintenance and Upload Settings;
+if (Upload permitted?) then ([Yes])
+  :Display Upload Form;
+else ([No])
+  :Display Upload Restriction;
+  stop
+endif
+
+|User|
+:Enter Reference Number and Category;
+:Select Audio or Video File;
+
+|System|
+:Validate Required Fields, Type, and Size;
+if (Input valid?) then ([Yes])
+  |User|
+  :Submit Upload;
+  |System|
+  :Prevent Duplicate Submission;
+  :Store Media and Create Transcript Record;
+  if (Storage successful?) then ([Yes])
+    if (Automatic processing enabled?) then ([Yes])
+      :Queue Processing Job;
+      |Processing Worker|
+      :Convert Media;
+      if (Conversion successful?) then ([Yes])
+        :Perform Speaker Diarization;
+        if (Diarization successful?) then ([Yes])
+          :Generate Dhivehi Transcription;
+          if (Transcription successful?) then ([Yes])
+            |System|
+            :Store Segments and Speaker Data;
+            :Set Status to Transcribed;
+            :Create Completion Notification;
+            |User|
+            :View Updated Status;
+            stop
+          else ([No])
+            |System|
+            :Record Transcription Failure;
+            :Set Status to Failed and Notify User;
+            stop
+          endif
+        else ([No])
+          |System|
+          :Record Diarization Failure;
+          :Set Status to Failed and Notify User;
+          stop
+        endif
+      else ([No])
+        |System|
+        :Record Conversion Failure;
+        :Set Status to Failed and Notify User;
+        stop
+      endif
+    else ([No])
+      :Set Status to Pending;
+      |User|
+      :View Pending Status;
+      stop
+    endif
+  else ([No])
+    :Display Storage Failure;
+    stop
+  endif
+else ([No])
+  :Display Validation Errors;
+  stop
+endif
+@enduml

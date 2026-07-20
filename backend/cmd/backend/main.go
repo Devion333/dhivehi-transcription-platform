@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 	"transcript_app/backend/internal/dtos"
 	"transcript_app/backend/internal/handlers"
 	"transcript_app/backend/internal/services"
@@ -13,10 +17,14 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// Initialize all services (MinIO, Qdrant, Redis) with auto-creation
 	if err := services.InitializeServices(); err != nil {
 		log.Fatalf("❌ Failed to initialize services: %v", err)
 	}
+	services.StartMaintenanceScheduler(ctx)
 
 	r := gin.Default()
 
@@ -28,7 +36,7 @@ func main() {
 			c.Writer.Header().Set("Vary", "Origin")
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, PATCH, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, PUT, PATCH, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -53,6 +61,7 @@ func main() {
 		api.POST("/auth/change-password", handlers.RequireAuth(), handlers.APIChangePassword)
 		api.GET("/auth/me", handlers.RequireAuth(), handlers.APIMe)
 		api.GET("/health", handlers.APIHealth)
+		api.GET("/settings/public", handlers.APIGetPublicSettings)
 
 		protected := api.Group("")
 		protected.Use(handlers.RequireAuth())
@@ -89,6 +98,9 @@ func main() {
 		admin := api.Group("/admin")
 		admin.Use(handlers.RequireAuth(), handlers.RequireRole(services.UserRoleAdmin))
 		{
+			admin.GET("/settings", handlers.APIAdminGetSettings)
+			admin.PUT("/settings", handlers.APIAdminUpdateSettings)
+			admin.POST("/settings/restore-defaults", handlers.APIAdminRestoreDefaultSettings)
 			admin.GET("/users", handlers.APIAdminListUsers)
 			admin.POST("/users", handlers.APIAdminCreateUser)
 			admin.GET("/users/:userId", handlers.APIAdminGetUser)
@@ -110,8 +122,18 @@ func main() {
 		}
 	}
 
+	server := &http.Server{Addr: ":8000", Handler: r}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("backend shutdown failed: %v", err)
+		}
+	}()
+
 	log.Println("🚀 Backend server starting on :8000")
-	if err := r.Run(":8000"); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("❌ Failed to start server: %v", err)
 	}
 }
@@ -131,7 +153,7 @@ func isAllowedOrigin(origin string) bool {
 
 func requiresTrustedBrowserOrigin(method string) bool {
 	switch method {
-	case http.MethodPost, http.MethodPatch, http.MethodDelete:
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 		return true
 	default:
 		return false

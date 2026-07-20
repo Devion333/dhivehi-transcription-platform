@@ -15,6 +15,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Pagination, TranscriptSummary } from "@/lib/api/types";
+import { withReturnTo } from "@/lib/navigation-utils";
+import { transcriptReferenceLabel } from "@/lib/transcript-identity";
 
 export function AdminTranscriptsClient() {
   const [items, setItems] = React.useState<TranscriptSummary[]>([]);
@@ -59,7 +61,8 @@ export function AdminTranscriptsClient() {
             <Card key={item.jobId}>
               <CardContent className="grid gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                 <div className="min-w-0 space-y-2">
-                  <h2 className="break-words font-semibold">{item.filename}</h2>
+                  <h2 className="break-words font-semibold">{transcriptReferenceLabel(item.referenceNumber)}</h2>
+                  <p className="truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p>
                   <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
                     <span>Owner: {item.ownerDisplayName || "Unassigned"}</span>
                     <span>Created: {formatDate(item.createdAt)}</span>
@@ -69,9 +72,9 @@ export function AdminTranscriptsClient() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button asChild size="sm"><Link href={`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`}><ExternalLink className="h-4 w-4" /> Open</Link></Button>
+                  <Button asChild size="sm"><Link href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`, "/Admin/Transcripts")}><ExternalLink className="h-4 w-4" /> Open</Link></Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => { setMessage(null); setReassignTarget(item); }}>Reassign</Button>
-                  <Button asChild size="sm" variant="outline"><Link href={`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`}>Delete</Link></Button>
+                  <Button asChild size="sm" variant="outline"><Link href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`, "/Admin/Transcripts")}>Delete</Link></Button>
                 </div>
               </CardContent>
             </Card>

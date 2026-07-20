@@ -143,9 +143,48 @@ func RequireAuth() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if !maintenanceModeAllows(c, user) {
+			c.Abort()
+			return
+		}
 		c.Set(authUserContextKey, user)
 		c.Next()
 	}
+}
+
+func maintenanceModeAllows(c *gin.Context, user dtos.AuthUser) bool {
+	if user.Role == services.UserRoleAdmin {
+		return true
+	}
+	if maintenanceRouteAllowed(c.Request.Method, c.Request.URL.Path) {
+		return true
+	}
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil || !settings.MaintenanceMode {
+		return true
+	}
+	writeMaintenanceModeError(c)
+	return false
+}
+
+func maintenanceRouteAllowed(method, path string) bool {
+	if method == http.MethodOptions || method == http.MethodHead {
+		return true
+	}
+	if method == http.MethodGet {
+		return true
+	}
+	if method == http.MethodPost && (path == "/api/auth/login" || path == "/api/auth/logout") {
+		return true
+	}
+	return false
+}
+
+func writeMaintenanceModeError(c *gin.Context) {
+	c.JSON(http.StatusServiceUnavailable, gin.H{
+		"error":   "maintenance_mode",
+		"message": "The system is currently in maintenance mode. Viewing existing content is available, but changes are temporarily disabled.",
+	})
 }
 
 func RequireRole(role string) gin.HandlerFunc {

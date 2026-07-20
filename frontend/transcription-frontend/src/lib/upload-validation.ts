@@ -14,7 +14,7 @@ export const categoryOptions = [
   { value: "other", label: "Other" },
 ] as const;
 
-export const referenceNumberMaxLength = 80;
+export const referenceNumberMaxLength = 100;
 export const notesMaxLength = 1000;
 export const clientGuidanceMaxBytes = 2 * 1024 * 1024 * 1024;
 
@@ -71,6 +71,9 @@ export function validateUploadFile(file: File | null): FileValidationResult {
 
 export function validateUploadMetadata(metadata: { referenceNumber: string; notes: string; requestedSpeakers: number }) {
   const errors: Record<string, string> = {};
+  if (!metadata.referenceNumber.trim()) {
+    errors.referenceNumber = "Reference number is required.";
+  }
   if (metadata.referenceNumber.length > referenceNumberMaxLength) {
     errors.referenceNumber = `Reference number must be ${referenceNumberMaxLength} characters or fewer.`;
   }

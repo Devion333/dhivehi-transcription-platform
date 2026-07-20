@@ -81,11 +81,28 @@ func APIAnalyseTranscript(c *gin.Context) {
 		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
 		return
 	}
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if !settings.AnalysisEnabled {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Analysis is disabled", nil)
+		return
+	}
 
 	started := time.Now()
 	parent, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID)
 	if err != nil {
 		writeServiceError(c, err)
+		return
+	}
+	if settings.RequireApprovalBeforeAnalysis && services.MapAnalysisReview(parent.Payload).Status != "approved" {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Transcript review approval is required before analysis", nil)
+		return
+	}
+	if !settings.UsersCanRerunAnalysis && services.MapAnalysis(parent.Payload).Status == "complete" {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Analysis reruns are disabled", nil)
 		return
 	}
 	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "started", "provider": "analysis"}})

@@ -8,7 +8,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"transcript_app/backend/internal/dtos"
@@ -25,6 +27,8 @@ type uploadMetadata struct {
 	Notes           string
 	Speakers        string
 }
+
+const maxReferenceNumberLength = 100
 
 type uploadResult struct {
 	FileID           string
@@ -49,13 +53,19 @@ func UploadFile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file not provided"})
 		return
 	}
-
-	result, err := processUpload(c, file, uploadMetadata{
+	metadata := uploadMetadata{
 		Category:        c.PostForm("category"),
 		ReferenceNumber: c.PostForm("reference_number"),
 		Notes:           c.PostForm("notes"),
 		Speakers:        c.PostForm("speakers"),
-	})
+	}
+	metadata.ReferenceNumber = strings.TrimSpace(metadata.ReferenceNumber)
+	if err := validateReferenceNumber(metadata.ReferenceNumber); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Reference number is required"})
+		return
+	}
+
+	result, err := processUpload(c, file, metadata)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -81,13 +91,41 @@ func APIUploadFile(c *gin.Context) {
 		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "A media file is required", nil)
 		return
 	}
-
-	result, err := processUpload(c, file, uploadMetadata{
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	metadata := uploadMetadata{
 		Category:        c.PostForm("category"),
 		ReferenceNumber: firstNonEmpty(c.PostForm("referenceNumber"), c.PostForm("reference_number")),
 		Notes:           c.PostForm("notes"),
 		Speakers:        firstNonEmpty(c.PostForm("requestedSpeakers"), c.PostForm("speakers")),
-	})
+	}
+	if !settings.UploadsEnabled {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Uploads are currently disabled", nil)
+		return
+	}
+	if file.Size > int64(settings.MaximumUploadSizeMB)*1024*1024 {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "File exceeds the configured upload size limit", nil)
+		return
+	}
+	if !services.UploadFormatAllowed(file.Filename, settings) {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "File format is not allowed", nil)
+		return
+	}
+	metadata.ReferenceNumber = strings.TrimSpace(metadata.ReferenceNumber)
+	metadata.Category = strings.TrimSpace(metadata.Category)
+	if err := validateReferenceNumber(metadata.ReferenceNumber); err != nil {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Reference number is required", nil)
+		return
+	}
+	if settings.RequireCategory && strings.TrimSpace(metadata.Category) == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "Category is required", nil)
+		return
+	}
+
+	result, err := processUpload(c, file, metadata)
 	if err != nil {
 		log.Printf("api upload failed: %v", err)
 		writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "Upload could not be accepted", nil)
@@ -102,10 +140,15 @@ func processUpload(c *gin.Context, file *multipart.FileHeader, uploadMeta upload
 	if file == nil || file.Filename == "" {
 		return uploadResult{}, fmt.Errorf("file not provided")
 	}
+	uploadMeta.ReferenceNumber = strings.TrimSpace(uploadMeta.ReferenceNumber)
+	uploadMeta.Category = strings.TrimSpace(uploadMeta.Category)
+	if err := validateReferenceNumber(uploadMeta.ReferenceNumber); err != nil {
+		return uploadResult{}, err
+	}
 
 	// Generate unique file ID
 	fileID := uuid.NewString()
-	localPath := fmt.Sprintf("/tmp/%s_%s", fileID, file.Filename)
+	localPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s_%s", fileID, filepath.Base(file.Filename)))
 
 	// Save file locally
 	if err := c.SaveUploadedFile(file, localPath); err != nil {
@@ -159,8 +202,11 @@ func processUpload(c *gin.Context, file *multipart.FileHeader, uploadMeta upload
 		log.Printf("✅ Successfully inserted metadata for file %s", fileID)
 	}
 
+	settings, _ := services.GetSystemSettings(ctx)
 	// Push job to conversion queue (which handles both video and audio)
-	if services.RedisClient == nil {
+	if !settings.ProcessingEnabled || !settings.AutomaticProcessing {
+		log.Printf("ℹ️ Processing enqueue skipped for file %s by system settings", fileID)
+	} else if services.RedisClient == nil {
 		log.Printf("⚠️ RedisClient is nil - cannot push to queue")
 	} else {
 		job := map[string]string{
@@ -235,6 +281,17 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func validateReferenceNumber(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("reference number is required")
+	}
+	if len([]rune(value)) > maxReferenceNumberLength {
+		return fmt.Errorf("reference number must be %d characters or fewer", maxReferenceNumberLength)
+	}
+	return nil
 }
 
 func uploadAuditMetadata(result uploadResult) map[string]interface{} {

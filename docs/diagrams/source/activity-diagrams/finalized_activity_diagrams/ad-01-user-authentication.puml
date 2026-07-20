@@ -1,0 +1,69 @@
+@startuml AD_01_User_Authentication
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_01 User Authentication
+
+|User|
+start
+:Open Login Page;
+
+|System|
+:Display Login Form;
+
+|User|
+:Enter Credentials;
+
+|System|
+:Validate Required Fields;
+if (Input complete?) then ([Yes])
+  if (Authentication available?) then ([Yes])
+    :Verify Credentials and Account State;
+    if (Credentials valid?) then ([Yes])
+      if (Account enabled?) then ([Yes])
+        :Create Authenticated Session;
+        :Determine Role and Open Dashboard;
+        :Display Role-Based Navigation;
+        |User|
+        :Use Platform;
+        :Log Out;
+        |System|
+        :Clear Session and Return Location;
+        :Return to Login Page;
+        stop
+      else ([No])
+        :Display Disabled Account Message;
+        stop
+      endif
+    else ([No])
+      :Display Invalid Credentials Message;
+      stop
+    endif
+  else ([No])
+    :Display Authentication Failure;
+    stop
+  endif
+else ([No])
+  :Display Missing Fields Message;
+  stop
+endif
+@enduml

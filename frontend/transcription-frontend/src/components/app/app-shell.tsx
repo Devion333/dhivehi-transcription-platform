@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Bell, BriefcaseBusiness, CheckCheck, CircleHelp, ClipboardList, FileText, FolderOpen, HeartPulse, History, Home, Inbox, LogOut, Menu, Search, UploadCloud, UserCircle, Users } from "lucide-react";
+import { Activity, Bell, BriefcaseBusiness, CheckCheck, CircleHelp, ClipboardList, FileText, FolderOpen, HeartPulse, History, Home, Inbox, LogOut, Menu, Search, Settings, UploadCloud, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -9,13 +9,17 @@ import { ErrorState, LoadingState } from "@/components/app/states";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PublicSettingsProvider, usePublicSettings } from "@/components/app/public-settings-provider";
 import { getNotificationUnreadCount, listNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/api/notifications";
 import type { NotificationItem } from "@/lib/api/types";
 import { isAdminRoute, isProtectedRoute, isPublicRoute, safeReturnPath } from "@/lib/auth-utils";
+import { withReturnTo } from "@/lib/navigation-utils";
 import { sectionToneClasses } from "@/lib/section-styles";
 import { cn } from "@/lib/utils";
 
 const NOTIFICATION_POLL_MS = 45_000;
+type OpenHeaderPanel = "notifications" | "profile" | null;
 
 const mainNavItems = [
   { href: "/", label: "Dashboard", icon: Home },
@@ -35,6 +39,7 @@ const adminNavItems = [
   { href: "/Admin/Users", label: "Users", icon: Users },
   { href: "/Admin/Audit", label: "Audit", icon: History },
   { href: "/Admin/Jobs", label: "Jobs", icon: BriefcaseBusiness },
+  { href: "/Admin/Settings", label: "System Settings", icon: Settings },
 ];
 
 function NavLink({ href, label, icon: Icon, onClick, collapsed = false }: (typeof mainNavItems)[number] & { onClick?: () => void; collapsed?: boolean }) {
@@ -70,18 +75,25 @@ function isActiveNavItem(href: string, pathname: string) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  return <PublicSettingsProvider pathname={pathname}><AppShellContent>{children}</AppShellContent></PublicSettingsProvider>;
+}
+
+function AppShellContent({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [openHeaderPanel, setOpenHeaderPanel] = React.useState<OpenHeaderPanel>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [sidebarPreferenceReady, setSidebarPreferenceReady] = React.useState(false);
   const [desktopViewport, setDesktopViewport] = React.useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
+  const publicSettings = usePublicSettings();
   const redirectingRef = React.useRef(false);
 
   React.useEffect(() => {
     redirectingRef.current = false;
+    setOpenHeaderPanel(null);
   }, [pathname]);
 
   React.useEffect(() => {
@@ -131,7 +143,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleSignOut() {
     await auth.logout();
-    setMenuOpen(false);
+    publicSettings.clearSettings();
+    setOpenHeaderPanel(null);
     router.replace("/Login");
   }
 
@@ -169,35 +182,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 flex-1 items-center justify-end px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            {auth.user && auth.status === "authenticated" && <NotificationBell />}
+            {auth.user && auth.status === "authenticated" && <NotificationBell open={openHeaderPanel === "notifications"} onOpenChange={(open) => setOpenHeaderPanel(open ? "notifications" : null)} />}
             {auth.user && (
-              <div className="relative">
-                <Button variant="outline" className="gap-2" onClick={() => setMenuOpen((open) => !open)}>
+              <DropdownMenu open={openHeaderPanel === "profile"} onOpenChange={(open) => setOpenHeaderPanel(open ? "profile" : null)}>
+                <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
                   <UserCircle className="h-4 w-4" />
                   <span className="hidden sm:inline">{auth.user.name}</span>
                 </Button>
-                {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-popover p-2 text-sm shadow-lg">
+                </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" avoidCollisions collisionPadding={16} className="w-56 p-2">
                     <div className="px-2 py-2">
                       <p className="font-medium">{auth.user.name}</p>
                       <p className="text-xs text-muted-foreground">{auth.user.role}</p>
                     </div>
-                    <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
-                      <Link href="/Account/Profile"><UserCircle className="h-4 w-4" /> Profile</Link>
-                    </Button>
-                    <Button asChild variant="ghost" className="w-full justify-start gap-2" onClick={() => setMenuOpen(false)}>
-                      <Link href="/About"><CircleHelp className="h-4 w-4" /> About</Link>
-                    </Button>
+                    <DropdownMenuItem onSelect={() => router.push("/Account/Profile")} className="gap-2"><UserCircle className="h-4 w-4" /> Profile</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => router.push("/Account/Security")} className="gap-2"><UserCircle className="h-4 w-4" /> Change password</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => router.push("/About")} className="gap-2"><CircleHelp className="h-4 w-4" /> About</DropdownMenuItem>
                     <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
                       <LogOut className="h-4 w-4" /> Sign out
                     </Button>
-                  </div>
-                )}
-              </div>
+                  </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
       </header>
+
+      {publicSettings.settings?.announcementEnabled && publicSettings.settings.announcementMessage && (
+        <div className="shrink-0 border-y border-[var(--accent-primary-border)] bg-[var(--accent-primary-bg)] px-4 py-2 text-sm text-[var(--accent-primary)] sm:px-6 lg:px-8">
+          {publicSettings.settings.announcementMessage}
+        </div>
+      )}
+
+      {publicSettings.settings?.maintenanceMode && (
+        <div className="shrink-0 border-y border-[var(--accent-warning-border)] bg-[var(--accent-warning-bg)] px-4 py-2 text-sm text-[var(--accent-warning)] sm:px-6 lg:px-8">
+          {auth.user?.role === "admin" ? "Maintenance mode is active for standard users." : "Maintenance mode is active. You can view existing content, but uploads and changes are temporarily disabled."}
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <aside className={cn("hidden min-h-0 shrink-0 overflow-hidden bg-background/95 backdrop-blur transition-[width] duration-200 ease-in-out lg:flex lg:flex-col", sidebarCollapsed ? "w-[68px]" : "w-60")}>
@@ -273,7 +295,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <main className={cn("min-h-0 min-w-0 flex-1", pathname === "/Admin/Settings" ? "overflow-hidden" : "overflow-y-auto")}>
         {children}
       </main>
       </div>
@@ -281,9 +303,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NotificationBell() {
+function NotificationBell({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
@@ -349,7 +370,7 @@ function NotificationBell() {
         return;
       }
     }
-    setOpen(false);
+    onOpenChange(false);
     router.push(notificationHref(item));
   }
 
@@ -364,47 +385,51 @@ function NotificationBell() {
   }
 
   return (
-    <div className="relative">
-      <Button type="button" variant="outline" size="icon" onClick={() => setOpen((value) => !value)} aria-label="Notifications" aria-expanded={open}>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+      <Button type="button" variant="outline" size="icon" aria-label="Notifications" aria-expanded={open}>
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--accent-notification)] px-1 text-xs font-medium text-background ring-1 ring-background">{unreadCount > 99 ? "99+" : unreadCount}</span>}
       </Button>
-      {open && (
-        <div className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-lg border bg-popover p-2 text-sm shadow-lg">
-          <div className="flex items-center justify-between gap-2 px-2 py-2">
-            <p className="font-medium">Notifications</p>
-            <Button type="button" variant="ghost" size="sm" className="gap-1" onClick={markAllRead} disabled={unreadCount === 0}><CheckCheck className="h-4 w-4" /> Mark all read</Button>
+      </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" avoidCollisions collisionPadding={16} className="w-[min(380px,calc(100vw-2rem))] overflow-hidden border bg-popover p-0 shadow-lg">
+          <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+            <h2 className="min-w-0 truncate font-semibold">Notifications</h2>
+            {unreadCount > 0 && <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2" onClick={markAllRead}><CheckCheck className="h-4 w-4" /> Mark all read</Button>}
           </div>
-          {loading && <p className="px-2 py-6 text-center text-muted-foreground">Loading notifications...</p>}
-          {error && <p className="px-2 py-3 text-destructive">{error}</p>}
-          {!loading && !error && items.length === 0 && <p className="px-2 py-6 text-center text-muted-foreground">No notifications yet.</p>}
-          {!loading && !error && items.length > 0 && (
-            <div className="max-h-[70vh] space-y-1 overflow-y-auto">
-              {items.map((item) => (
-                  <button key={item.id} type="button" className={cn("w-full rounded-md px-3 py-2 text-left hover:bg-accent", !item.isRead && "bg-[var(--accent-notification-bg)] ring-1 ring-[var(--accent-notification-border)]")} onClick={() => void openNotification(item)}>
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-medium">{item.title}</p>
-                    {!item.isRead && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-notification)]" aria-label="Unread" />}
+          <div className="max-h-[460px] overflow-y-auto">
+            {loading && <p className="px-4 py-6 text-center text-sm text-muted-foreground">Loading notifications...</p>}
+            {error && <div className="space-y-2 px-4 py-3 text-sm"><p className="text-destructive">{error}</p><Button type="button" variant="outline" size="sm" onClick={() => void refreshList()}>Retry</Button></div>}
+            {!loading && !error && items.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>}
+            {!loading && !error && items.length > 0 && items.map((item) => (
+              <button key={item.id} type="button" className={cn("flex w-full gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none", !item.isRead && "bg-[var(--accent-notification-bg)]")} onClick={() => void openNotification(item)}>
+                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 break-words text-sm font-medium leading-5">{item.title}</p>
+                    {!item.isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-notification)]" aria-label="Unread" />}
                   </div>
-                  <p className="mt-1 text-muted-foreground">{item.message}</p>
+                  <p className="mt-1 truncate text-sm text-muted-foreground" title={item.message}>{item.message}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{formatNotificationDate(item.createdAt)}</p>
-                </button>
-              ))}
-            </div>
-          )}
-          <Button asChild variant="ghost" className="mt-2 w-full justify-start" onClick={() => setOpen(false)}>
-            <Link href="/Notifications">View all notifications</Link>
-          </Button>
-        </div>
-      )}
-    </div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <div className="border-t px-2 py-2">
+            <Button asChild variant="ghost" className="w-full justify-start" onClick={() => onOpenChange(false)}>
+              <Link href="/Notifications">View all notifications</Link>
+            </Button>
+          </div>
+        </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
 function notificationHref(item: NotificationItem) {
   const jobId = encodeURIComponent(item.resourceId);
-  if (item.type === "analysis_completed" || item.type === "analysis_failed") return `/Transcripts/Analysis?job_id=${jobId}`;
-  return `/Transcripts/Details?job_id=${jobId}`;
+  const returnTo = typeof window === "undefined" ? "/" : `${window.location.pathname}${window.location.search}`;
+  if (item.type === "analysis_completed" || item.type === "analysis_failed") return withReturnTo(`/Transcripts/Analysis?job_id=${jobId}`, returnTo);
+  return withReturnTo(`/Transcripts/Details?job_id=${jobId}`, returnTo);
 }
 
 function formatNotificationDate(value: string) {

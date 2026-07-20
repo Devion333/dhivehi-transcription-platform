@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -43,7 +44,7 @@ func ListAccountActivity(ctx context.Context, userID string, page, pageSize int)
 	queryArgs := append(baseArgs, pageSize, (page-1)*pageSize)
 	limitIndex := len(baseArgs) + 1
 	offsetIndex := len(baseArgs) + 2
-	rows, err := Database.QueryContext(ctx, fmt.Sprintf(`SELECT id, action, resource_type, resource_id, created_at FROM audit_events WHERE actor_user_id = $1 AND action IN (%s) ORDER BY created_at DESC, id DESC LIMIT $%d OFFSET $%d`, actionClause, limitIndex, offsetIndex), queryArgs...)
+	rows, err := Database.QueryContext(ctx, fmt.Sprintf(`SELECT id, action, resource_type, resource_id, metadata_json, created_at FROM audit_events WHERE actor_user_id = $1 AND action IN (%s) ORDER BY created_at DESC, id DESC LIMIT $%d OFFSET $%d`, actionClause, limitIndex, offsetIndex), queryArgs...)
 	if err != nil {
 		return dtos.AccountActivityResponse{}, err
 	}
@@ -52,11 +53,12 @@ func ListAccountActivity(ctx context.Context, userID string, page, pageSize int)
 	for rows.Next() {
 		var id, action string
 		var resourceType, resourceID sql.NullString
+		var metadataRaw []byte
 		var createdAt time.Time
-		if err := rows.Scan(&id, &action, &resourceType, &resourceID, &createdAt); err != nil {
+		if err := rows.Scan(&id, &action, &resourceType, &resourceID, &metadataRaw, &createdAt); err != nil {
 			return dtos.AccountActivityResponse{}, err
 		}
-		items = append(items, accountActivityDTO(id, action, resourceType, resourceID, createdAt))
+		items = append(items, accountActivityDTO(id, action, resourceType, resourceID, metadataRaw, createdAt))
 	}
 	if err := rows.Err(); err != nil {
 		return dtos.AccountActivityResponse{}, err
@@ -86,9 +88,35 @@ func accountActivityActionClause(actions []string, start int) (string, []interfa
 	return strings.Join(placeholders, ", "), args
 }
 
-func accountActivityDTO(id, action string, resourceType, resourceID sql.NullString, createdAt time.Time) dtos.AccountActivityItem {
+func accountActivityDTO(id, action string, resourceType, resourceID sql.NullString, metadataRaw []byte, createdAt time.Time) dtos.AccountActivityItem {
 	title, description := accountActivityText(action)
-	return dtos.AccountActivityItem{ID: id, Action: action, Title: title, Description: description, ResourceType: stringPtrFromNull(resourceType), ResourceID: stringPtrFromNull(resourceID), CreatedAt: createdAt.UTC().Format(time.RFC3339)}
+	metadata := map[string]interface{}{}
+	_ = json.Unmarshal(metadataRaw, &metadata)
+	return dtos.AccountActivityItem{ID: id, Action: action, Title: title, Description: description, ResourceType: stringPtrFromNull(resourceType), ResourceID: stringPtrFromNull(resourceID), ReferenceNumber: metadataString(metadata, "referenceNumber"), Filename: metadataString(metadata, "filename"), Detail: accountActivityDetail(action, metadata), CreatedAt: createdAt.UTC().Format(time.RFC3339)}
+}
+
+func metadataString(metadata map[string]interface{}, key string) string {
+	if value, ok := metadata[key].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func accountActivityDetail(action string, metadata map[string]interface{}) string {
+	switch action {
+	case "transcript.segment_updated":
+		return "Edited transcript text"
+	case "speaker_rename_succeeded":
+		return fmt.Sprintf("%s renamed", metadataString(metadata, "speakerKey"))
+	case "speaker_name_reset":
+		return fmt.Sprintf("%s reset", metadataString(metadata, "speakerKey"))
+	case "transcript_download_succeeded", "export.pdf_generated":
+		format := metadataString(metadata, "format")
+		if format != "" {
+			return "Downloaded " + strings.ToUpper(format)
+		}
+	}
+	return ""
 }
 
 func stringPtrFromNull(value sql.NullString) *string {

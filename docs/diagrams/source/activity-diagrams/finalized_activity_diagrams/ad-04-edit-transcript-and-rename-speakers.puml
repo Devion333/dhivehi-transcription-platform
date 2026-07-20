@@ -1,0 +1,86 @@
+@startuml AD_04_Edit_Transcript_And_Rename_Speakers
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_04 View, Edit and Rename Transcript Speakers
+
+|User|
+start
+:Open Transcript Details;
+
+|System|
+:Verify Transcript Access;
+if (Access authorized?) then ([Yes])
+  :Display Reference, Media, Segments,\nSpeakers, Review, Analysis, and Folder;
+else ([No])
+  :Display Access Error;
+  stop
+endif
+
+|User|
+switch (Selected action)
+case (Play Media)
+  :Play, Pause, or Seek;
+  |System|
+  :Update Playback Position;
+case (Edit Segment)
+  |System|
+  :Check Editing Policy and Maintenance;
+  if (Editing allowed?) then ([Yes])
+    |User|
+    :Edit Transcript Text;
+    if (Save selected?) then ([Yes])
+      |System|
+      :Validate and Save Segment;
+      if (Save successful?) then ([Yes])
+        :Record Activity and Refresh Segment;
+      else ([No])
+        :Display Save Failure;
+      endif
+    else ([No])
+      :Discard Unsaved Edit;
+    endif
+  else ([No])
+    :Display Editing Restriction;
+  endif
+case (Rename Speaker)
+  |System|
+  :Check Renaming Policy and Maintenance;
+  if (Renaming allowed?) then ([Yes])
+    |User|
+    :Select Speaker and Enter Display Name;
+    |System|
+    :Validate and Save Speaker Mapping;
+    if (Save successful?) then ([Yes])
+      :Update Matching Segments;
+      :Record Activity;
+    else ([No])
+      :Display Name or Save Error;
+    endif
+  else ([No])
+    :Display Renaming Restriction;
+  endif
+case (Leave)
+  :Leave Without Changes;
+endswitch
+stop
+@enduml

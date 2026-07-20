@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
-import { safeReturnPath } from "@/lib/auth-utils";
 
 export default function LoginPage() {
   return (
@@ -28,12 +27,11 @@ function LoginForm() {
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
-  const returnTo = safeReturnPath(searchParams.get("returnTo"));
   const reason = searchParams.get("reason");
 
   React.useEffect(() => {
-    if (auth.status === "authenticated") router.replace(returnTo);
-  }, [auth.status, returnTo, router]);
+    if (auth.status === "authenticated") router.replace("/");
+  }, [auth.status, router]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,7 +44,7 @@ function LoginForm() {
     try {
       await auth.login({ email: email.trim(), password });
       setPassword("");
-      router.replace(returnTo);
+      router.replace("/");
     } catch (err) {
       setPassword("");
       if (err instanceof ApiError && (err.status === 401 || err.code === "UNAUTHENTICATED")) {
