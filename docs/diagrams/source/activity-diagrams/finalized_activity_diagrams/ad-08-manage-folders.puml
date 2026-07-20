@@ -1,0 +1,89 @@
+@startuml AD_08_Manage_Folders
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_08 Manage Folders
+
+|User|
+start
+:Open Folders;
+
+|System|
+:Display Accessible Folders;
+
+|User|
+switch (Selected action)
+case (Create Folder)
+  :Enter Name and Optional Description;
+  |System|
+  :Check Maintenance and Validate Folder;
+  if (Valid?) then ([Yes])
+    :Save Folder and Refresh List;
+  else ([No])
+    :Display Validation Error;
+  endif
+case (Open Folder)
+  :Select Folder;
+  |System|
+  :Display Folder Contents;
+case (Rename Folder)
+  :Enter Updated Details;
+  |System|
+  :Check Maintenance and Save Update;
+  if (Update successful?) then ([Yes])
+    :Refresh Folder List;
+  else ([No])
+    :Display Update Error;
+  endif
+case (Delete Folder)
+  :Request Deletion;
+  if (Deletion confirmed?) then ([Yes])
+    |System|
+    :Check Maintenance and Deletion Rules;
+    if (Deletion allowed?) then ([Yes])
+      :Delete Folder and Refresh List;
+    else ([No])
+      :Display Deletion Restriction;
+    endif
+  else ([No])
+    :Cancel Deletion;
+  endif
+case (Add or Move Transcript)
+  :Select Transcript by Reference Number;
+  |System|
+  :Check Access, Maintenance, and One-Folder Rule;
+  if (Assignment allowed?) then ([Yes])
+    :Add or Move Transcript;
+    :Refresh Folder Contents;
+  else ([No])
+    :Display Assignment Error;
+  endif
+case (Remove Transcript)
+  :Select Transcript to Remove;
+  |System|
+  :Remove Folder Assignment;
+  :Keep Transcript Record and Refresh Folder;
+case (Cancel)
+  :Leave Folders Unchanged;
+endswitch
+stop
+@enduml

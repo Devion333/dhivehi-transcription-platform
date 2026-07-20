@@ -61,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = React.useCallback(async (input: LoginInput) => {
+    clearAuthRedirectState();
     const response = await loginRequest(input);
     setUser(response.user);
     setStatus("authenticated");
@@ -71,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await logoutRequest();
     } finally {
+      clearAuthRedirectState();
       setUser(null);
       setStatus("unauthenticated");
     }
@@ -85,6 +87,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+export function clearAuthRedirectState() {
+  if (typeof window === "undefined") return;
+  for (const storage of [window.sessionStorage, window.localStorage]) {
+    for (const key of ["returnTo", "redirectTo", "redirectUrl", "transcript-app-return-to", "transcript-app-redirect", "next-url"]) {
+      storage.removeItem(key);
+    }
+  }
+  document.cookie = "returnTo=; Max-Age=0; path=/";
+  document.cookie = "redirectTo=; Max-Age=0; path=/";
 }
 
 async function getCurrentUserWithTimeout(signal?: AbortSignal) {

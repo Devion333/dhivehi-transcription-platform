@@ -16,7 +16,9 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { listFolders } from "@/lib/api/folders";
 import { searchTranscripts } from "@/lib/api/search";
 import type { Folder, Pagination, TranscriptSearchResult } from "@/lib/api/types";
+import { withReturnTo } from "@/lib/navigation-utils";
 import { highlightedText, normalizeSearchPage, normalizeSearchStatus, normalizeSearchText, searchPageSize, searchTextProps } from "@/lib/search-utils";
+import { transcriptReferenceLabel } from "@/lib/transcript-identity";
 import { formatTimestamp, safeValue, speakerLabel } from "@/lib/transcript-details-utils";
 import { transcriptStatusFilters } from "@/lib/transcript-list-utils";
 
@@ -192,7 +194,7 @@ export function SearchClient() {
       {hasFilters && loading && <LoadingState label="Searching" />}
       {hasFilters && !loading && error && <ErrorState title="Search failed" description={error} onRetry={() => setRetryToken((value) => value + 1)} />}
       {hasFilters && !loading && !error && data.items.length === 0 && <EmptyState title="No matches" description="Try another search." />}
-      {hasFilters && !loading && !error && data.items.length > 0 && <SearchResults items={data.items} query={data.query} />}
+      {hasFilters && !loading && !error && data.items.length > 0 && <SearchResults items={data.items} query={data.query} returnTo={`${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`} />}
 
       {showPagination && (
         <nav className="mt-6 flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:justify-between" aria-label="Search pagination">
@@ -211,7 +213,7 @@ export function SearchClient() {
   );
 }
 
-function SearchResults({ items, query }: { items: TranscriptSearchResult[]; query: string }) {
+function SearchResults({ items, query, returnTo }: { items: TranscriptSearchResult[]; query: string; returnTo: string }) {
   return (
     <div className="grid gap-4">
       {items.map((item) => {
@@ -222,8 +224,9 @@ function SearchResults({ items, query }: { items: TranscriptSearchResult[]; quer
             <CardHeader className="pb-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <CardTitle className="truncate text-base"><Link className="hover:underline" href={detailsPath(item.jobId, item.segmentId)}>{item.filename}</Link></CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">{safeValue(item.referenceNumber, "No reference")} · {safeValue(item.category, "Uncategorized")}{item.folderName ? ` · Folder: ${item.folderName}` : ""}</p>
+                  <CardTitle className="truncate text-base"><Link className="hover:underline" href={withReturnTo(detailsPath(item.jobId, item.segmentId), returnTo)}>{transcriptReferenceLabel(item.referenceNumber)}</Link></CardTitle>
+                  <p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{safeValue(item.category, "Uncategorized")}{item.folderName ? ` · Folder: ${item.folderName}` : ""}</p>
                 </div>
                 <StatusBadge status={item.transcriptStatus} />
               </div>
@@ -235,7 +238,7 @@ function SearchResults({ items, query }: { items: TranscriptSearchResult[]; quer
                 {item.segmentId && <span>{formatTimestamp(item.startTime)} - {formatTimestamp(item.endTime)}</span>}
               </div>
               <p dir={textProps.dir} className={textProps.className}>{highlightedText(text, query)}</p>
-              <Button asChild size="sm" variant="outline"><Link href={detailsPath(item.jobId, item.segmentId)}>{item.segmentId ? "Open matching segment" : "View transcript"}</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link href={withReturnTo(detailsPath(item.jobId, item.segmentId), returnTo)}>{item.segmentId ? "Open matching segment" : "View transcript"}</Link></Button>
             </CardContent>
           </Card>
         );

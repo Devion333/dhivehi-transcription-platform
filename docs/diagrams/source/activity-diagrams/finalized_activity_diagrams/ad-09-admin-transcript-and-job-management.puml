@@ -1,0 +1,110 @@
+@startuml AD_09_Admin_Transcript_And_Job_Management
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_09 Administrative Transcript and Job Management
+
+|Administrator|
+start
+:Open Transcript or Job Administration;
+
+|System|
+:Verify Administrator Access;
+if (Authorized?) then ([Yes])
+  :Retrieve Transcripts and Job Statuses;
+else ([No])
+  :Deny Administrative Access;
+  stop
+endif
+
+|Administrator|
+:Search, Filter, and Select Record;
+
+|System|
+if (Record found?) then ([Yes])
+  :Display Selected Record;
+else ([No])
+  :Display Record Not Found;
+  stop
+endif
+
+|Administrator|
+switch (Selected action)
+case (Inspect Transcript)
+  |System|
+  :Open Transcript Details;
+case (Reassign Ownership)
+  |Administrator|
+  :Select New Owner and Confirm;
+  |System|
+  :Validate Target User;
+  if (Owner valid?) then ([Yes])
+    :Update Ownership and Folder Membership;
+    :Record Audit Event and Refresh List;
+  else ([No])
+    :Display Invalid Owner Message;
+  endif
+case (Delete Transcript)
+  |System|
+  :Display Deletion Confirmation;
+  |Administrator|
+  if (Deletion confirmed?) then ([Yes])
+    |System|
+    :Validate Deletion Eligibility;
+    if (Eligible?) then ([Yes])
+      :Delete Implemented Transcript Data;
+      if (Deletion successful?) then ([Yes])
+        :Record Audit Event and Refresh List;
+      else ([No])
+        :Display Deletion Failure;
+      endif
+    else ([No])
+      :Display Processing or Stale-State Restriction;
+    endif
+  else ([No])
+    :Cancel Deletion;
+  endif
+case (Inspect Failed Job)
+  |System|
+  :Display Failure Stage and Details;
+case (Retry Failed Job)
+  |System|
+  :Verify Retry Eligibility;
+  if (Retry eligible?) then ([Yes])
+    |Administrator|
+    :Confirm Retry;
+    |System|
+    :Queue Job Again;
+    if (Queue successful?) then ([Yes])
+      :Update Status and Record Audit Event;
+      |Processing Worker|
+      :Receive Requeued Job;
+    else ([No])
+      |System|
+      :Display Retry Queue Failure;
+    endif
+  else ([No])
+    :Display Retry Restriction;
+  endif
+endswitch
+stop
+@enduml

@@ -18,13 +18,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { addTranscriptToFolder, deleteFolder, getFolder, removeTranscriptFromFolder, updateFolder } from "@/lib/api/folders";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Folder, TranscriptSummary } from "@/lib/api/types";
+import { withReturnTo } from "@/lib/navigation-utils";
 import { sectionToneClasses } from "@/lib/section-styles";
+import { transcriptReferenceLabel } from "@/lib/transcript-identity";
 import { cn } from "@/lib/utils";
 
 export function FolderDetailsClient() {
   const auth = useAuth();
   const router = useRouter();
   const folderId = (useSearchParams().get("folder_id") ?? "").trim();
+  const currentPath = folderId ? `/Folders/Details?folder_id=${encodeURIComponent(folderId)}` : "/Folders";
   const [folder, setFolder] = React.useState<Folder | null>(null);
   const [transcripts, setTranscripts] = React.useState<TranscriptSummary[]>([]);
   const [eligible, setEligible] = React.useState<TranscriptSummary[]>([]);
@@ -90,11 +93,11 @@ export function FolderDetailsClient() {
         <aside className="space-y-4">
           <Card className={cn("border-t-4", sectionToneClasses.folder.border)}><CardContent className="space-y-3 p-4"><SectionHeading title="Folder" icon={FolderOpen} tone="folder" /><p className="text-sm text-muted-foreground">Owner: {auth.user?.role === "admin" ? folder.ownerDisplayName : "You"}</p><p className="text-sm text-muted-foreground">{transcripts.length} transcript{transcripts.length === 1 ? "" : "s"}</p></CardContent></Card>
           <Card><CardContent className="p-4"><form className="space-y-3" onSubmit={saveFolder}><SectionHeading title="Rename folder" icon={FolderOpen} tone="folder" /><Input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} /><Textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} /><Button type="submit">Save changes</Button></form></CardContent></Card>
-          <Card><CardContent className="space-y-3 p-4"><SectionHeading title="Add transcript" icon={Plus} tone="transcript" /><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedJobId} onChange={(event) => setSelectedJobId(event.target.value)}><option value="">Select transcript</option>{eligible.map((item) => <option key={item.jobId} value={item.jobId}>{item.filename}</option>)}</select><Button type="button" onClick={addTranscript} disabled={!selectedJobId}><Plus className="h-4 w-4" /> Add</Button></CardContent></Card>
+          <Card><CardContent className="space-y-3 p-4"><SectionHeading title="Add transcript" icon={Plus} tone="transcript" /><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedJobId} onChange={(event) => setSelectedJobId(event.target.value)}><option value="">Select transcript</option>{eligible.map((item) => <option key={item.jobId} value={item.jobId}>{transcriptReferenceLabel(item.referenceNumber)} - {item.filename}</option>)}</select><Button type="button" onClick={addTranscript} disabled={!selectedJobId}><Plus className="h-4 w-4" /> Add</Button></CardContent></Card>
           <Card className="border-destructive/40"><CardContent className="space-y-3 p-4"><h2 className="font-semibold">Delete folder</h2><p className="text-sm text-muted-foreground">Only empty folders can be deleted. Transcripts are never deleted with a folder.</p><Button type="button" variant="outline" disabled={transcripts.length > 0} onClick={() => setDeleteArmed(true)}>Prepare deletion</Button><Button type="button" variant="destructive" disabled={!deleteArmed || transcripts.length > 0} onClick={deleteEmptyFolder}><Trash2 className="h-4 w-4" /> Delete empty folder</Button></CardContent></Card>
         </aside>
         <section className="space-y-3">
-          {transcripts.length === 0 ? <EmptyState title="No transcripts in this folder" /> : transcripts.map((item) => <Card key={item.jobId}><CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"><div><h2 className="font-semibold"><Link className="hover:underline" href={`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`}>{item.filename}</Link></h2><p className="mt-1 text-sm text-muted-foreground">{item.referenceNumber || "No reference"}</p><div className="mt-2"><StatusBadge status={item.status} /></div></div><Button type="button" variant="outline" onClick={() => void removeTranscript(item.jobId)}>Remove</Button></CardContent></Card>)}
+          {transcripts.length === 0 ? <EmptyState title="No transcripts in this folder" /> : transcripts.map((item) => <Card key={item.jobId}><CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"><div className="min-w-0"><h2 className="truncate font-semibold"><Link className="hover:underline" href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`, currentPath)}>{transcriptReferenceLabel(item.referenceNumber)}</Link></h2><p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p><div className="mt-2"><StatusBadge status={item.status} /></div></div><Button type="button" variant="outline" onClick={() => void removeTranscript(item.jobId)}>Remove</Button></CardContent></Card>)}
         </section>
       </div>
     </PageContainer>

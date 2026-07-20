@@ -132,6 +132,26 @@ func APIDownloadTranscript(c *gin.Context) {
 		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
 		return
 	}
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if !settings.TranscriptDownloadsEnabled || !services.ContainsString(settings.EnabledDownloadFormats, format) {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Transcript downloads are disabled for this format", nil)
+		return
+	}
+	if settings.RequireApprovalBeforeDownload {
+		parent, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		if services.MapAnalysisReview(parent.Payload).Status != "approved" {
+			writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Transcript review approval is required before download", nil)
+			return
+		}
+	}
 
 	download, err := services.BuildTranscriptDownload(transcriptAccessScope(c), jobID, format)
 	if err != nil {
@@ -150,6 +170,15 @@ func APIUpdateSegment(c *gin.Context) {
 	segmentID := strings.TrimSpace(c.Param("segmentId"))
 	if jobID == "" || segmentID == "" {
 		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId and segmentId are required", nil)
+		return
+	}
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if !settings.TranscriptEditingEnabled {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Transcript editing is disabled", nil)
 		return
 	}
 
@@ -186,6 +215,15 @@ func APIUpdateSpeakerName(c *gin.Context) {
 	jobID := strings.TrimSpace(c.Param("jobId"))
 	if jobID == "" {
 		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if !settings.SpeakerRenamingEnabled {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Speaker renaming is disabled", nil)
 		return
 	}
 	var request dtos.SpeakerRenameRequest

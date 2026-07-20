@@ -63,13 +63,16 @@ type NotificationReadAllResponse struct {
 }
 
 type AccountActivityItem struct {
-	ID           string  `json:"id"`
-	Action       string  `json:"action"`
-	Title        string  `json:"title"`
-	Description  string  `json:"description"`
-	ResourceType *string `json:"resourceType"`
-	ResourceID   *string `json:"resourceId"`
-	CreatedAt    string  `json:"createdAt"`
+	ID              string  `json:"id"`
+	Action          string  `json:"action"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	ResourceType    *string `json:"resourceType"`
+	ResourceID      *string `json:"resourceId"`
+	ReferenceNumber string  `json:"referenceNumber"`
+	Filename        string  `json:"filename"`
+	Detail          string  `json:"detail"`
+	CreatedAt       string  `json:"createdAt"`
 }
 
 type AccountActivityResponse struct {

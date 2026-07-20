@@ -1,0 +1,74 @@
+@startuml AD_05_Transcript_Review_And_Approval
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_05 Transcript Review and Approval
+
+|User|
+start
+:Open Transcript;
+
+|System|
+:Display Media and Transcript;
+
+|User|
+:Review Audio and Transcript Accuracy;
+:Open Transcript Review;
+
+|System|
+:Check Authorization and Maintenance;
+if (Review update allowed?) then ([Yes])
+  |User|
+  switch (Selected status)
+  case (Reviewed)
+    :Select Reviewed;
+  case (Approved)
+    :Select Approved;
+  case (Rejected)
+    :Select Rejected;
+  case (Cancel)
+    :Cancel Review Update;
+    stop
+  endswitch
+  :Enter Optional Note and Confirm;
+  |System|
+  :Validate Review Status;
+  if (Status valid?) then ([Yes])
+    :Save Status, Reviewer, Time, and Note;
+    if (Update successful?) then ([Yes])
+      :Refresh Transcript and Review Views;
+      :Record Activity or Audit Data;
+      :Confirm Success;
+      stop
+    else ([No])
+      :Display Update Failure;
+      stop
+    endif
+  else ([No])
+    :Display Invalid Status Message;
+    stop
+  endif
+else ([No])
+  :Display Authorization or Maintenance Restriction;
+  stop
+endif
+@enduml

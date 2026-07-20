@@ -1,0 +1,38 @@
+Render the finalized PlantUML activity diagrams supplied in this folder.
+
+Do not redesign the workflows or rewrite the PlantUML source unless a file fails to render or a connector is genuinely missing.
+
+Tasks:
+1. Copy the 11 .puml files into:
+   docs/diagrams/source/activity-diagrams/
+2. Render every file to SVG using the available PlantUML JAR.
+3. Save the SVGs under:
+   docs/diagrams/exported/activity-diagrams/
+   using the same base filenames.
+4. Open every SVG in Opera GX, not Microsoft Edge.
+5. Verify:
+   - all swimlane top, bottom, left, and right borders are visible;
+   - every decision diamond has visible labelled outgoing connectors;
+   - no activity is disconnected;
+   - start and end nodes are visible;
+   - no title, lane heading, arrow, or node is clipped;
+   - whitespace is compact enough for Microsoft Word while text remains readable;
+   - no content extends outside the SVG viewBox.
+6. Make only minimal source-level layout corrections when needed, then rerender.
+7. Do not manually patch generated SVGs unless PlantUML produces an incorrect viewBox that cannot be corrected in source.
+8. Do not modify application code.
+9. Do not commit plantuml.jar.
+
+Suggested render command:
+java -jar <path-to-plantuml.jar> -tsvg docs/diagrams/source/activity-diagrams
+
+After rendering, report:
+- all source files copied;
+- all SVG files generated;
+- PlantUML command used;
+- Opera GX executable path;
+- any files that required source corrections;
+- final SVG dimensions/viewBoxes;
+- confirmation that all borders and decision connectors are visible;
+- confirmation that the diagrams are suitable for insertion into Word;
+- git diff --check result.

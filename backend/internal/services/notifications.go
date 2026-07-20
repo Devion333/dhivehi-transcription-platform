@@ -57,6 +57,9 @@ func CreateNotification(ctx context.Context, input NotificationInput) (dtos.Noti
 	if input.UserID == "" || input.Type == "" || input.Title == "" || input.Message == "" || input.ResourceType == "" || input.ResourceID == "" || input.EventKey == "" {
 		return dtos.Notification{}, false, newServiceError(ErrCodeBadRequest, errors.New("notification fields are required"))
 	}
+	if !notificationTypeEnabled(ctx, input.Type) {
+		return dtos.Notification{}, false, nil
+	}
 
 	row := Database.QueryRowContext(ctx, `INSERT INTO notifications (id, user_id, type, title, message, resource_type, resource_id, event_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (user_id, event_key) DO NOTHING RETURNING id::text, type, title, message, resource_type, resource_id, event_key, is_read, created_at, read_at`, uuid.NewString(), input.UserID, input.Type, input.Title, input.Message, input.ResourceType, input.ResourceID, input.EventKey)
 	notification, err := scanNotification(row)
@@ -142,14 +145,16 @@ func DeleteExpiredNotifications(ctx context.Context, now time.Time) (int, error)
 	if Database == nil {
 		return 0, newServiceError(ErrCodeInternal, errors.New("database is not initialized"))
 	}
-	days := NotificationRetentionDays()
-	cutoff := now.UTC().AddDate(0, 0, -days)
-	result, err := Database.ExecContext(ctx, `DELETE FROM notifications WHERE created_at < $1 AND is_read = TRUE`, cutoff)
+	settings, err := GetSystemSettings(ctx)
 	if err != nil {
 		return 0, err
 	}
-	rows, _ := result.RowsAffected()
-	return int(rows), nil
+	days := settings.NotificationRetentionDays
+	if days == 0 {
+		return 0, nil
+	}
+	cutoff := now.UTC().AddDate(0, 0, -days)
+	return CleanupExpiredNotifications(ctx, cutoff, DefaultMaintenanceCleanupBatch)
 }
 
 func NotificationRetentionDays() int {
@@ -227,6 +232,25 @@ func NotifyTranscriptAssigned(ctx context.Context, jobID, newOwnerUserID, update
 		updatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	_, _, _ = CreateNotification(ctx, NotificationInput{UserID: newOwnerUserID, Type: NotificationTranscriptAssigned, Title: "Transcript assigned to you", Message: "A transcript has been assigned to you.", ResourceType: "transcript", ResourceID: jobID, EventKey: fmt.Sprintf("transcript-assigned:%s:%s:%s", jobID, newOwnerUserID, updatedAt)})
+}
+
+func notificationTypeEnabled(ctx context.Context, notificationType string) bool {
+	settings, err := GetSystemSettings(ctx)
+	if err != nil {
+		return true
+	}
+	switch notificationType {
+	case NotificationTranscriptCompleted:
+		return settings.NotifyTranscriptionComplete
+	case NotificationTranscriptFailed:
+		return settings.NotifyProcessingFailed
+	case NotificationAnalysisCompleted, NotificationAnalysisFailed:
+		return settings.NotifyAnalysisComplete
+	case NotificationTranscriptAssigned:
+		return settings.NotifyTranscriptAssigned
+	default:
+		return true
+	}
 }
 
 type notificationScanner interface {

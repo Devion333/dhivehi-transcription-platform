@@ -1,0 +1,65 @@
+@startuml AD_03_View_And_Search_Transcripts
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_03 View and Search Transcripts
+
+|User|
+start
+:Open Transcript List or Search;
+
+|System|
+:Retrieve Accessible Transcripts;
+if (Retrieval successful?) then ([Yes])
+  :Display Reference-First Results;
+else ([No])
+  :Display Retrieval Error;
+  stop
+endif
+
+|User|
+:Enter Query or Apply Filters;
+
+|System|
+:Validate and Apply Criteria;
+if (Criteria valid?) then ([Yes])
+  if (Matches found?) then ([Yes])
+    :Display Matching Transcripts;
+    |User|
+    :Select Transcript;
+    |System|
+    :Open Transcript Details;
+    :Preserve Originating Route;
+    |User|
+    :Select Back;
+    |System|
+    :Return to Originating Page;
+    stop
+  else ([No])
+    :Display Empty State;
+    stop
+  endif
+else ([No])
+  :Display Criteria Error;
+  stop
+endif
+@enduml

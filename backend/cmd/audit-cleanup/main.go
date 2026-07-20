@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -12,19 +11,8 @@ import (
 )
 
 func main() {
-	dryRun := flag.Bool("dry-run", false, "count expired audit events without deleting them")
-	batchSize := flag.Int("batch-size", services.DefaultAuditCleanupBatch, "maximum audit events to delete per statement")
-	flag.Parse()
-
 	log.SetOutput(os.Stderr)
 	ctx := context.Background()
-	retentionDays, err := services.AuditRetentionDaysFromEnv()
-	if err != nil {
-		log.Fatalf("invalid audit retention configuration: %v", err)
-	}
-	if *batchSize < 1 {
-		log.Fatalf("batch-size must be at least 1")
-	}
 	if err := services.OpenDatabase(ctx); err != nil {
 		log.Fatalf("connect database: %v", err)
 	}
@@ -32,11 +20,9 @@ func main() {
 	if err := services.RunMigrations(ctx, services.Database); err != nil {
 		log.Fatalf("run migrations: %v", err)
 	}
-
-	cutoff := services.AuditRetentionCutoff(time.Now(), retentionDays)
-	result, err := services.DeleteAuditEventsBefore(ctx, cutoff, *batchSize, *dryRun, retentionDays)
+	result, err := services.RunScheduledCleanup(ctx, time.Now().UTC(), services.CleanupTriggerManual)
 	if err != nil {
 		log.Fatalf("cleanup audit events: %v", err)
 	}
-	fmt.Printf("audit_retention_days=%d cutoff=%s eligible=%d deleted=%d dry_run=%t batch_size=%d\n", result.RetentionDays, result.Cutoff.Format(time.RFC3339), result.EligibleCount, result.DeletedCount, result.DryRun, result.BatchSize)
+	fmt.Printf("audit_retention_days=%d audit_events_deleted=%d\n", result.AuditRetentionDays, result.AuditEventsDeleted)
 }

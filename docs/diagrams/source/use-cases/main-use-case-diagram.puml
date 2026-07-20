@@ -1,0 +1,128 @@
+@startuml main-use-case-diagram
+' Main UML use case diagram for the completed platform.
+' Administrator inherits ordinary User capabilities; ordinary User associations are not duplicated.
+' Processing Worker is provider-neutral and represents conversion, diarization, and transcription workers.
+' Maintenance cleanup covers audit records and notifications only.
+' Technical infrastructure such as databases, queues, object storage, hosts, and HTTP endpoints is intentionally excluded.
+
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam diagramMargin 40
+skinparam nodesep 25
+skinparam ranksep 30
+skinparam usecase {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+skinparam actor {
+  BackgroundColor White
+  BorderColor Black
+}
+
+actor User
+actor Administrator
+actor "Processing Worker" as ProcessingWorker
+actor "Analysis Service" as AnalysisService
+actor "Maintenance Scheduler" as MaintenanceScheduler
+
+Administrator --|> User
+
+rectangle "Dhivehi Multimedia Transcription and Analysis Platform" {
+  usecase "Authenticate" as UC_Authenticate
+  usecase "Manage Profile" as UC_ManageProfile
+  usecase "Change Password" as UC_ChangePassword
+  usecase "Upload Media" as UC_UploadMedia
+  usecase "Validate Upload" as UC_ValidateUpload
+  usecase "Store Media" as UC_StoreMedia
+  usecase "Create Transcript Record" as UC_CreateTranscriptRecord
+  usecase "View Processing Status" as UC_ViewProcessingStatus
+  usecase "View Transcripts" as UC_ViewTranscripts
+  usecase "Search Transcripts" as UC_SearchTranscripts
+  usecase "View Transcript Details" as UC_ViewTranscriptDetails
+  usecase "Play Media" as UC_PlayMedia
+  usecase "Edit Transcript" as UC_EditTranscript
+  usecase "Rename Speakers" as UC_RenameSpeakers
+  usecase "Review Transcript" as UC_ReviewTranscript
+  usecase "Download Transcript" as UC_DownloadTranscript
+  usecase "Select Download Format" as UC_SelectDownloadFormat
+  usecase "Run Analysis" as UC_RunAnalysis
+  usecase "View Analysis" as UC_ViewAnalysis
+  usecase "Manage Folders" as UC_ManageFolders
+  usecase "View Notifications" as UC_ViewNotifications
+  usecase "View Activity" as UC_ViewActivity
+  usecase "Manage Users" as UC_ManageUsers
+  usecase "Manage Transcript Ownership" as UC_ManageTranscriptOwnership
+  usecase "Reassign Transcript" as UC_ReassignTranscript
+  usecase "Delete Transcript" as UC_DeleteTranscript
+  usecase "Manage Processing Jobs" as UC_ManageProcessingJobs
+  usecase "Retry Failed Job" as UC_RetryFailedJob
+  usecase "View Audit Logs" as UC_ViewAuditLogs
+  usecase "Export Audit Logs" as UC_ExportAuditLogs
+  usecase "Monitor System Health" as UC_MonitorSystemHealth
+  usecase "Configure System Settings" as UC_ConfigureSystemSettings
+  usecase "Save Settings" as UC_SaveSettings
+  usecase "Restore Default Settings" as UC_RestoreDefaultSettings
+  usecase "Manage Maintenance Mode" as UC_ManageMaintenanceMode
+  usecase "Process Uploaded Media" as UC_ProcessUploadedMedia
+  usecase "Convert Media" as UC_ConvertMedia
+  usecase "Perform Speaker Diarization" as UC_PerformSpeakerDiarization
+  usecase "Generate Dhivehi Transcription" as UC_GenerateDhivehiTranscription
+  usecase "Update Processing Status" as UC_UpdateProcessingStatus
+  usecase "Generate Transcript Analysis" as UC_GenerateTranscriptAnalysis
+  usecase "Clean Expired System Records" as UC_CleanExpiredSystemRecords
+}
+
+User -- UC_Authenticate
+User -- UC_ManageProfile
+User -- UC_ChangePassword
+User -- UC_UploadMedia
+User -- UC_ViewProcessingStatus
+User -- UC_ViewTranscripts
+User -- UC_SearchTranscripts
+User -- UC_ViewTranscriptDetails
+User -- UC_ManageFolders
+User -- UC_ViewNotifications
+User -- UC_ViewActivity
+
+Administrator -- UC_ManageUsers
+Administrator -- UC_ManageTranscriptOwnership
+Administrator -- UC_DeleteTranscript
+Administrator -- UC_ManageProcessingJobs
+Administrator -- UC_ViewAuditLogs
+Administrator -- UC_MonitorSystemHealth
+Administrator -- UC_ConfigureSystemSettings
+Administrator -- UC_ManageMaintenanceMode
+
+ProcessingWorker -- UC_ProcessUploadedMedia
+AnalysisService -- UC_GenerateTranscriptAnalysis
+MaintenanceScheduler -- UC_CleanExpiredSystemRecords
+
+UC_UploadMedia ..> UC_ValidateUpload : <<include>>
+UC_UploadMedia ..> UC_StoreMedia : <<include>>
+UC_UploadMedia ..> UC_CreateTranscriptRecord : <<include>>
+UC_DownloadTranscript ..> UC_SelectDownloadFormat : <<include>>
+UC_RunAnalysis ..> UC_GenerateTranscriptAnalysis : <<include>>
+UC_ConfigureSystemSettings ..> UC_SaveSettings : <<include>>
+UC_ConfigureSystemSettings ..> UC_RestoreDefaultSettings : <<include>>
+
+UC_ProcessUploadedMedia ..> UC_ConvertMedia : <<include>>
+UC_ProcessUploadedMedia ..> UC_PerformSpeakerDiarization : <<include>>
+UC_ProcessUploadedMedia ..> UC_GenerateDhivehiTranscription : <<include>>
+UC_ProcessUploadedMedia ..> UC_UpdateProcessingStatus : <<include>>
+
+UC_ReassignTranscript ..> UC_ManageTranscriptOwnership : <<extend>>
+UC_RetryFailedJob ..> UC_ManageProcessingJobs : <<extend>>
+UC_ExportAuditLogs ..> UC_ViewAuditLogs : <<extend>>
+UC_ManageMaintenanceMode ..> UC_ConfigureSystemSettings : <<extend>>
+UC_PlayMedia ..> UC_ViewTranscriptDetails : <<extend>>
+UC_EditTranscript ..> UC_ViewTranscriptDetails : <<extend>>
+UC_RenameSpeakers ..> UC_ViewTranscriptDetails : <<extend>>
+UC_ReviewTranscript ..> UC_ViewTranscriptDetails : <<extend>>
+UC_DownloadTranscript ..> UC_ViewTranscriptDetails : <<extend>>
+UC_RunAnalysis ..> UC_ViewTranscriptDetails : <<extend>>
+UC_ViewAnalysis ..> UC_ViewTranscriptDetails : <<extend>>
+
+@enduml

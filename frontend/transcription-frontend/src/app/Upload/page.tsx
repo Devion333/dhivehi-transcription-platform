@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMaintenanceAccess } from "@/hooks/use-maintenance-access";
+import { ApiError } from "@/lib/api/client";
 import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +37,7 @@ type UploadState = "idle" | "validating" | "uploading" | "accepted" | "error";
 export default function UploadTranscriptPage() {
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const referenceRef = React.useRef<HTMLInputElement>(null);
   const abortRef = React.useRef<AbortController | null>(null);
   const [file, setFile] = React.useState<File | null>(null);
   const [dragActive, setDragActive] = React.useState(false);
@@ -49,14 +52,39 @@ export default function UploadTranscriptPage() {
   const [processingStatus, setProcessingStatus] = React.useState<TranscriptStatusResponse | null>(null);
   const [uploadProgress, setUploadProgress] = React.useState<number | null>(null);
   const [progressComputable, setProgressComputable] = React.useState(true);
+  const maintenance = useMaintenanceAccess();
+  const effectiveSettings = maintenance.settings;
+  const maintenanceUploadDisabled = Boolean(effectiveSettings?.maintenanceMode && !maintenance.isAdmin);
+  const uploadsDisabled = effectiveSettings?.uploadsEnabled === false;
+  const uploadDisabledReason = maintenanceUploadDisabled && uploadsDisabled
+    ? "Uploads are currently disabled by an administrator and temporarily disabled during maintenance mode."
+    : maintenanceUploadDisabled
+      ? "Uploads are temporarily disabled during maintenance mode."
+      : uploadsDisabled
+        ? "Uploads are currently disabled by an administrator."
+        : "";
 
-  const fileValidation = React.useMemo(() => validateUploadFile(file), [file]);
+  const fileValidation = React.useMemo(() => {
+    const result = validateUploadFile(file);
+    if (!file || !effectiveSettings) return result;
+    const extension = result.extension.replace(/^\./, "");
+    const maxBytes = effectiveSettings.maximumUploadSizeMb * 1024 * 1024;
+    const errors = [...result.errors];
+    if (!effectiveSettings.allowedUploadFormats.includes(extension)) errors.push(`This file type is disabled. Allowed formats: ${effectiveSettings.allowedUploadFormats.join(", ")}.`);
+    if (file.size > maxBytes) errors.push(`File exceeds the configured ${effectiveSettings.maximumUploadSizeMb} MB upload limit.`);
+    return { ...result, valid: errors.length === 0, errors };
+  }, [effectiveSettings, file]);
   const metadataErrors = React.useMemo(
-    () => validateUploadMetadata({ referenceNumber, notes, requestedSpeakers }),
-    [notes, referenceNumber, requestedSpeakers],
+    () => {
+      const errors = validateUploadMetadata({ referenceNumber, notes, requestedSpeakers });
+      if (!referenceNumber.trim()) errors.referenceNumber = "Reference number is required.";
+      if (effectiveSettings?.requireCategory && !category.trim()) errors.category = "Category is required.";
+      return errors;
+    },
+    [category, effectiveSettings?.requireCategory, notes, referenceNumber, requestedSpeakers],
   );
   const hasMetadataErrors = Object.keys(metadataErrors).length > 0;
-  const canSubmit = fileValidation.valid && !hasMetadataErrors && state !== "uploading";
+  const canSubmit = !maintenanceUploadDisabled && Boolean(effectiveSettings?.uploadsEnabled) && fileValidation.valid && !hasMetadataErrors && state !== "uploading";
   const { polling } = useTranscriptStatusPolling({
     jobId: result?.job.jobId ?? "",
     enabled: state === "accepted" && Boolean(result),
@@ -102,7 +130,7 @@ export default function UploadTranscriptPage() {
   function handleDrag(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
-    if (state === "uploading") return;
+    if (state === "uploading" || maintenanceUploadDisabled || uploadsDisabled) return;
     if (event.type === "dragenter" || event.type === "dragover") setDragActive(true);
     if (event.type === "dragleave") setDragActive(false);
   }
@@ -111,7 +139,7 @@ export default function UploadTranscriptPage() {
     event.preventDefault();
     event.stopPropagation();
     setDragActive(false);
-    if (state !== "uploading") chooseFile(event.dataTransfer.files?.[0]);
+    if (state !== "uploading" && !maintenanceUploadDisabled && !uploadsDisabled) chooseFile(event.dataTransfer.files?.[0]);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -120,9 +148,16 @@ export default function UploadTranscriptPage() {
     setState("validating");
     setError(null);
 
+    if (maintenanceUploadDisabled || !effectiveSettings?.uploadsEnabled) {
+      setState("error");
+      setError(uploadDisabledReason || "Uploads are currently disabled.");
+      return;
+    }
+
     if (!file || !fileValidation.valid || hasMetadataErrors) {
       setState("error");
       setError("Review the highlighted fields before uploading.");
+      if (metadataErrors.referenceNumber) referenceRef.current?.focus();
       return;
     }
 
@@ -161,7 +196,7 @@ export default function UploadTranscriptPage() {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Upload was cancelled. The selected file is still ready to retry.");
       } else {
-        setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
+        setError(err instanceof ApiError && err.code === "maintenance_mode" ? "Changes are temporarily disabled during maintenance mode." : err instanceof Error ? err.message : "Upload failed. Please try again.");
       }
       setState("error");
       setUploadProgress(null);
@@ -179,10 +214,10 @@ export default function UploadTranscriptPage() {
     <PageContainer>
       <div className="mx-auto w-full max-w-4xl">
         <PageHeader
-          title="Upload"
-          description="Add an audio or video file and optional metadata before processing starts."
+          title="Upload transcript"
           actions={<Button asChild variant="outline"><Link href="/Transcripts">Transcripts</Link></Button>}
         />
+        {uploadDisabledReason && <div className="mb-4 rounded-lg border border-[var(--accent-warning-border)] bg-[var(--accent-warning-bg)] px-4 py-3 text-sm text-[var(--accent-warning)]">{uploadDisabledReason}</div>}
         <form onSubmit={handleSubmit} className="space-y-6">
           <Card>
             <CardHeader>
@@ -204,10 +239,10 @@ export default function UploadTranscriptPage() {
                   ref={inputRef}
                   id="media-file"
                   type="file"
-                  accept={acceptedFileInputValue()}
+                  accept={effectiveSettings?.allowedUploadFormats.map((format) => `.${format}`).join(",") ?? acceptedFileInputValue()}
                   className="sr-only"
                   onChange={(event) => chooseFile(event.target.files?.[0])}
-                  disabled={state === "uploading"}
+                  disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}
                 />
                 <div className="flex flex-col items-center justify-center text-center">
                   <UploadCloud className="mb-3 h-10 w-10 text-muted-foreground" />
@@ -215,9 +250,10 @@ export default function UploadTranscriptPage() {
                     Drop an audio or video file here, or browse.
                   </Label>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Audio: {audioExtensions.join(", ")} · Video: {videoExtensions.join(", ")}
+                    {effectiveSettings ? `Allowed formats: ${effectiveSettings.allowedUploadFormats.join(", ")} · Max ${effectiveSettings.maximumUploadSizeMb} MB` : `Audio: ${audioExtensions.join(", ")} · Video: ${videoExtensions.join(", ")}`}
                   </p>
-                  <Button className="mt-4" type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={state === "uploading"}>
+                  {uploadDisabledReason && <p className="mt-2 text-sm text-destructive">{uploadDisabledReason}</p>}
+                  <Button className="mt-4" type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}>
                     Browse files
                   </Button>
                 </div>
@@ -254,32 +290,33 @@ export default function UploadTranscriptPage() {
               )}
               {submitAttempted && !file && <ValidationList items={fileValidation.errors} tone="error" />}
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="referenceNumber" className="block leading-5">Reference number <span className="text-muted-foreground">(optional)</span></Label>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="referenceNumber" className="block leading-5">Reference number <span className="text-destructive">*</span></Label>
                   <Input
                     id="referenceNumber"
+                    ref={referenceRef}
                     value={referenceNumber}
                     maxLength={referenceNumberMaxLength}
                     onChange={(event) => setReferenceNumber(event.target.value)}
-                    disabled={state === "uploading"}
-                    placeholder="Example: REF-2026-001"
+                    disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}
+                    placeholder="Enter reference number"
                     className="h-10"
                   />
                   <FieldHint current={referenceNumber.length} max={referenceNumberMaxLength} error={metadataErrors.referenceNumber} />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="category" className="block leading-5">Category <span className="text-muted-foreground">(optional)</span></Label>
+                  <Label htmlFor="category" className="block leading-5">Category {!effectiveSettings?.requireCategory && <span className="text-muted-foreground">(optional)</span>}</Label>
                   <select
                     id="category"
                     value={category}
                     onChange={(event) => setCategory(event.target.value)}
-                    disabled={state === "uploading"}
+                    disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
-                  <div className="h-4" aria-hidden="true" />
+                  {metadataErrors.category ? <p className="text-xs text-destructive">{metadataErrors.category}</p> : <div className="h-4" aria-hidden="true" />}
                 </div>
 
               <div className="grid gap-2">
@@ -291,7 +328,7 @@ export default function UploadTranscriptPage() {
                   max={10}
                   value={requestedSpeakers}
                   onChange={(event) => setRequestedSpeakers(Number(event.target.value))}
-                  disabled={state === "uploading"}
+                  disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}
                 />
                 {metadataErrors.requestedSpeakers && <p className="text-xs text-destructive">{metadataErrors.requestedSpeakers}</p>}
               </div>
@@ -303,7 +340,7 @@ export default function UploadTranscriptPage() {
                   value={notes}
                   maxLength={notesMaxLength}
                   onChange={(event) => setNotes(event.target.value)}
-                  disabled={state === "uploading"}
+                  disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}
                   placeholder="Optional reviewer notes"
                   rows={5}
                 />

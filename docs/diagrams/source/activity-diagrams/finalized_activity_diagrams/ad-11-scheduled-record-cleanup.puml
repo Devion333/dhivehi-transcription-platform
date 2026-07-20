@@ -1,0 +1,74 @@
+@startuml AD_11_Scheduled_Record_Cleanup
+!pragma useVerticalIf on
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam diagramMargin 12
+skinparam nodesep 16
+skinparam ranksep 18
+skinparam maxMessageSize 28
+skinparam ArrowColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneTitleBackgroundColor #F2F2F2
+skinparam swimlaneTitleFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  FontSize 10
+  Padding 5
+}
+title AD_11 Scheduled Cleanup of Expired System Records
+
+|System|
+start
+:Start Backend and Initialize Scheduler;
+
+|Maintenance Scheduler|
+:Wait for Daily Execution Time;
+:Check Active Cleanup Run;
+if (Cleanup already running?) then ([Yes])
+  :Skip Overlapping Run;
+  stop
+else ([No])
+  |System|
+  :Acquire Execution Lock;
+  :Load Audit and Notification Retention;
+  if (Settings loaded?) then ([Yes])
+    if (Audit retention is 0?) then ([Yes])
+      :Skip Audit Deletion;
+    else ([No])
+      :Calculate Audit UTC Cutoff;
+      :Delete Expired Audit Records;
+      if (Audit cleanup successful?) then ([Yes])
+        :Record Audit Deletion Count;
+      else ([No])
+        :Log Audit Cleanup Failure;
+      endif
+    endif
+
+    if (Notification retention is 0?) then ([Yes])
+      :Skip Notification Deletion;
+    else ([No])
+      :Calculate Notification UTC Cutoff;
+      :Delete Expired Notifications;
+      if (Notification cleanup successful?) then ([Yes])
+        :Record Notification Deletion Count;
+      else ([No])
+        :Log Notification Cleanup Failure;
+      endif
+    endif
+
+    :Log Cleanup Completion;
+    :Release Execution Lock;
+    stop
+  else ([No])
+    :Log Settings Retrieval Failure;
+    :Release Execution Lock;
+    stop
+  endif
+endif
+@enduml

@@ -32,10 +32,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as ApiErrorBody | null;
+    const flatBody = body as { error?: string; message?: string } | null;
     throw new ApiError(
-      body?.error?.message ?? `Request failed with status ${response.status}`,
+      body?.error && typeof body.error === "object" ? body.error.message ?? `Request failed with status ${response.status}` : flatBody?.message ?? `Request failed with status ${response.status}`,
       response.status,
-      body?.error?.code,
+      body?.error && typeof body.error === "object" ? body.error.code : flatBody?.error,
     );
   }
 

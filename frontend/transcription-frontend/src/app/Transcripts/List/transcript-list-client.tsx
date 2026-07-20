@@ -17,6 +17,8 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { listFolders } from "@/lib/api/folders";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Folder, Pagination, TranscriptSummary } from "@/lib/api/types";
+import { withReturnTo } from "@/lib/navigation-utils";
+import { transcriptIdentityTitle, transcriptReferenceLabel } from "@/lib/transcript-identity";
 import { isProcessingTranscriptStatus } from "@/lib/transcript-status";
 import {
   buildTranscriptListPath,
@@ -215,8 +217,8 @@ export function TranscriptListClient() {
       )}
       {!loading && !error && data.items.length > 0 && (
         <>
-          <TranscriptTable items={data.items} isAdmin={isAdmin} />
-          <TranscriptCards items={data.items} isAdmin={isAdmin} />
+          <TranscriptTable items={data.items} isAdmin={isAdmin} returnTo={`${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`} />
+          <TranscriptCards items={data.items} isAdmin={isAdmin} returnTo={`${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`} />
         </>
       )}
 
@@ -239,14 +241,13 @@ export function TranscriptListClient() {
   );
 }
 
-function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdmin: boolean }) {
+function TranscriptTable({ items, isAdmin, returnTo }: { items: TranscriptSummary[]; isAdmin: boolean; returnTo: string }) {
   return (
     <Card className="hidden overflow-hidden lg:block">
       <table className="w-full table-fixed text-sm">
         <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="w-[30%] px-4 py-3 font-medium">Filename</th>
-            <th className="w-[16%] px-4 py-3 font-medium">Reference</th>
+            <th className="w-[34%] px-4 py-3 font-medium">Reference</th>
             <th className="hidden w-[12%] px-4 py-3 font-medium xl:table-cell">Category</th>
             <th className="w-[13%] px-4 py-3 font-medium">Status</th>
             <th className="w-[10%] px-4 py-3 font-medium">Segments</th>
@@ -261,12 +262,12 @@ function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
           {items.map((item) => (
             <tr key={item.jobId} className="bg-card">
               <td className="min-w-0 px-4 py-4">
-                <Link className="block truncate font-medium hover:underline" href={transcriptDetailPath(item.jobId)} title={item.filename}>{item.filename}</Link>
+                <Link className="block truncate font-semibold hover:underline" href={withReturnTo(transcriptDetailPath(item.jobId), returnTo)} title={transcriptIdentityTitle(item.referenceNumber, item.filename)}>{transcriptReferenceLabel(item.referenceNumber)}</Link>
+                <p className="mt-1 truncate text-xs text-muted-foreground" title={item.filename}>{item.filename}</p>
                 {item.folderName && <p className="mt-1 truncate text-xs text-muted-foreground">Folder: {item.folderName}</p>}
                 <p className="mt-1 truncate text-xs text-muted-foreground xl:hidden">{fallbackText(item.category, "Uncategorized")}</p>
                 {item.notes && <p className="mt-1 truncate text-xs text-muted-foreground" title={item.notes}>{item.notes}</p>}
               </td>
-              <td className="min-w-0 px-4 py-4 text-muted-foreground"><div className="truncate" title={fallbackText(item.referenceNumber, "No reference")}>{fallbackText(item.referenceNumber, "No reference")}</div></td>
               <td className="hidden px-4 py-4 text-muted-foreground xl:table-cell"><div className="truncate" title={fallbackText(item.category, "Uncategorized")}>{fallbackText(item.category, "Uncategorized")}</div></td>
               <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
               <td className="px-4 py-4 text-muted-foreground">{segmentCountLabel(item.segmentCount)}</td>
@@ -274,7 +275,7 @@ function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
               <td className="hidden px-4 py-4 2xl:table-cell"><span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span></td>
               {isAdmin && <td className="hidden min-w-0 px-4 py-4 text-muted-foreground 2xl:table-cell"><div className="truncate" title={ownerLabel(item)}>{ownerLabel(item)}</div></td>}
               <td className="px-4 py-4 text-muted-foreground">{formatTranscriptDate(item.createdAt)}</td>
-              <td className="px-4 py-4 text-right"><Button asChild size="sm" variant="outline"><Link href={transcriptDetailPath(item.jobId)}>View</Link></Button></td>
+              <td className="px-4 py-4 text-right"><Button asChild size="sm" variant="outline"><Link href={withReturnTo(transcriptDetailPath(item.jobId), returnTo)}>View</Link></Button></td>
             </tr>
           ))}
         </tbody>
@@ -283,7 +284,7 @@ function TranscriptTable({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
   );
 }
 
-function TranscriptCards({ items, isAdmin }: { items: TranscriptSummary[]; isAdmin: boolean }) {
+function TranscriptCards({ items, isAdmin, returnTo }: { items: TranscriptSummary[]; isAdmin: boolean; returnTo: string }) {
   return (
     <div className="grid gap-3 lg:hidden">
       {items.map((item) => (
@@ -291,7 +292,8 @@ function TranscriptCards({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <CardTitle className="truncate text-base"><Link className="hover:underline" href={transcriptDetailPath(item.jobId)}>{item.filename}</Link></CardTitle>
+                <CardTitle className="truncate text-base"><Link className="hover:underline" href={withReturnTo(transcriptDetailPath(item.jobId), returnTo)}>{transcriptReferenceLabel(item.referenceNumber)}</Link></CardTitle>
+                <p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{formatTranscriptDate(item.createdAt)}</p>
                 {item.folderName && <p className="mt-1 text-xs text-muted-foreground">Folder: {item.folderName}</p>}
               </div>
@@ -301,13 +303,12 @@ function TranscriptCards({ items, isAdmin }: { items: TranscriptSummary[]; isAdm
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-2"><StatusBadge status={item.status} /><StatusBadge status={item.analysisStatus} /><span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span></div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
-              <div><dt className="text-muted-foreground">Reference</dt><dd>{fallbackText(item.referenceNumber, "No reference")}</dd></div>
               <div><dt className="text-muted-foreground">Category</dt><dd>{fallbackText(item.category, "Uncategorized")}</dd></div>
               <div><dt className="text-muted-foreground">Segments</dt><dd>{segmentCountLabel(item.segmentCount)}</dd></div>
               {isAdmin && <div><dt className="text-muted-foreground">Owner</dt><dd>{ownerLabel(item)}</dd></div>}
             </dl>
             {item.notes && <p className="line-clamp-2 text-sm text-muted-foreground">{item.notes}</p>}
-            <Button asChild className="w-full" variant="outline"><Link href={transcriptDetailPath(item.jobId)}>View transcript</Link></Button>
+            <Button asChild className="w-full" variant="outline"><Link href={withReturnTo(transcriptDetailPath(item.jobId), returnTo)}>View transcript</Link></Button>
           </CardContent>
         </Card>
       ))}

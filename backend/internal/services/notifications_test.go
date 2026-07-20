@@ -137,10 +137,14 @@ func TestDeletedResourceNotificationRemainsSafe(t *testing.T) {
 	}
 }
 
-func TestRetentionDeletesOnlyOldReadNotifications(t *testing.T) {
+func TestRetentionDeletesOldReadAndUnreadNotifications(t *testing.T) {
 	mock := withMockDatabase(t)
 	now := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
-	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM notifications WHERE created_at < $1 AND is_read = TRUE`)).WithArgs(now.AddDate(0, 0, -defaultNotificationRetentionDays)).WillReturnResult(sqlmock.NewResult(0, 2))
+	settings := DefaultSystemSettings()
+	settings.NotificationRetentionDays = 45
+	restore := SetSystemSettingsProviderForTest(func(context.Context) (SystemSettings, error) { return settings, nil })
+	t.Cleanup(restore)
+	mock.ExpectExec(regexp.QuoteMeta(`WITH doomed AS (SELECT id FROM notifications WHERE created_at < $1 ORDER BY created_at ASC, id ASC LIMIT $2 FOR UPDATE SKIP LOCKED) DELETE FROM notifications WHERE id IN (SELECT id FROM doomed)`)).WithArgs(now.AddDate(0, 0, -45), DefaultMaintenanceCleanupBatch).WillReturnResult(sqlmock.NewResult(0, 2))
 	deleted, err := DeleteExpiredNotifications(context.Background(), now)
 	if err != nil || deleted != 2 {
 		t.Fatalf("expected two deleted, got deleted=%d err=%v", deleted, err)

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { maintenanceMutationMessage, useMaintenanceAccess } from "@/hooks/use-maintenance-access";
 import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-polling";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,7 +25,9 @@ import { addTranscriptToFolder, createFolder, listFolders, removeTranscriptFromF
 import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateAnalysisReview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
 import type { AnalysisReviewStatus, Folder, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
+import { getSafeInternalReturnPath, withReturnTo } from "@/lib/navigation-utils";
 import { sectionToneClasses } from "@/lib/section-styles";
+import { hasTranscriptReference, transcriptIdentityTitle } from "@/lib/transcript-identity";
 import { transcriptStatusLabel } from "@/lib/transcript-status";
 import {
   formatDetailDate,
@@ -55,12 +58,14 @@ type SpeakerEditState = {
 };
 
 export function TranscriptDetailsClient() {
-	const auth = useAuth();
+  const auth = useAuth();
+  const maintenance = useMaintenanceAccess();
 	const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
   const reviewParam = searchParams.get("review");
   const targetSegmentId = (searchParams.get("segment_id") ?? "").trim();
+  const returnTo = getSafeInternalReturnPath(searchParams.get("returnTo"), "/Transcripts");
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const stopAtRef = React.useRef<number | null>(null);
   const segmentRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
@@ -233,7 +238,7 @@ export function TranscriptDetailsClient() {
   if (!jobId) {
     return (
       <PageContainer>
-        <div className="mb-4"><BackToList /></div>
+        <div className="mb-4"><BackToList href={returnTo} /></div>
         <PageHeader title="Transcript Details" description="Missing job ID." />
         <EmptyState title="Invalid link" description="Open a transcript from the list." />
       </PageContainer>
@@ -243,7 +248,7 @@ export function TranscriptDetailsClient() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="mb-4"><BackToList /></div>
+        <div className="mb-4"><BackToList href={returnTo} /></div>
         <PageHeader title="Transcript Details" />
         <LoadingState label="Loading transcript" />
       </PageContainer>
@@ -254,15 +259,15 @@ export function TranscriptDetailsClient() {
     const notFound = error?.toLowerCase().includes("not found");
     return (
       <PageContainer>
-        <div className="mb-4"><BackToList /></div>
+        <div className="mb-4"><BackToList href={returnTo} /></div>
         <PageHeader title="Transcript Details" />
         <ErrorState title={notFound ? "Transcript not found" : "Could not load transcript"} description={error ?? "Transcript data was unavailable."} onRetry={() => setRetryToken((value) => value + 1)} />
       </PageContainer>
     );
   }
 
-  const detailHref = `/Transcripts/Details?job_id=${encodeURIComponent(detail.jobId)}`;
-  const analysisHref = `/Transcripts/Analysis?job_id=${encodeURIComponent(detail.jobId)}&returnTo=${encodeURIComponent(detailHref)}`;
+  const detailHref = withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(detail.jobId)}`, returnTo);
+  const analysisHref = withReturnTo(`/Transcripts/Analysis?job_id=${encodeURIComponent(detail.jobId)}`, detailHref);
   const isAdmin = auth.user?.role === "admin";
   const currentStatus = liveStatus?.status ?? detail.status;
   const transcriptReady = !isProcessingStatus(currentStatus) && currentStatus !== "failed";
@@ -337,7 +342,7 @@ export function TranscriptDetailsClient() {
       });
       setEdits((current) => ({ ...current, [segment.id]: { editing: false, draft: updated.transcriptText, saving: false, saved: true, error: null } }));
     } catch (err) {
-      setEdits((current) => ({ ...current, [segment.id]: { ...current[segment.id], saving: false, error: err instanceof Error ? err.message : "Failed to save segment" } }));
+      setEdits((current) => ({ ...current, [segment.id]: { ...current[segment.id], saving: false, error: err instanceof ApiError && err.code === "maintenance_mode" ? "Changes are temporarily disabled during maintenance mode." : err instanceof Error ? err.message : "Failed to save segment" } }));
     }
   }
 
@@ -431,21 +436,23 @@ export function TranscriptDetailsClient() {
 
   return (
     <PageContainer>
-      <div className="mb-4"><BackToList /></div>
+      <div className="mb-4"><BackToList href={returnTo} /></div>
       <header className="mb-3 space-y-3">
       <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
-          <h1 className="line-clamp-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground md:text-3xl" title={detail.filename}>{detail.filename}</h1>
+          <h1 className="line-clamp-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground md:text-3xl" title={transcriptIdentityTitle(detail.referenceNumber, detail.filename)}>{transcriptIdentityTitle(detail.referenceNumber, detail.filename)}</h1>
+          {hasTranscriptReference(detail.referenceNumber) ? <p className="mt-1 break-words text-sm text-muted-foreground" title={detail.filename}>{detail.filename}</p> : <p className="mt-1 text-sm text-[var(--accent-warning)]">No reference</p>}
           <CompactMetadata detail={detail} status={currentStatus} />
           <MetadataDetailsPanel detail={detail} />
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-start gap-2 xl:justify-end">
-          <TranscriptFolderButton detail={detail} onChanged={() => setRetryToken((value) => value + 1)} />
+          <TranscriptFolderButton detail={detail} disabled={!maintenance.canModifyDuringMaintenance} onChanged={() => setRetryToken((value) => value + 1)} />
           {speakers.length > 0 && (
             <SpeakerManagementMenu
               speakers={speakers}
               speakerNames={detail.speakerNames}
               edit={speakerEdit}
+              disabled={!maintenance.canModifyDuringMaintenance}
               onEdit={(speakerKey) => setSpeakerEdit({ speakerKey, draft: getSpeakerDisplayName(speakerKey, detail.speakerNames), saving: false, error: null })}
               onCancel={() => setSpeakerEdit(null)}
               onDraft={(draft) => setSpeakerEdit((current) => current ? { ...current, draft, error: null } : current)}
@@ -454,8 +461,10 @@ export function TranscriptDetailsClient() {
             />
           )}
           <DownloadMenu loading={downloadLoading} disabled={!transcriptReady || detail.segments.length === 0} onDownload={startDownload} />
-          {transcriptReady ? (
+          {transcriptReady ? maintenance.canModifyDuringMaintenance ? (
             <Button asChild variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)}><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {analysisActionLabel(detail.analysisStatus)}</Link></Button>
+          ) : (
+            <Button type="button" variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)} disabled title={maintenanceMutationMessage}><BarChart3 className="h-4 w-4" /> {analysisActionLabel(detail.analysisStatus)}</Button>
           ) : (
             <Button type="button" variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)} disabled><BarChart3 className="h-4 w-4" /> Analysing...</Button>
           )}
@@ -475,7 +484,7 @@ export function TranscriptDetailsClient() {
             analysis={exportAnalysis}
             loading={reviewLoading}
             saving={reviewSaving}
-            editable={detail.analysisStatus === "complete" && Boolean(exportAnalysis)}
+            editable={detail.analysisStatus === "complete" && Boolean(exportAnalysis) && maintenance.canModifyDuringMaintenance}
             message={reviewMessage}
             error={reviewError}
             onNote={setReviewNote}
@@ -539,7 +548,7 @@ export function TranscriptDetailsClient() {
                   highlighted={highlightedSegmentId === segment.id}
                   refCallback={(element) => { segmentRefs.current[segment.id] = element; }}
                   audioAvailable={Boolean(detail.mediaUrl) && !audioError}
-                  editable={transcriptReady}
+                  editable={transcriptReady && maintenance.canModifyDuringMaintenance}
                   onPlay={() => playSegment(segment)}
                   onEdit={() => startEdit(segment)}
                   onCancel={() => cancelEdit(segment)}
@@ -601,10 +610,11 @@ function uniqueSpeakers(segments: TranscriptSegment[]) {
   return Array.from(new Set(segments.map((segment) => segment.speaker).filter(Boolean))).sort();
 }
 
-function SpeakerManagementMenu({ speakers, speakerNames, edit, onEdit, onCancel, onDraft, onSave, onReset }: {
+function SpeakerManagementMenu({ speakers, speakerNames, edit, disabled = false, onEdit, onCancel, onDraft, onSave, onReset }: {
   speakers: string[];
   speakerNames: Record<string, string>;
   edit: SpeakerEditState | null;
+  disabled?: boolean;
   onEdit: (speakerKey: string) => void;
   onCancel: () => void;
   onDraft: (draft: string) => void;
@@ -644,7 +654,7 @@ function SpeakerManagementMenu({ speakers, speakerNames, edit, onEdit, onCancel,
                   <div className="grid grid-cols-[minmax(0,1fr)_110px_56px] items-center gap-3 text-sm">
                     <p className="truncate font-medium" title={displayName}>{displayName}</p>
                     <p className="truncate text-xs text-muted-foreground" title={speakerKey}>{speakerKey}</p>
-                    {!editing && <Button type="button" variant="ghost" size="sm" className="justify-self-end" onClick={() => onEdit(speakerKey)}>Edit</Button>}
+                    {!editing && <Button type="button" variant="ghost" size="sm" className="justify-self-end" onClick={() => onEdit(speakerKey)} disabled={disabled} title={disabled ? maintenanceMutationMessage : undefined}>Edit</Button>}
                     {editing && <span className="text-right text-xs text-muted-foreground">Editing</span>}
                   </div>
                   {editing && (
@@ -694,8 +704,8 @@ function hasControlCharacters(value: string) {
   });
 }
 
-function BackToList() {
-  return <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2"><Link href="/Transcripts"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
+function BackToList({ href }: { href: string }) {
+  return <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2"><Link href={href}><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
 }
 
 function analysisActionLabel(status: string) {
@@ -828,7 +838,7 @@ function MetadataDetailsPanel({ detail }: { detail: TranscriptDetail }) {
   );
 }
 
-function TranscriptFolderButton({ detail, onChanged }: { detail: TranscriptDetail; onChanged: () => void }) {
+function TranscriptFolderButton({ detail, disabled = false, onChanged }: { detail: TranscriptDetail; disabled?: boolean; onChanged: () => void }) {
   const [open, setOpen] = React.useState(false);
   const [folders, setFolders] = React.useState<Folder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = React.useState("");
@@ -902,7 +912,7 @@ function TranscriptFolderButton({ detail, onChanged }: { detail: TranscriptDetai
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="inline-flex max-w-48 shrink-0 items-center gap-2" onClick={() => setOpen(true)} title={detail.folderName || "Add to folder"}>
+      <Button type="button" variant="outline" size="sm" className="inline-flex max-w-48 shrink-0 items-center gap-2" onClick={() => setOpen(true)} disabled={disabled} title={disabled ? maintenanceMutationMessage : detail.folderName || "Add to folder"}>
         <FolderIcon className={cn("h-4 w-4 shrink-0", sectionToneClasses.folder.text)} /> <span className="truncate">{detail.folderName || "Add to folder"}</span>
       </Button>
       {open && (

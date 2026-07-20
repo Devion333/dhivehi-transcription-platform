@@ -6,8 +6,13 @@ import { cn } from "@/lib/utils";
 
 const DropdownMenuContext = React.createContext<{ open: boolean; setOpen: (open: boolean) => void; rootRef: React.RefObject<HTMLDivElement | null> } | null>(null);
 
-export function DropdownMenu({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = React.useState(false);
+export function DropdownMenu({ children, open: controlledOpen, onOpenChange }: { children: React.ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = React.useCallback((nextOpen: boolean) => {
+    if (onOpenChange) onOpenChange(nextOpen);
+    else setUncontrolledOpen(nextOpen);
+  }, [onOpenChange]);
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -24,7 +29,7 @@ export function DropdownMenu({ children }: { children: React.ReactNode }) {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   return <DropdownMenuContext.Provider value={{ open, setOpen, rootRef: ref }}><div ref={ref} className="relative inline-block">{children}</div></DropdownMenuContext.Provider>;
 }

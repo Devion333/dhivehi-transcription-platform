@@ -13,6 +13,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Textarea } from "@/components/ui/textarea";
+import { maintenanceMutationMessage, useMaintenanceAccess } from "@/hooks/use-maintenance-access";
+import { ApiError } from "@/lib/api/client";
 import { createFolder, listFolders } from "@/lib/api/folders";
 import type { Folder, Pagination } from "@/lib/api/types";
 import { sectionToneClasses } from "@/lib/section-styles";
@@ -20,6 +22,7 @@ import { cn } from "@/lib/utils";
 
 export function FoldersClient() {
   const auth = useAuth();
+  const maintenance = useMaintenanceAccess();
   const [items, setItems] = React.useState<Folder[]>([]);
   const [pagination, setPagination] = React.useState<Pagination | null>(null);
   const [page, setPage] = React.useState(1);
@@ -45,6 +48,10 @@ export function FoldersClient() {
 
   async function submitCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!maintenance.canModifyDuringMaintenance) {
+      setError("Changes are temporarily disabled during maintenance mode.");
+      return;
+    }
     setCreating(true);
     setError(null);
     try {
@@ -53,7 +60,7 @@ export function FoldersClient() {
       setDescription("");
       setReload((value) => value + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Folder could not be created");
+      setError(err instanceof ApiError && err.code === "maintenance_mode" ? "Changes are temporarily disabled during maintenance mode." : err instanceof Error ? err.message : "Folder could not be created");
     } finally {
       setCreating(false);
     }
@@ -63,7 +70,7 @@ export function FoldersClient() {
     <PageContainer>
       <PageHeader title="Folders" />
       <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <Card className={cn("border-t-4", sectionToneClasses.folder.border)}><CardContent className="p-4"><form className="space-y-3" onSubmit={submitCreate}><SectionHeading title="Create folder" icon={FolderPlus} tone="folder" /><div className="space-y-2"><label className="text-sm font-medium" htmlFor="folder-name">Name</label><Input id="folder-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Enter name" maxLength={120} /></div><div className="space-y-2"><label className="text-sm font-medium" htmlFor="folder-description">Description</label><Textarea id="folder-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Enter description" maxLength={500} /></div><Button type="submit" disabled={creating || !name.trim()}><FolderPlus className={cn("h-4 w-4", sectionToneClasses.folder.text)} /> Create</Button></form></CardContent></Card>
+        <Card className={cn("border-t-4", sectionToneClasses.folder.border)}><CardContent className="p-4"><form className="space-y-3" onSubmit={submitCreate}><SectionHeading title="Create folder" icon={FolderPlus} tone="folder" />{!maintenance.canModifyDuringMaintenance && <p className="rounded-md border bg-muted/30 p-2 text-sm text-muted-foreground">{maintenanceMutationMessage}</p>}<div className="space-y-2"><label className="text-sm font-medium" htmlFor="folder-name">Name</label><Input id="folder-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Enter name" maxLength={120} disabled={!maintenance.canModifyDuringMaintenance} /></div><div className="space-y-2"><label className="text-sm font-medium" htmlFor="folder-description">Description</label><Textarea id="folder-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Enter description" maxLength={500} disabled={!maintenance.canModifyDuringMaintenance} /></div><Button type="submit" disabled={creating || !name.trim() || !maintenance.canModifyDuringMaintenance} title={!maintenance.canModifyDuringMaintenance ? maintenanceMutationMessage : undefined}><FolderPlus className={cn("h-4 w-4", sectionToneClasses.folder.text)} /> Create</Button></form></CardContent></Card>
         <div>
           <form className="mb-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); setPage(1); setQuery(search); }}><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search folders" className="pl-9" /></div><Button type="submit" variant="outline">Search</Button></form>
           {loading && <LoadingState label="Loading folders" />}
