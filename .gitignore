@@ -68,4 +68,4 @@ AGENTS.md
 !mock_workers/**
 
 # Gradio outputs (if generated data)
-gradio/analysis/outputs/
+gradio/analysis/outputs/docs/
