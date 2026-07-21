@@ -9,6 +9,7 @@ import json
 import tempfile
 import requests
 import redis
+import redis.exceptions
 from datetime import datetime
 from pyannote.audio import Pipeline
 from worker_heartbeat import start_heartbeat
@@ -31,7 +32,7 @@ print("âœ… Pyannote diarization model loaded successfully.")
 # Redis connection
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, socket_keepalive=True)
 start_heartbeat(r, "diarization", modelName="pyannote/speaker-diarization-3.1")
 
 # Redis queue names
@@ -500,14 +501,17 @@ def worker_loop():
         job = None
         local_path = None
         try:
-            job_data = r.execute_command(
-                "BLMOVE",
-                DIARIZATION_QUEUE,
-                DIARIZATION_PROCESSING_QUEUE,
-                "LEFT",
-                "RIGHT",
-                10,
-            )
+            try:
+                job_data = r.execute_command(
+                    "BLMOVE",
+                    DIARIZATION_QUEUE,
+                    DIARIZATION_PROCESSING_QUEUE,
+                    "LEFT",
+                    "RIGHT",
+                    10,
+                )
+            except redis.exceptions.TimeoutError:
+                continue
             if job_data is None:
                 continue
 

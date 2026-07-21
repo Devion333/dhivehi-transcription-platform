@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
   let page: Page | null = null;
   let payload: PdfExportPayload | null = null;
 
+  console.log("PDF export request received");
+
   try {
     await requireAuthenticated(request);
     payload = await readAndValidatePayload(request);
@@ -45,7 +47,8 @@ export async function POST(request: NextRequest) {
     browser = await puppeteer.launch({
       headless: "shell",
       timeout: 30_000,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--hide-scrollbars", "--mute-audio"],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--hide-scrollbars", "--mute-audio", "--disable-dev-shm-usage"],
     });
     page = await browser.newPage();
     page.setDefaultTimeout(PDF_TIMEOUT_MS);
@@ -76,6 +79,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const routeError = normalizeRouteError(error);
+    console.error("PDF export failed:", error instanceof Error ? error.message : error);
     if (payload) await recordPDFExportAudit(request, payload, "failure");
     return NextResponse.json({ error: { code: routeError.code, message: routeError.message, details: null } }, { status: routeError.status });
   } finally {

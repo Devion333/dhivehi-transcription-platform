@@ -1201,10 +1201,10 @@ function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, high
           {!isLast && <div className={cn("absolute bottom-[-1.125rem] left-1/2 top-10 -translate-x-1/2 border-l border-border", active && "border-[var(--accent-transcript-border)]")} aria-hidden="true" />}
         </div>
 
-        <div className="min-w-0 space-y-2">
+          <div className="min-w-0 space-y-2">
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold text-foreground" title={displayName}>{displayName}</h3>
-            <p className="text-xs text-muted-foreground">{segment.speaker}</p>
+            {segment.speaker !== displayName && <p className="text-xs text-muted-foreground">{segment.speaker}</p>}
           </div>
           {edit.editing ? (
             <Textarea value={edit.draft} onChange={(event) => onDraft(event.target.value)} rows={5} dir={textProps.dir} className={cn("min-h-32 bg-background text-base leading-8", textProps.className)} disabled={edit.saving} />
@@ -1214,7 +1214,7 @@ function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, high
           {edit.error && <p className="text-sm text-destructive">{edit.error}</p>}
           {edit.saved && <p className="flex items-center gap-1 text-sm text-[var(--accent-success)]"><Check className="h-4 w-4" /> Saved</p>}
           <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">{formatTimestamp(segment.startTime)} - {formatTimestamp(segment.endTime)} Â· {formatDuration(segment.startTime, segment.endTime)}</p>
+            <p className="text-xs text-muted-foreground">{formatTimestamp(segment.startTime)} – {formatTimestamp(segment.endTime)} · Duration: {formatDuration(segment.startTime, segment.endTime)}</p>
             <div className="flex flex-wrap items-center gap-2">
               {reviewable && (
                 <Button type="button" variant="ghost" size="sm" onClick={onToggleReview} disabled={segmentReviewSaving} className={cn("text-xs", segment.isReviewed ? "text-[var(--accent-success)]" : "text-muted-foreground")}>
@@ -1262,8 +1262,8 @@ function getSpeakerMarkerLabel(speakerKey: string, customDisplayName: string | u
   const trimmedName = customDisplayName?.trim();
   if (trimmedName) return speakerInitials(trimmedName);
   const suffix = speakerKey.match(/(\d+)$/)?.[1];
-  if (suffix) return String(Number(suffix) + 1);
-  return String(Math.max(0, speakerIndex) + 1);
+  if (suffix) return String(Number(suffix));
+  return String(Math.max(0, speakerIndex));
 }
 
 function speakerInitials(value: string) {

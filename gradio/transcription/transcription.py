@@ -8,6 +8,7 @@ import time
 import json
 import requests
 import redis
+import redis.exceptions
 import torch
 from datetime import datetime
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
@@ -23,7 +24,7 @@ from worker_heartbeat import start_heartbeat
 # Redis connection
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, socket_keepalive=True)
 
 # Qdrant backend API
 QDRANT_HOST = os.getenv("QDRANT_HOST", "http://qdrant:6333")
@@ -530,14 +531,17 @@ def worker_loop():
         job_data = None
         job = None
         try:
-            job_data = r.execute_command(
-                "BLMOVE",
-                TRANSCRIPTION_QUEUE,
-                TRANSCRIPTION_PROCESSING_QUEUE,
-                "LEFT",
-                "RIGHT",
-                10,
-            )
+            try:
+                job_data = r.execute_command(
+                    "BLMOVE",
+                    TRANSCRIPTION_QUEUE,
+                    TRANSCRIPTION_PROCESSING_QUEUE,
+                    "LEFT",
+                    "RIGHT",
+                    10,
+                )
+            except redis.exceptions.TimeoutError:
+                continue
 
             if job_data is None:
                 continue

@@ -17,8 +17,11 @@ export function formatTimestamp(seconds: number) {
 }
 
 export function formatDuration(start: number, end: number) {
-  const duration = Math.max(0, end - start);
-  return formatTimestamp(duration);
+  const totalSecs = Math.round(Math.max(0, end - start));
+  const min = Math.floor(totalSecs / 60);
+  const sec = totalSecs % 60;
+  if (min > 0) return `${min} min ${sec} sec`;
+  return `${sec} sec`;
 }
 
 export function sortSegments(segments: TranscriptSegment[]) {
@@ -28,7 +31,7 @@ export function sortSegments(segments: TranscriptSegment[]) {
 export function speakerLabel(speaker: string) {
   const match = speaker.match(/(\d+)$/);
   if (!match) return speaker || "Unknown speaker";
-  return `Speaker ${Number(match[1]) + 1}`;
+  return `Speaker ${Number(match[1])}`;
 }
 
 export function getSpeakerDisplayName(speakerKey: string, speakerNames?: Record<string, string> | null) {

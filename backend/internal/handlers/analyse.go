@@ -71,6 +71,8 @@ func AnalyseTranscript(c *gin.Context) {
 		return
 	}
 
+	go saveAnalysisResult(context.Background(), jobID, result, parent.Payload)
+
 	c.JSON(http.StatusOK, gin.H{
 		"keywords":            result.Keywords,
 		"entities":            result.Entities,
@@ -112,20 +114,107 @@ func APIAnalyseTranscript(c *gin.Context) {
 		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Analysis reruns are disabled", nil)
 		return
 	}
-	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "started", "provider": "analysis"}})
-	result, analysisErr := runTranscriptAnalysis(jobID, services.MapSpeakerNames(parent.Payload))
-	if analysisErr != nil {
-		services.NotifyAnalysisFailed(c.Request.Context(), parent.Payload, jobID, started.UTC().Format(time.RFC3339Nano))
-		auditRequestEvent(c, services.AuditEventInput{Action: "analysis.failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeFailure, Metadata: map[string]interface{}{"analysisStatus": "failed", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
-		writeAPIError(c, analysisErr.status, analysisErr.code, analysisErr.message, nil)
+
+	currentAnalysis := services.MapAnalysis(parent.Payload)
+	if currentAnalysis.Status == "processing" {
+		c.JSON(http.StatusAccepted, dtos.AnalysisTriggerResponse{
+			Analysis: currentAnalysis,
+			Message:  "Analysis is already running",
+		})
 		return
 	}
 
-	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.completed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "complete", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"}})
-	c.JSON(http.StatusOK, dtos.AnalysisTriggerResponse{
-		Analysis: mapAnalysisResult(result),
-		Message:  "Analysis completed",
+	speakerNames := services.MapSpeakerNames(parent.Payload)
+	currentUser, _ := CurrentUser(c)
+	auditRequestEvent(c, services.AuditEventInput{Action: "analysis.started", Category: "analysis", ResourceType: "transcript", ResourceID: jobID, Outcome: services.AuditOutcomeSuccess, Metadata: map[string]interface{}{"analysisStatus": "processing", "provider": "analysis"}})
+
+	if err := services.UpdateParentPayload(jobID, map[string]interface{}{
+		"analysis_status": "processing",
+		"updated_at":      started.UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		writeAPIError(c, http.StatusInternalServerError, services.ErrCodeInternal, "Failed to start analysis", nil)
+		return
+	}
+
+	c.JSON(http.StatusAccepted, dtos.AnalysisTriggerResponse{
+		Analysis: dtos.Analysis{Status: "processing"},
+		Message:  "Analysis started",
 	})
+
+	go runAPIAnalysisAsync(jobID, speakerNames, parent.Payload, currentUser, started)
+}
+
+func runAPIAnalysisAsync(jobID string, speakerNames map[string]string, parentPayload map[string]interface{}, currentUser dtos.AuthUser, started time.Time) {
+	ctx := context.Background()
+
+	defer func() {
+		if r := recover(); r != nil {
+			errMsg := fmt.Sprintf("panic in analysis: %v", r)
+			log.Printf("Analysis panic for job %s: %v", jobID, r)
+			_ = services.UpdateParentPayload(jobID, map[string]interface{}{
+				"analysis_status": "failed",
+				"analysis_error":  errMsg,
+				"updated_at":      time.Now().UTC().Format(time.RFC3339Nano),
+			})
+			services.RecordAuditEvent(ctx, services.AuditEventInput{
+				Action: "analysis.failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID,
+				Outcome:  services.AuditOutcomeFailure,
+				Metadata: map[string]interface{}{"analysisStatus": "failed", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"},
+				Actor:    &currentUser,
+			})
+		}
+	}()
+
+	result, analysisErr := runTranscriptAnalysis(jobID, speakerNames)
+	if analysisErr != nil {
+		_ = services.UpdateParentPayload(jobID, map[string]interface{}{
+			"analysis_status": "failed",
+			"analysis_error":  analysisErr.message,
+			"updated_at":      time.Now().UTC().Format(time.RFC3339Nano),
+		})
+		services.NotifyAnalysisFailed(ctx, parentPayload, jobID, started.UTC().Format(time.RFC3339Nano))
+		services.RecordAuditEvent(ctx, services.AuditEventInput{
+			Action: "analysis.failed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID,
+			Outcome:  services.AuditOutcomeFailure,
+			Metadata: map[string]interface{}{"analysisStatus": "failed", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"},
+			Actor:    &currentUser,
+		})
+		log.Printf("Analysis failed for job %s: %s", jobID, analysisErr.message)
+		return
+	}
+
+	saveAnalysisResult(ctx, jobID, result, parentPayload)
+	services.RecordAuditEvent(ctx, services.AuditEventInput{
+		Action: "analysis.completed", Category: "analysis", ResourceType: "transcript", ResourceID: jobID,
+		Outcome:  services.AuditOutcomeSuccess,
+		Metadata: map[string]interface{}{"analysisStatus": "complete", "durationMs": time.Since(started).Milliseconds(), "provider": "analysis"},
+		Actor:    &currentUser,
+	})
+	log.Printf("Analysis completed for job %s", jobID)
+}
+
+func saveAnalysisResult(ctx context.Context, jobID string, result AnalysisResult, parentPayload map[string]interface{}) {
+	completedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := services.UpdateParentPayload(jobID, map[string]interface{}{
+		"analysis_keywords":            result.Keywords,
+		"analysis_entities":            result.Entities,
+		"analysis_summary":             result.Summary,
+		"analysis_classification":      result.Classification,
+		"analysis_english_translation": result.EnglishTranslation,
+		"analysis_status":              "complete",
+		"analysis_completed_at":        completedAt,
+	}); err != nil {
+		log.Printf("Failed to save analysis results for %s: %v", jobID, err)
+		_ = services.UpdateParentPayload(jobID, map[string]interface{}{
+			"analysis_status": "failed",
+			"analysis_error":  fmt.Sprintf("save failed: %v", err),
+			"updated_at":      time.Now().UTC().Format(time.RFC3339Nano),
+		})
+		return
+	}
+	if parent, err := services.GetParentTranscriptPoint(jobID); err == nil {
+		services.NotifyAnalysisCompleted(ctx, parent.Payload, jobID, completedAt)
+	}
 }
 
 func runTranscriptAnalysis(jobID string, speakerNames map[string]string) (AnalysisResult, *analysisHandlerError) {
@@ -192,27 +281,6 @@ func runTranscriptAnalysis(jobID string, speakerNames map[string]string) (Analys
 		log.Printf("Failed to parse analysis JSON result for %s: %v", jobID, err)
 		return AnalysisResult{}, &analysisHandlerError{status: http.StatusInternalServerError, code: services.ErrCodeUpstream, message: "failed to parse analysis result", err: err}
 	}
-
-	go func() {
-		completedAt := time.Now().UTC().Format(time.RFC3339Nano)
-		parentPayload := map[string]interface{}{
-			"analysis_keywords":            result.Keywords,
-			"analysis_entities":            result.Entities,
-			"analysis_summary":             result.Summary,
-			"analysis_classification":      result.Classification,
-			"analysis_english_translation": result.EnglishTranslation,
-			"analysis_status":              "complete",
-			"analysis_completed_at":        completedAt,
-		}
-		if err := services.UpdateParentPayload(jobID, parentPayload); err != nil {
-			log.Printf("Warning: failed to update parent payload with analysis for %s: %v", jobID, err)
-		} else {
-			if parent, err := services.GetParentTranscriptPoint(jobID); err == nil {
-				services.NotifyAnalysisCompleted(context.Background(), parent.Payload, jobID, completedAt)
-			}
-			log.Printf("Saved analysis results to Qdrant for job %s", jobID)
-		}
-	}()
 
 	return result, nil
 }

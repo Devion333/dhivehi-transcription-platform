@@ -40,6 +40,43 @@ export function TranscriptAnalysisClient() {
   const [retryToken, setRetryToken] = React.useState(0);
   const [exportOpen, setExportOpen] = React.useState(false);
 
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollCountRef = React.useRef(0);
+
+  const POLL_INTERVAL_MS = 3000;
+  const MAX_POLLS = 100;
+
+  const startPolling = React.useCallback(() => {
+    if (pollRef.current) return;
+    pollCountRef.current = 0;
+    pollRef.current = setInterval(async () => {
+      pollCountRef.current++;
+      if (pollCountRef.current > MAX_POLLS) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setRunning(false);
+        setRunError("Analysis is taking longer than expected. Please check back later.");
+        return;
+      }
+      try {
+        const nextAnalysis = await getTranscriptAnalysis(jobId);
+        setAnalysis(nextAnalysis);
+        if (nextAnalysis.status === "complete" || nextAnalysis.status === "failed") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setRunning(false);
+          const refreshed = await getTranscript(jobId).catch(() => null);
+          if (refreshed) setDetail(refreshed);
+          if (nextAnalysis.status === "failed") {
+            setRunError("Analysis failed. Please try again.");
+          }
+        }
+      } catch {
+        // polling errors are transient; the interval continues
+      }
+    }, POLL_INTERVAL_MS);
+  }, [jobId]);
+
   React.useEffect(() => {
     if (!jobId) return;
     const controller = new AbortController();
@@ -49,6 +86,10 @@ export function TranscriptAnalysisClient() {
       .then(([nextDetail, nextAnalysis]) => {
         setDetail(nextDetail);
         setAnalysis(nextAnalysis);
+        if (nextAnalysis.status === "processing") {
+          setRunning(true);
+          startPolling();
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -57,8 +98,12 @@ export function TranscriptAnalysisClient() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
-    return () => controller.abort();
-  }, [jobId, retryToken]);
+    return () => {
+      controller.abort();
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+    };
+  }, [jobId, retryToken, startPolling]);
 
   async function runAnalysis() {
     if (!jobId || running) return;
@@ -67,11 +112,9 @@ export function TranscriptAnalysisClient() {
     try {
       const response = await analyseTranscript(jobId);
       setAnalysis(response.analysis);
-      const refreshed = await getTranscript(jobId).catch(() => null);
-      if (refreshed) setDetail(refreshed);
+      startPolling();
     } catch (err) {
-      setRunError(err instanceof Error ? err.message : "Failed to run analysis");
-    } finally {
+      setRunError(err instanceof Error ? err.message : "Failed to start analysis");
       setRunning(false);
     }
   }
