@@ -3,8 +3,9 @@
 // Description: API route handler
 // First Written on: 03/07/2026
 // Edited on: 21/07/2026
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
 
 import { NextRequest, NextResponse } from "next/server";
 import puppeteer, { type Browser, type Page } from "puppeteer";
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
   let browser: Browser | null = null;
   let page: Page | null = null;
   let payload: PdfExportPayload | null = null;
+  let chromiumProfileDir: string | null = null;
 
   console.log("PDF export request received");
 
@@ -48,11 +50,30 @@ export async function POST(request: NextRequest) {
       const authorizedAnalysis = await requireTranscriptAnalysis(request, payload.transcript.jobId);
       payload = { ...payload, analysis: hasUsableAnalysis(authorizedAnalysis) ? toPdfAnalysis(authorizedAnalysis) : undefined };
     }
+    chromiumProfileDir = await mkdtemp(path.join(tmpdir(), "transcript-pdf-chromium-"));
     browser = await puppeteer.launch({
       headless: "shell",
       timeout: 30_000,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--hide-scrollbars", "--mute-audio", "--disable-dev-shm-usage"],
+      userDataDir: chromiumProfileDir,
+      env: {
+        ...process.env,
+        HOME: chromiumProfileDir,
+        XDG_CONFIG_HOME: chromiumProfileDir,
+        XDG_CACHE_HOME: chromiumProfileDir,
+      },
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        "--mute-audio",
+        "--disable-dev-shm-usage",
+        "--disable-breakpad",
+        "--disable-crash-reporter",
+        "--no-first-run",
+        "--no-default-browser-check",
+      ],
     });
     page = await browser.newPage();
     page.setDefaultTimeout(PDF_TIMEOUT_MS);
@@ -89,6 +110,9 @@ export async function POST(request: NextRequest) {
   } finally {
     await page?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
+    if (chromiumProfileDir) {
+      await rm(chromiumProfileDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 }
 
