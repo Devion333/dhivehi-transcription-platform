@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: jobs-client.tsx
+// Description: Frontend page or component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { ChevronLeft, ChevronRight, Eye, RefreshCw, RotateCcw, Search, ServerCog, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -123,7 +128,7 @@ export function AdminJobsClient() {
 
 function HealthSummary({ health }: { health: AdminJobHealthResponse | null }) {
   if (!health) return null;
-  return <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><HealthCard label="Redis" value={health.redis} /><HealthCard label="Qdrant" value={health.qdrant} /><HealthCard label="MinIO" value={health.minio} /><Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Queues</p><p className="mt-1 text-sm">{Object.entries(health.queues).map(([name, counts]) => `${stageLabel(name)} ${counts.queued}/${counts.processing}/${counts.failed}`).join(" · ")}</p></CardContent></Card><Card className={cn("md:col-span-2 xl:col-span-4", sectionToneClasses.admin.border)}><CardContent className="p-4"><SectionHeading title="Workers" icon={ServerCog} tone="admin" /><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(health.workers).map(([name, worker]) => <WorkerHealth key={name} name={name} worker={worker} />)}</div></CardContent></Card></div>;
+  return <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><HealthCard label="Redis" value={health.redis} /><HealthCard label="Qdrant" value={health.qdrant} /><HealthCard label="MinIO" value={health.minio} /><Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Queues</p><p className="mt-1 text-sm">{Object.entries(health.queues).map(([name, counts]) => `${stageLabel(name)} ${counts.queued}/${counts.processing}/${counts.failed}`).join(" Â· ")}</p></CardContent></Card><Card className={cn("md:col-span-2 xl:col-span-4", sectionToneClasses.admin.border)}><CardContent className="p-4"><SectionHeading title="Workers" icon={ServerCog} tone="admin" /><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(health.workers).map(([name, worker]) => <WorkerHealth key={name} name={name} worker={worker} />)}</div></CardContent></Card></div>;
 }
 
 function HealthCard({ label, value }: { label: string; value: string }) {

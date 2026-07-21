@@ -1,3 +1,8 @@
+-- Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+-- Program Name: 002_audit_events.sql
+-- Description: Database migration script
+-- First Written on: 03/07/2026
+-- Edited on: 21/07/2026
 CREATE TABLE IF NOT EXISTS audit_events (
   id UUID PRIMARY KEY,
   actor_user_id UUID,

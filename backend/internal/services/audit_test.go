@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: audit_test.go
+// Description: Unit tests
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package services
 
 import (
@@ -135,12 +140,12 @@ func TestAuditFilterValidation(t *testing.T) {
 
 func TestRenderAuditCSVDoesEscapingUnicodeAndSensitiveMetadata(t *testing.T) {
 	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
-	body, err := renderAuditCSV([]AuditEventRecord{{ActorName: sqlNull("Admin, One"), ActorEmail: sqlNull("admin@example.com"), ActorRole: sqlNull("admin"), Action: "profile_updated", Outcome: "success", ResourceType: sqlNull("user"), ResourceID: sqlNull("user-1"), IPAddress: sqlNull("127.0.0.1"), MetadataJSON: []byte(`{"changedFields":["displayName"],"password":"secret","unicode":"ދިވެހި"}`), CreatedAt: now}})
+	body, err := renderAuditCSV([]AuditEventRecord{{ActorName: sqlNull("Admin, One"), ActorEmail: sqlNull("admin@example.com"), ActorRole: sqlNull("admin"), Action: "profile_updated", Outcome: "success", ResourceType: sqlNull("user"), ResourceID: sqlNull("user-1"), IPAddress: sqlNull("127.0.0.1"), MetadataJSON: []byte(`{"changedFields":["displayName"],"password":"secret","unicode":"Þ‹Þ¨ÞˆÞ¬Þ€Þ¨"}`), CreatedAt: now}})
 	if err != nil {
 		t.Fatalf("renderAuditCSV failed: %v", err)
 	}
 	csv := string(body)
-	if !strings.Contains(csv, `"Admin, One"`) || !strings.Contains(csv, "ދިވެހި") || strings.Contains(csv, "secret") || strings.Contains(strings.ToLower(csv), "password") {
+	if !strings.Contains(csv, `"Admin, One"`) || !strings.Contains(csv, "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨") || strings.Contains(csv, "secret") || strings.Contains(strings.ToLower(csv), "password") {
 		t.Fatalf("unexpected csv output: %q", csv)
 	}
 }

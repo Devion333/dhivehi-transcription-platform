@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: qdrant_helpers.py
+# Description: Mock worker for development testing
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 """
 Shared helpers for mock workers.
 Mirrors the exact Qdrant ID hashing scheme used in the real
@@ -15,7 +20,7 @@ HTTP_TIMEOUT = (HTTP_CONNECT_TIMEOUT_SECONDS, HTTP_READ_TIMEOUT_SECONDS)
 
 
 def hash_string_to_uint64(s: str) -> int:
-    """Identical djb2-style hash to the real workers — must match exactly
+    """Identical djb2-style hash to the real workers â€” must match exactly
     so mock-created points have the same IDs the backend/frontend expect."""
     hash_val = 5381
     for c in s:

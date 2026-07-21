@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: mock_diarization.py
+# Description: Mock worker for development testing
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 """
 Mock diarization worker.
 
@@ -32,7 +37,7 @@ DIARIZATION_FAILED_QUEUE = "diarization_failed_queue"
 DIARIZATION_MAX_ATTEMPTS = max(1, int(os.getenv("DIARIZATION_MAX_ATTEMPTS", "3")))
 MAX_RAW_JOB_CHARS = 1000
 
-# Fixed fake diarization layout — two speakers alternating, ~5s segments.
+# Fixed fake diarization layout â€” two speakers alternating, ~5s segments.
 FAKE_SEGMENTS = [
     {"speaker": "SPEAKER_00", "start": 0.0, "end": 4.8},
     {"speaker": "SPEAKER_01", "start": 5.1, "end": 9.6},
@@ -92,7 +97,7 @@ def validate_job(job):
 def remove_processing_job(job_data):
     removed = r.lrem(DIARIZATION_PROCESSING_QUEUE, 1, job_data)
     if removed == 0:
-        print("⚠️ [mock_diarization] processing queue item was not found during removal")
+        print("âš ï¸ [mock_diarization] processing queue item was not found during removal")
     return removed
 
 
@@ -103,7 +108,7 @@ def requeue_job(job_data, job, error_message):
     pipe.lpush(DIARIZATION_QUEUE, serialize_job(job))
     pipe.execute()
     print(
-        f"🔁 [mock_diarization] retrying {job.get('file_id', 'unknown')} "
+        f"ðŸ” [mock_diarization] retrying {job.get('file_id', 'unknown')} "
         f"(attempt {job['attempts']}/{DIARIZATION_MAX_ATTEMPTS}): {error_message}"
     )
 
@@ -115,7 +120,7 @@ def update_parent_failure(file_id, error_message):
         "diarization_error": sanitize_error_message(error_message),
         "diarization_failed_at": utc_now(),
     })
-    print(f"✅ [mock_diarization] marked parent {file_id} -> diarization_failed")
+    print(f"âœ… [mock_diarization] marked parent {file_id} -> diarization_failed")
 
 
 def fail_job(job_data, job, error_message):
@@ -132,7 +137,7 @@ def fail_job(job_data, job, error_message):
             update_parent_failure(file_id, error_message)
         except Exception as e:
             print(
-                f"⚠️ [mock_diarization] failed to write final failure status for {file_id}: "
+                f"âš ï¸ [mock_diarization] failed to write final failure status for {file_id}: "
                 f"{sanitize_error_message(e)}"
             )
 
@@ -140,7 +145,7 @@ def fail_job(job_data, job, error_message):
     pipe.lrem(DIARIZATION_PROCESSING_QUEUE, 1, job_data)
     pipe.lpush(DIARIZATION_FAILED_QUEUE, serialize_job(failure_payload))
     pipe.execute()
-    print(f"🛑 [mock_diarization] final failure for {file_id or 'unknown'}: {error_message}")
+    print(f"ðŸ›‘ [mock_diarization] final failure for {file_id or 'unknown'}: {error_message}")
 
 
 def fail_malformed_job(job_data, error):
@@ -161,7 +166,7 @@ def fail_malformed_job(job_data, error):
     pipe.lrem(DIARIZATION_PROCESSING_QUEUE, 1, job_data)
     pipe.lpush(DIARIZATION_FAILED_QUEUE, serialize_job(failure_payload))
     pipe.execute()
-    print(f"🛑 [mock_diarization] final malformed-job failure: {error_message}")
+    print(f"ðŸ›‘ [mock_diarization] final malformed-job failure: {error_message}")
 
 
 def handle_job_failure(job_data, job, error):
@@ -181,7 +186,7 @@ def recover_processing_jobs():
             break
         r.lpush(DIARIZATION_QUEUE, job_data)
         recovered += 1
-    print(f"🔁 [mock_diarization] recovered {recovered} processing jobs")
+    print(f"ðŸ” [mock_diarization] recovered {recovered} processing jobs")
 
 
 def update_parent_metadata(file_id, segment_count):
@@ -195,7 +200,7 @@ def update_parent_metadata(file_id, segment_count):
     updated_payload.pop("diarization_error", None)
     updated_payload.pop("diarization_failed_at", None)
     upsert_point(numeric_id, updated_payload)
-    print(f"✅ [mock_diarization] updated parent {file_id} -> diarized")
+    print(f"âœ… [mock_diarization] updated parent {file_id} -> diarized")
 
 
 def build_segment_points_and_jobs(file_id, segments, minio_url):
@@ -253,7 +258,7 @@ def replace_segment_entries(file_id, segments, minio_url):
         raise RuntimeError("segment write verification failed")
     if len(discovered) != len(points):
         raise RuntimeError(f"segment count verification failed: expected {len(points)}, found {len(discovered)}")
-    print(f"✅ [mock_diarization] replaced {len(points)} fake segments in Qdrant")
+    print(f"âœ… [mock_diarization] replaced {len(points)} fake segments in Qdrant")
     return transcription_jobs
 
 
@@ -262,11 +267,11 @@ def push_transcription_jobs(jobs):
     for job in jobs:
         pipe.lpush("transcription_queue", serialize_job(job))
     pipe.execute()
-    print(f"✅ [mock_diarization] pushed {len(jobs)} jobs to transcription_queue")
+    print(f"âœ… [mock_diarization] pushed {len(jobs)} jobs to transcription_queue")
 
 
 def worker_loop():
-    print("🚀 [mock_diarization] started, waiting for jobs...")
+    print("ðŸš€ [mock_diarization] started, waiting for jobs...")
     recover_processing_jobs()
     # Recovery assumes one mock diarization worker in the dev stack.
     while True:
@@ -299,7 +304,7 @@ def worker_loop():
 
             file_id = job["file_id"]
             minio_url = job["minio_url"]
-            print(f"🎭 [mock_diarization] processing file {file_id} (fake — no real audio read)")
+            print(f"ðŸŽ­ [mock_diarization] processing file {file_id} (fake â€” no real audio read)")
 
             jobs = replace_segment_entries(file_id, FAKE_SEGMENTS, minio_url)
             update_parent_metadata(file_id, len(FAKE_SEGMENTS))
@@ -307,7 +312,7 @@ def worker_loop():
             remove_processing_job(job_data)
 
         except Exception as e:
-            print(f"⚠️ [mock_diarization] error: {sanitize_error_message(e)}")
+            print(f"âš ï¸ [mock_diarization] error: {sanitize_error_message(e)}")
             if job_data is not None:
                 if job is None:
                     fail_malformed_job(job_data, e)

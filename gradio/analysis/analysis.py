@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: analysis.py
+# Description: Gradio worker for the analysis service
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 import os
 import json
 import google.generativeai as genai

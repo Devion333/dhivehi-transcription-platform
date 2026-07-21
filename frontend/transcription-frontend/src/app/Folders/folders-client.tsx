@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: folders-client.tsx
+// Description: Frontend page or component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { FolderOpen, FolderPlus, Search, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -135,7 +140,7 @@ function FolderCard({ folder }: { folder: Folder }) {
           {folder.description && <p className="mt-0.5 truncate text-sm text-muted-foreground">{folder.description}</p>}
           <p className="mt-1 text-xs text-muted-foreground">
             {folder.transcriptCount} transcript{folder.transcriptCount === 1 ? "" : "s"}
-            <span className="mx-1.5">·</span>
+            <span className="mx-1.5">Â·</span>
             Updated {formatDate(folder.updatedAt)}
           </p>
         </div>

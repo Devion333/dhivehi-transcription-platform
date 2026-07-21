@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: format-audit-action.ts
+// Description: Audit action label formatting utility
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 const ACRONYMS = new Set(["API", "PDF", "ID", "URL", "IP"]);
 
 const actionLabels: Record<string, string> = {

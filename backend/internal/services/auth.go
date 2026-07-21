@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: auth.go
+// Description: Service layer for auth
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package services
 
 import (
@@ -416,7 +421,7 @@ func BootstrapInitialAdmin(ctx context.Context) error {
 		return err
 	}
 	if exists {
-		fmt.Printf("✅ Initial administrator already exists: %s\n", email)
+		fmt.Printf("âœ… Initial administrator already exists: %s\n", email)
 		return nil
 	}
 	passwordHash, err := HashPassword(password)
@@ -425,7 +430,7 @@ func BootstrapInitialAdmin(ctx context.Context) error {
 	}
 	_, err = Database.ExecContext(ctx, `INSERT INTO users (id, name, email, password_hash, role, is_active) VALUES ($1, $2, $3, $4, 'admin', TRUE)`, uuid.NewString(), name, email, passwordHash)
 	if err == nil {
-		fmt.Printf("✅ Initial administrator created: %s\n", email)
+		fmt.Printf("âœ… Initial administrator created: %s\n", email)
 	}
 	return err
 }

@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: transcription.py
+# Description: Gradio worker for the transcription service
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 import os
 import time
 import json
@@ -58,14 +63,14 @@ def log_dagster_event(event_type, asset_key, metadata):
         }
         requests.post(f"{DAGSTER_API_URL}/events", json=payload, timeout=HTTP_TIMEOUT)
     except Exception as e:
-        print(f"⚠️ Failed to log Dagster event: {e}")
+        print(f"âš ï¸ Failed to log Dagster event: {e}")
 
 
 # =========================
 # Load Whisper Model
 # =========================
 
-print("🔊 Loading Whisper model...")
+print("ðŸ”Š Loading Whisper model...")
 # Load from local checkpoint
 #model_path = "/app/models/checkpoint-3000"
 model_path = "Devion333/whisper-small-dv-syn"
@@ -76,7 +81,7 @@ try:
     processor = AutoProcessor.from_pretrained(model_path, use_fast=False)
     model = AutoModelForSpeechSeq2Seq.from_pretrained(model_path)
 except Exception as e:
-    print(f"⚠️ Auto loading failed: {e}")
+    print(f"âš ï¸ Auto loading failed: {e}")
     print("Trying WhisperProcessor...")
     # Fallback to WhisperProcessor
     processor = WhisperProcessor.from_pretrained(model_path, use_fast=False)
@@ -87,7 +92,7 @@ model.eval()
 # Use GPU if available
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = model.to(device)
-print(f"✅ Whisper model loaded from {model_path} on {device}")
+print(f"âœ… Whisper model loaded from {model_path} on {device}")
 start_heartbeat(r, "transcription", device=device, modelName=model_path)
 
 # =========================
@@ -187,7 +192,7 @@ def serialize_job(job):
 def remove_processing_job(job_data):
     removed = r.lrem(TRANSCRIPTION_PROCESSING_QUEUE, 1, job_data)
     if removed == 0:
-        print("⚠️ Processing queue item was not found during removal")
+        print("âš ï¸ Processing queue item was not found during removal")
     return removed
 
 
@@ -197,7 +202,7 @@ def requeue_job(job_data, job, error_message):
     remove_processing_job(job_data)
     r.lpush(TRANSCRIPTION_QUEUE, updated_job)
     print(
-        f"🔁 Retrying segment {job.get('segment_id', 'unknown')} "
+        f"ðŸ” Retrying segment {job.get('segment_id', 'unknown')} "
         f"(attempt {job['attempts']}/{TRANSCRIPTION_MAX_ATTEMPTS}): {error_message}"
     )
 
@@ -216,9 +221,9 @@ def fail_job(job_data, job, error_message):
         try:
             update_segment_failure_in_qdrant(segment_id, error_message)
         except QdrantUpdateError as e:
-            print(f"⚠️ Failed to write final failure status for {segment_id}: {sanitize_error_message(e)}")
+            print(f"âš ï¸ Failed to write final failure status for {segment_id}: {sanitize_error_message(e)}")
 
-    print(f"🛑 Final transcription failure for segment {segment_id or 'unknown'}: {error_message}")
+    print(f"ðŸ›‘ Final transcription failure for segment {segment_id or 'unknown'}: {error_message}")
 
 
 def handle_job_failure(job_data, job, error):
@@ -247,7 +252,7 @@ def fail_malformed_job(job_data, error):
         failure_payload["raw_job_truncated"] = True
     remove_processing_job(job_data)
     r.lpush(TRANSCRIPTION_FAILED_QUEUE, serialize_job(failure_payload))
-    print(f"🛑 Final transcription failure for malformed job: {error_message}")
+    print(f"ðŸ›‘ Final transcription failure for malformed job: {error_message}")
 
 
 def recover_processing_jobs():
@@ -258,7 +263,7 @@ def recover_processing_jobs():
             break
         r.lpush(TRANSCRIPTION_QUEUE, job_data)
         recovered += 1
-    print(f"🔁 Recovered {recovered} transcription processing jobs")
+    print(f"ðŸ” Recovered {recovered} transcription processing jobs")
     return recovered
 
 def hash_string_to_uint64(s):
@@ -272,7 +277,7 @@ def hash_string_to_uint64(s):
 def get_qdrant_point(numeric_id, label):
     url = f"{QDRANT_HOST}/collections/{QDRANT_COLLECTION}/points/{numeric_id}"
     resp = requests.get(url, timeout=HTTP_TIMEOUT)
-    print(f"🔍 {label} point exists check: {resp.status_code}")
+    print(f"ðŸ” {label} point exists check: {resp.status_code}")
     if resp.status_code == 404:
         raise QdrantUpdateError(f"{label} point not found")
     if resp.status_code >= 300:
@@ -290,7 +295,7 @@ def upsert_qdrant_point(numeric_id, payload, vector, label):
         }]
     }
     resp = requests.put(url, json=body, timeout=HTTP_TIMEOUT)
-    print(f"🔍 {label} update response status: {resp.status_code}")
+    print(f"ðŸ” {label} update response status: {resp.status_code}")
     if resp.status_code >= 300:
         raise QdrantUpdateError(f"failed to update {label}: HTTP {resp.status_code}")
 
@@ -329,19 +334,19 @@ def download_audio_segment(minio_url, start_time, end_time):
         return segment_audio, sr
         
     except Exception as e:
-        print(f"⚠️ Error downloading audio segment: {e}")
+        print(f"âš ï¸ Error downloading audio segment: {e}")
         return None, None
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
             except Exception as e:
-                print(f"⚠️ Failed to clean up temporary audio file: {e}")
+                print(f"âš ï¸ Failed to clean up temporary audio file: {e}")
 
 def transcribe_audio(audio, sr=16000):
     """Transcribe audio using Whisper model"""
     try:
-        print(f"🔍 Transcribing audio segment (length: {len(audio)/sr:.2f}s)")
+        print(f"ðŸ” Transcribing audio segment (length: {len(audio)/sr:.2f}s)")
         
         # Convert to input features
         input_features = processor(audio, sampling_rate=sr, return_tensors="pt").input_features
@@ -350,7 +355,7 @@ def transcribe_audio(audio, sr=16000):
         # Force Dhivehi decoding - only get the IDs, don't pass task
         forced_decoder_ids = processor.get_decoder_prompt_ids(language="si")
         
-        print(f"🔍 Generating transcription...")
+        print(f"ðŸ” Generating transcription...")
         # Generate transcription
         with torch.no_grad():
             predicted_ids = model.generate(
@@ -366,7 +371,7 @@ def transcribe_audio(audio, sr=16000):
         return transcription
         
     except Exception as e:
-        print(f"⚠️ Error transcribing audio: {e}")
+        print(f"âš ï¸ Error transcribing audio: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -375,7 +380,7 @@ def update_segment_in_qdrant(segment_id, transcription):
     """Update segment with transcription in Qdrant"""
     numeric_id = hash_string_to_uint64(segment_id)
     
-    print(f"🔍 Updating segment {segment_id} (numeric_id: {numeric_id})")
+    print(f"ðŸ” Updating segment {segment_id} (numeric_id: {numeric_id})")
     
     try:
         # Get existing point data
@@ -383,7 +388,7 @@ def update_segment_in_qdrant(segment_id, transcription):
         existing_payload = point_data.get("payload", {})
         existing_vector = point_data.get("vector", [0.0] * 512)
         
-        print(f"🔍 Existing payload keys: {list(existing_payload.keys())}")
+        print(f"ðŸ” Existing payload keys: {list(existing_payload.keys())}")
         
         # Merge with new transcription data
         updated_payload = {**existing_payload}
@@ -394,12 +399,12 @@ def update_segment_in_qdrant(segment_id, transcription):
         updated_payload.pop("transcription_failed_at", None)
 
         upsert_qdrant_point(numeric_id, updated_payload, existing_vector, "segment")
-        print(f"✅ Updated segment {segment_id} in Qdrant")
+        print(f"âœ… Updated segment {segment_id} in Qdrant")
         return True
              
     except Exception as e:
         message = sanitize_error_message(e)
-        print(f"⚠️ Failed Qdrant segment write for {segment_id}: {message}")
+        print(f"âš ï¸ Failed Qdrant segment write for {segment_id}: {message}")
         raise QdrantUpdateError(message)
 
 
@@ -415,7 +420,7 @@ def update_segment_failure_in_qdrant(segment_id, error_message):
         updated_payload["transcription_error"] = sanitize_error_message(error_message)
         updated_payload["transcription_failed_at"] = utc_now()
         upsert_qdrant_point(numeric_id, updated_payload, existing_vector, "segment failure")
-        print(f"✅ Marked segment {segment_id} as transcription_failed")
+        print(f"âœ… Marked segment {segment_id} as transcription_failed")
         return True
     except Exception as e:
         message = sanitize_error_message(e)
@@ -425,7 +430,7 @@ def update_parent_status(file_id):
     """Update parent job status after all segments are transcribed"""
     numeric_id = hash_string_to_uint64(file_id)
     
-    print(f"🔍 Updating parent status for {file_id} (numeric_id: {numeric_id})")
+    print(f"ðŸ” Updating parent status for {file_id} (numeric_id: {numeric_id})")
     
     try:
         # Get existing point data
@@ -439,12 +444,12 @@ def update_parent_status(file_id):
         updated_payload["transcription_completed_at"] = utc_now()
 
         upsert_qdrant_point(numeric_id, updated_payload, existing_vector, "parent")
-        print(f"✅ Updated parent {file_id} status to transcribed")
+        print(f"âœ… Updated parent {file_id} status to transcribed")
         return True
              
     except Exception as e:
         message = sanitize_error_message(e)
-        print(f"⚠️ Failed Qdrant parent write for {file_id}: {message}")
+        print(f"âš ï¸ Failed Qdrant parent write for {file_id}: {message}")
         raise QdrantUpdateError(message)
 
 def check_all_segments_transcribed(file_id):
@@ -489,7 +494,7 @@ def check_all_segments_transcribed(file_id):
         offset = next_offset
 
     if not all_segments:
-        print(f"⏳ No segments found for parent {file_id}; parent is not complete")
+        print(f"â³ No segments found for parent {file_id}; parent is not complete")
         return False
 
     parent_payload = get_parent_payload(file_id)
@@ -501,7 +506,7 @@ def check_all_segments_transcribed(file_id):
             raise QdrantCompletionCheckError("parent segment_count is not numeric")
         if len(all_segments) != expected_count:
             print(
-                f"⏳ Parent {file_id} has {len(all_segments)} discovered segments, "
+                f"â³ Parent {file_id} has {len(all_segments)} discovered segments, "
                 f"expected {expected_count}; parent is not complete"
             )
             return False
@@ -516,9 +521,9 @@ def check_all_segments_transcribed(file_id):
 # =========================
 
 def worker_loop():
-    print("🚀 Transcription worker started, waiting for jobs...")
-    print(f"🔍 Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
-    print(f"🔍 Connected to Qdrant at {QDRANT_HOST}")
+    print("ðŸš€ Transcription worker started, waiting for jobs...")
+    print(f"ðŸ” Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+    print(f"ðŸ” Connected to Qdrant at {QDRANT_HOST}")
     recover_processing_jobs()
     
     while True:
@@ -537,7 +542,7 @@ def worker_loop():
             if job_data is None:
                 continue
 
-            print("📥 Moved transcription job to processing queue")
+            print("ðŸ“¥ Moved transcription job to processing queue")
 
             try:
                 job = validate_job(decode_job(job_data))
@@ -562,7 +567,7 @@ def worker_loop():
             attempt_number = int(job.get("attempts", 0) or 0) + 1
 
             print(f"\n{'='*60}")
-            print(f"🎙️ Processing segment {segment_id}")
+            print(f"ðŸŽ™ï¸ Processing segment {segment_id}")
             print(f"   Attempt: {attempt_number}/{TRANSCRIPTION_MAX_ATTEMPTS}")
             print(f"   Speaker: {speaker}")
             print(f"   Time: {start_time}s - {end_time}s")
@@ -570,20 +575,20 @@ def worker_loop():
             print(f"{'='*60}\n")
 
             if job.get("segment_saved"):
-                print(f"✅ Segment {segment_id} already saved; retrying parent completion only")
+                print(f"âœ… Segment {segment_id} already saved; retrying parent completion only")
             else:
                 # Download and transcribe
-                print("📥 Downloading audio segment...")
+                print("ðŸ“¥ Downloading audio segment...")
                 audio, sr = download_audio_segment(minio_url, start_time, end_time)
                 if audio is None:
                     raise TranscriptionJobError("failed to download or prepare audio segment")
 
-                print(f"✅ Audio downloaded ({len(audio)/sr:.2f}s)")
+                print(f"âœ… Audio downloaded ({len(audio)/sr:.2f}s)")
                 transcription = transcribe_audio(audio, sr)
                 if transcription is None:
                     raise TranscriptionJobError("model transcription failed")
 
-                print(f"📝 Transcription complete for segment {segment_id}")
+                print(f"ðŸ“ Transcription complete for segment {segment_id}")
                 log_dagster_event(
                     "segment_transcribed",
                     "transcribed_segments",
@@ -597,15 +602,15 @@ def worker_loop():
                 )
 
                 # Update Qdrant
-                print("💾 Updating Qdrant...")
+                print("ðŸ’¾ Updating Qdrant...")
                 update_segment_in_qdrant(segment_id, transcription)
                 job["segment_saved"] = True
 
             # Check if all segments are done
-            print(f"🔍 Checking if all segments complete for parent {file_id}...")
+            print(f"ðŸ” Checking if all segments complete for parent {file_id}...")
             if check_all_segments_transcribed(file_id):
                 update_parent_status(file_id)
-                print(f"✅ All segments transcribed for parent job {file_id}")
+                print(f"âœ… All segments transcribed for parent job {file_id}")
                 log_dagster_event(
                     "file_fully_transcribed",
                     "completed_files",
@@ -615,14 +620,14 @@ def worker_loop():
                     }
                 )
             else:
-                print(f"⏳ Still waiting for other segments of parent {file_id}")
+                print(f"â³ Still waiting for other segments of parent {file_id}")
 
             remove_processing_job(job_data)
-            print(f"✅ Completed transcription job for segment {segment_id}")
+            print(f"âœ… Completed transcription job for segment {segment_id}")
 
         except Exception as e:
             message = sanitize_error_message(e)
-            print(f"⚠️ Error in transcription worker: {message}")
+            print(f"âš ï¸ Error in transcription worker: {message}")
             if job_data is not None:
                 if job is None:
                     fail_malformed_job(job_data, e)

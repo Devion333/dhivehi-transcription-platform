@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: qdrant.go
+// Description: Service layer for qdrant
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package services
 
 import (
@@ -26,7 +31,7 @@ func InsertFileMetadata(id string, metadata map[string]interface{}) error {
 		pointID = hashStringToUint64(id)
 	}
 
-	fmt.Printf("🔍 Inserting point with file_id: %s, numeric_id: %d\n", id, pointID)
+	fmt.Printf("ðŸ” Inserting point with file_id: %s, numeric_id: %d\n", id, pointID)
 
 	// Use 512-dimensional zero vector to match collection config
 	vector := make([]float32, 512)
@@ -61,12 +66,12 @@ func InsertFileMetadata(id string, metadata map[string]interface{}) error {
 
 	if resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("qdrant API error: %s — Response: %s", resp.Status, string(bodyBytes))
+		return fmt.Errorf("qdrant API error: %s â€” Response: %s", resp.Status, string(bodyBytes))
 	}
 
 	// Log success response too
 	bodyBytes, _ := io.ReadAll(resp.Body)
-	fmt.Printf("✅ Qdrant insert response: %s\n", string(bodyBytes))
+	fmt.Printf("âœ… Qdrant insert response: %s\n", string(bodyBytes))
 
 	return nil
 }

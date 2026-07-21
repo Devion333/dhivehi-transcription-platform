@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: analysis-review-status.ts
+// Description: Utility module: analysis-review-status
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import type { AnalysisReviewStatus } from "@/lib/api/types";
 import { sectionToneClasses } from "@/lib/section-styles";
 
@@ -34,7 +39,7 @@ function roundPct(v: number | undefined | null): number {
 }
 
 export function reviewProgressLabel(reviewed: number | undefined | null, total: number | undefined | null, percentage: number | undefined | null): string {
-  if (total == null || total === 0) return "—";
+  if (total == null || total === 0) return "â€”";
   const pct = percentage != null ? percentage : (total > 0 ? Math.round(((reviewed ?? 0) / total) * 100) : 0);
   if (pct >= 100) return `Fully Reviewed (${reviewed ?? 0}/${total})`;
   if (pct > 0) return `${pct}% Reviewed (${reviewed ?? 0}/${total})`;

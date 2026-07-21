@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: transcript_api_test.go
+// Description: Unit tests
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package services
 
 import (
@@ -201,9 +206,9 @@ func TestListParentTranscriptPointsForScopeAllowsAdminLegacy(t *testing.T) {
 }
 
 func TestMatchExcerptPreservesDhivehi(t *testing.T) {
-	text := "މިއީ ދިވެހި ޓެކްސްޓް ސެގްމަންޓެއް"
-	excerpt := MatchExcerpt(text, "ދިވެހި", 3)
-	if !literalContains(excerpt, "ދިވެހި") {
+	text := "Þ‰Þ¨Þ‡Þ© Þ‹Þ¨ÞˆÞ¬Þ€Þ¨ Þ“Þ¬Þ†Þ°ÞÞ°Þ“Þ° ÞÞ¬ÞŽÞ°Þ‰Þ¦Þ‚Þ°Þ“Þ¬Þ‡Þ°"
+	excerpt := MatchExcerpt(text, "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨", 3)
+	if !literalContains(excerpt, "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨") {
 		t.Fatalf("expected excerpt to contain query, got %q", excerpt)
 	}
 }
@@ -232,8 +237,8 @@ func TestBuildTranscriptSearchResponseEnrichesParentsAndOrdersResults(t *testing
 }
 
 func TestBuildTranscriptSearchResponseMissingParentFallback(t *testing.T) {
-	segments := []QdrantPoint{{Payload: map[string]interface{}{"parent_job_id": "missing", "segment_index": float64(3), "transcript_text": "ދިވެހި text"}}}
-	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "ދިވެހި", Page: 1, PageSize: 20}, segments, nil)
+	segments := []QdrantPoint{{Payload: map[string]interface{}{"parent_job_id": "missing", "segment_index": float64(3), "transcript_text": "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨ text"}}}
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨", Page: 1, PageSize: 20}, segments, nil)
 	if len(result.Items) != 0 {
 		t.Fatalf("expected orphaned segment to be excluded, got %+v", result)
 	}
@@ -284,16 +289,16 @@ func TestValidateTranscriptSearchFiltersRejectsInvalidDate(t *testing.T) {
 
 func TestBuildTranscriptSearchResponseTranscriptTextIncludesSegmentID(t *testing.T) {
 	parents := []QdrantPoint{{Payload: map[string]interface{}{"job_id": "job", "filename": "case.wav", "status": "transcribed", "timestamp": "2026-07-15T00:00:00Z", "speaker_names": map[string]interface{}{"SPEAKER_00": "Officer Ahmed"}}}}
-	segments := []QdrantPoint{{Payload: map[string]interface{}{"parent_job_id": "job", "segment_index": float64(0), "speaker": "SPEAKER_00", "start_time": float64(12.5), "end_time": float64(18.2), "transcript_text": "ދިވެހި text"}}}
-	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "ދިވެހި", Page: 1, PageSize: 20}, segments, parents)
+	segments := []QdrantPoint{{Payload: map[string]interface{}{"parent_job_id": "job", "segment_index": float64(0), "speaker": "SPEAKER_00", "start_time": float64(12.5), "end_time": float64(18.2), "transcript_text": "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨ text"}}}
+	result := BuildTranscriptSearchResponse(TranscriptSearchFilters{Query: "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨", Page: 1, PageSize: 20}, segments, parents)
 	if len(result.Items) != 1 || result.Items[0].SegmentID != "job_seg_000" || result.Items[0].SpeakerDisplayName != "Officer Ahmed" {
 		t.Fatalf("expected segment result with speaker display name, got %+v", result.Items)
 	}
 }
 
 func TestTranscriptDownloadRenderers(t *testing.T) {
-	detail := dtos.TranscriptDetail{JobID: "job", Filename: "case.wav", ReferenceNumber: "REF/Unsafe", Category: "Call", SpeakerNames: map[string]string{"SPEAKER_00": "Officer Ahmed"}, Segments: []dtos.Segment{{ID: "seg", SegmentIndex: 0, Speaker: "SPEAKER_00", StartTime: 12.5, EndTime: 18.2, TranscriptText: "ދިވެހި text", Status: "transcribed"}}}
-	if txt := renderTranscriptTXT(detail); !strings.Contains(txt, "ދިވެހި") || !strings.Contains(txt, "Officer Ahmed") {
+	detail := dtos.TranscriptDetail{JobID: "job", Filename: "case.wav", ReferenceNumber: "REF/Unsafe", Category: "Call", SpeakerNames: map[string]string{"SPEAKER_00": "Officer Ahmed"}, Segments: []dtos.Segment{{ID: "seg", SegmentIndex: 0, Speaker: "SPEAKER_00", StartTime: 12.5, EndTime: 18.2, TranscriptText: "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨ text", Status: "transcribed"}}}
+	if txt := renderTranscriptTXT(detail); !strings.Contains(txt, "Þ‹Þ¨ÞˆÞ¬Þ€Þ¨") || !strings.Contains(txt, "Officer Ahmed") {
 		t.Fatalf("txt did not preserve unicode/speaker: %q", txt)
 	}
 	if srt := renderTranscriptSubtitles(detail, "srt"); !strings.Contains(srt, "1\n00:00:12,500 --> 00:00:18,200") || !strings.Contains(srt, "Officer Ahmed") {

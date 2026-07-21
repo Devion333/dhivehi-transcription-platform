@@ -1,3 +1,8 @@
+-- Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+-- Program Name: 004_transcript_folders.sql
+-- Description: Database migration script
+-- First Written on: 03/07/2026
+-- Edited on: 21/07/2026
 CREATE TABLE IF NOT EXISTS transcript_folders (
     id UUID PRIMARY KEY,
     owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

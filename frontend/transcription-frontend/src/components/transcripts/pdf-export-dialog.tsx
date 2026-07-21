@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: pdf-export-dialog.tsx
+// Description: Transcript component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { AlignLeft, FileDown, FileText, Loader2, X } from "lucide-react";
 import * as React from "react";
 

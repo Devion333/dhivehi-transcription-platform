@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: auth-provider.tsx
+// Description: Authentication component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import * as React from "react";
 
 import { getCurrentUser, login as loginRequest, logout as logoutRequest } from "@/lib/api/auth";

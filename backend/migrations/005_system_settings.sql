@@ -1,3 +1,8 @@
+-- Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+-- Program Name: 005_system_settings.sql
+-- Description: Database migration script
+-- First Written on: 03/07/2026
+-- Edited on: 21/07/2026
 CREATE TABLE IF NOT EXISTS system_settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   uploads_enabled BOOLEAN NOT NULL DEFAULT TRUE,

@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: admin-jobs.ts
+// Description: API client for admin-jobs
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { request } from "@/lib/api/client";
 import type { AdminJobHealthResponse, AdminJobListParams, AdminJobListResponse, AdminJobResponse, AdminJobRetryInput, AdminJobRetryResponse } from "@/lib/api/types";
 

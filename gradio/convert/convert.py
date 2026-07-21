@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: convert.py
+# Description: Gradio worker for the convert service
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 import os
 import time
 import json
@@ -30,7 +35,7 @@ minio_client = Minio(
     secure=False
 )
 
-print("✅ Connected to MinIO and Redis")
+print("âœ… Connected to MinIO and Redis")
 start_heartbeat(r, "conversion")
 
 # Dagster integration 
@@ -51,7 +56,7 @@ def log_dagster_event(event_type, asset_key, metadata):
         }
         requests.post(f"{DAGSTER_API_URL}/events", json=payload, timeout=2)
     except Exception as e:
-        print(f"⚠️ Failed to log Dagster event: {e}")
+        print(f"âš ï¸ Failed to log Dagster event: {e}")
 
 # =========================
 # Conversion Functions
@@ -65,7 +70,7 @@ def is_video_file(filename):
 def convert_video_to_audio(video_path, output_path):
     """Convert video to audio using ffmpeg"""
     try:
-        print(f"🎬 Converting video to audio...")
+        print(f"ðŸŽ¬ Converting video to audio...")
         
         # Use ffmpeg to extract audio
         cmd = [
@@ -87,24 +92,24 @@ def convert_video_to_audio(video_path, output_path):
         )
         
         if result.returncode != 0:
-            print(f"⚠️ FFmpeg error: {result.stderr}")
+            print(f"âš ï¸ FFmpeg error: {result.stderr}")
             return False
         
-        print(f"✅ Conversion complete")
+        print(f"âœ… Conversion complete")
         return True
         
     except subprocess.TimeoutExpired:
-        print(f"⚠️ Conversion timed out")
+        print(f"âš ï¸ Conversion timed out")
         return False
     except Exception as e:
-        print(f"⚠️ Conversion error: {e}")
+        print(f"âš ï¸ Conversion error: {e}")
         return False
 
 def process_file(file_id, minio_url, filename):
     """Download, convert if needed, and re-upload"""
     try:
         print(f"\n{'='*60}")
-        print(f"📁 Processing: {filename}")
+        print(f"ðŸ“ Processing: {filename}")
         print(f"   File ID: {file_id}")
         print(f"   URL: {minio_url}")
         print(f"{'='*60}\n")
@@ -113,14 +118,14 @@ def process_file(file_id, minio_url, filename):
         is_video = is_video_file(filename)
         
         if not is_video:
-            print(f"🎵 File is already audio, skipping conversion")
+            print(f"ðŸŽµ File is already audio, skipping conversion")
             # Push directly to diarization queue
             job = {
                 "file_id": file_id,
                 "minio_url": minio_url
             }
             r.lpush("diarization_queue", json.dumps(job))
-            print(f"✅ Pushed to diarization queue")
+            print(f"âœ… Pushed to diarization queue")
             log_dagster_event(
                 "conversion_skipped",
                 "converted_files",
@@ -129,25 +134,25 @@ def process_file(file_id, minio_url, filename):
             return
         
         # Download video file
-        print(f"📥 Downloading video file...")
+        print(f"ðŸ“¥ Downloading video file...")
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp_video:
             video_path = tmp_video.name
             resp = requests.get(minio_url)
             resp.raise_for_status()
             tmp_video.write(resp.content)
         
-        print(f"✅ Downloaded: {os.path.getsize(video_path) / (1024*1024):.2f} MB")
+        print(f"âœ… Downloaded: {os.path.getsize(video_path) / (1024*1024):.2f} MB")
         
         # Convert to audio
         audio_path = video_path.replace(os.path.splitext(filename)[1], '.wav')
         
         if not convert_video_to_audio(video_path, audio_path):
-            print(f"⚠️ Failed to convert video")
+            print(f"âš ï¸ Failed to convert video")
             os.unlink(video_path)
             return
         
         # Upload converted audio to MinIO
-        print(f"📤 Uploading converted audio to MinIO...")
+        print(f"ðŸ“¤ Uploading converted audio to MinIO...")
         bucket = "uploads"
         audio_filename = f"{file_id}_converted.wav"
         
@@ -159,7 +164,7 @@ def process_file(file_id, minio_url, filename):
         )
         
         new_minio_url = f"http://{MINIO_ENDPOINT}/{bucket}/{audio_filename}"
-        print(f"✅ Uploaded: {new_minio_url}")
+        print(f"âœ… Uploaded: {new_minio_url}")
         
         # Clean up temp files
         os.unlink(video_path)
@@ -171,8 +176,8 @@ def process_file(file_id, minio_url, filename):
             "minio_url": new_minio_url
         }
         r.lpush("diarization_queue", json.dumps(job))
-        print(f"✅ Pushed converted audio to diarization queue")
-        # Already added in artifact ✅
+        print(f"âœ… Pushed converted audio to diarization queue")
+        # Already added in artifact âœ…
         log_dagster_event(
             "video_converted",
             "converted_files",
@@ -184,7 +189,7 @@ def process_file(file_id, minio_url, filename):
         )
         
     except Exception as e:
-        print(f"⚠️ Error processing file: {e}")
+        print(f"âš ï¸ Error processing file: {e}")
         import traceback
         traceback.print_exc()
 
@@ -193,9 +198,9 @@ def process_file(file_id, minio_url, filename):
 # =========================
 
 def worker_loop():
-    print("🚀 Conversion worker started, waiting for jobs...")
-    print(f"🔍 Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
-    print(f"🔍 Connected to MinIO at {MINIO_ENDPOINT}")
+    print("ðŸš€ Conversion worker started, waiting for jobs...")
+    print(f"ðŸ” Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+    print(f"ðŸ” Connected to MinIO at {MINIO_ENDPOINT}")
     
     while True:
         try:
@@ -215,7 +220,7 @@ def worker_loop():
             process_file(file_id, minio_url, filename)
             
         except Exception as e:
-            print(f"⚠️ Error in conversion worker: {e}")
+            print(f"âš ï¸ Error in conversion worker: {e}")
             import traceback
             traceback.print_exc()
             time.sleep(5)

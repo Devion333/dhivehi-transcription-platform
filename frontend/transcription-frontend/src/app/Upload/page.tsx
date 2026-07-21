@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: page.tsx
+// Description: Frontend page or component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { AlertCircle, CheckCircle2, FileAudio, FileVideo, Loader2, RefreshCcw, UploadCloud, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -250,7 +255,7 @@ export default function UploadTranscriptPage() {
                     Drop an audio or video file here, or browse.
                   </Label>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {effectiveSettings ? `Allowed formats: ${effectiveSettings.allowedUploadFormats.join(", ")} · Max ${effectiveSettings.maximumUploadSizeMb} MB` : `Audio: ${audioExtensions.join(", ")} · Video: ${videoExtensions.join(", ")}`}
+                    {effectiveSettings ? `Allowed formats: ${effectiveSettings.allowedUploadFormats.join(", ")} Â· Max ${effectiveSettings.maximumUploadSizeMb} MB` : `Audio: ${audioExtensions.join(", ")} Â· Video: ${videoExtensions.join(", ")}`}
                   </p>
                   {uploadDisabledReason && <p className="mt-2 text-sm text-destructive">{uploadDisabledReason}</p>}
                   <Button className="mt-4" type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}>

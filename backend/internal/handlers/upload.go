@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: upload.go
+// Description: HTTP handler for upload
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package handlers
 
 import (
@@ -197,17 +202,17 @@ func processUpload(c *gin.Context, file *multipart.FileHeader, uploadMeta upload
 
 	// Insert metadata into Qdrant
 	if err := services.InsertFileMetadata(fileID, payload); err != nil {
-		log.Printf("⚠️ Failed to insert metadata into Qdrant: %v", err)
+		log.Printf("âš ï¸ Failed to insert metadata into Qdrant: %v", err)
 	} else {
-		log.Printf("✅ Successfully inserted metadata for file %s", fileID)
+		log.Printf("âœ… Successfully inserted metadata for file %s", fileID)
 	}
 
 	settings, _ := services.GetSystemSettings(ctx)
 	// Push job to conversion queue (which handles both video and audio)
 	if !settings.ProcessingEnabled || !settings.AutomaticProcessing {
-		log.Printf("ℹ️ Processing enqueue skipped for file %s by system settings", fileID)
+		log.Printf("â„¹ï¸ Processing enqueue skipped for file %s by system settings", fileID)
 	} else if services.RedisClient == nil {
-		log.Printf("⚠️ RedisClient is nil - cannot push to queue")
+		log.Printf("âš ï¸ RedisClient is nil - cannot push to queue")
 	} else {
 		job := map[string]string{
 			"file_id":   fileID,
@@ -216,14 +221,14 @@ func processUpload(c *gin.Context, file *multipart.FileHeader, uploadMeta upload
 		}
 		jobJSON, err := json.Marshal(job)
 		if err != nil {
-			log.Printf("⚠️ Failed to marshal Redis job: %v", err)
+			log.Printf("âš ï¸ Failed to marshal Redis job: %v", err)
 		} else {
-			log.Printf("📤 Attempting to push job to conversion queue...")
+			log.Printf("ðŸ“¤ Attempting to push job to conversion queue...")
 			err = services.RedisClient.LPush(ctx, "conversion_queue", jobJSON).Err()
 			if err != nil {
-				log.Printf("⚠️ Failed to push job to Redis: %v", err)
+				log.Printf("âš ï¸ Failed to push job to Redis: %v", err)
 			} else {
-				log.Printf("✅ Pushed conversion job to Redis for file %s", fileID)
+				log.Printf("âœ… Pushed conversion job to Redis for file %s", fileID)
 			}
 		}
 	}

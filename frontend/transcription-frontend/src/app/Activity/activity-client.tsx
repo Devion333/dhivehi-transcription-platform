@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: activity-client.tsx
+// Description: Frontend page or component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -59,7 +64,7 @@ export function ActivityClient() {
                       {item.filename && <p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p>}
                     </>
                   ) : <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>}
-                  <p className="mt-1 text-xs text-muted-foreground">{item.detail || item.description} · {formatDate(item.createdAt)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.detail || item.description} Â· {formatDate(item.createdAt)}</p>
                 </div>
                 {item.resourceType === "transcript" && item.resourceId && (
                   <Button asChild variant="outline" size="sm"><Link href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.resourceId)}`, activityPath(page))}><ExternalLink className="h-4 w-4" /> Open transcript</Link></Button>

@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: transcript_list.go
+// Description: Service layer for transcript_list
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package services
 
 import (
@@ -77,7 +82,7 @@ func GetAllTranscripts(scope TranscriptAccessScope) ([]TranscriptListItem, error
 		transcripts = append(transcripts, transcript)
 	}
 
-	fmt.Printf("✅ Retrieved %d transcripts from Qdrant\n", len(transcripts))
+	fmt.Printf("âœ… Retrieved %d transcripts from Qdrant\n", len(transcripts))
 
 	return transcripts, nil
 }

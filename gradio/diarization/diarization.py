@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: diarization.py
+# Description: Gradio worker for the diarization service
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 import os
 import time
 import json
@@ -17,11 +22,11 @@ if not HUGGINGFACE_ACCESS_TOKEN:
     raise EnvironmentError("Missing HUGGINGFACE_ACCESS_TOKEN.")
 
 # Pyannote diarization pipeline
-print("🔊 Loading pyannote speaker diarization pipeline...")
+print("ðŸ”Š Loading pyannote speaker diarization pipeline...")
 pipeline = Pipeline.from_pretrained(
     "pyannote/speaker-diarization-3.1", use_auth_token=HUGGINGFACE_ACCESS_TOKEN
 )
-print("✅ Pyannote diarization model loaded successfully.")
+print("âœ… Pyannote diarization model loaded successfully.")
 
 # Redis connection
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
@@ -88,7 +93,7 @@ def log_dagster_event(event_type, asset_key, metadata):
         }
         requests.post(f"{DAGSTER_API_URL}/events", json=payload, timeout=HTTP_TIMEOUT)
     except Exception as e:
-        print(f"⚠️ Failed to log Dagster event: {e}")
+        print(f"âš ï¸ Failed to log Dagster event: {e}")
 
 
 # =========================
@@ -140,7 +145,7 @@ def serialize_job(job):
 def remove_processing_job(job_data):
     removed = r.lrem(DIARIZATION_PROCESSING_QUEUE, 1, job_data)
     if removed == 0:
-        print("⚠️ Diarization processing queue item was not found during removal")
+        print("âš ï¸ Diarization processing queue item was not found during removal")
     return removed
 
 
@@ -152,7 +157,7 @@ def requeue_job(job_data, job, error_message):
     pipe.lpush(DIARIZATION_QUEUE, updated_job)
     pipe.execute()
     print(
-        f"🔁 Retrying diarization for {job.get('file_id', 'unknown')} "
+        f"ðŸ” Retrying diarization for {job.get('file_id', 'unknown')} "
         f"(attempt {job['attempts']}/{DIARIZATION_MAX_ATTEMPTS}): {error_message}"
     )
 
@@ -167,7 +172,7 @@ def update_parent_failure_in_qdrant(file_id, error_message):
     updated_payload["diarization_error"] = sanitize_error_message(error_message)
     updated_payload["diarization_failed_at"] = utc_now()
     upsert_qdrant_point(numeric_id, updated_payload, existing_vector, "parent failure")
-    print(f"✅ Marked parent {file_id} as diarization_failed")
+    print(f"âœ… Marked parent {file_id} as diarization_failed")
 
 
 def fail_job(job_data, job, error_message):
@@ -184,7 +189,7 @@ def fail_job(job_data, job, error_message):
             update_parent_failure_in_qdrant(file_id, error_message)
         except Exception as e:
             print(
-                f"⚠️ Failed to write final diarization failure status for {file_id}: "
+                f"âš ï¸ Failed to write final diarization failure status for {file_id}: "
                 f"{sanitize_error_message(e)}"
             )
 
@@ -192,7 +197,7 @@ def fail_job(job_data, job, error_message):
     pipe.lrem(DIARIZATION_PROCESSING_QUEUE, 1, job_data)
     pipe.lpush(DIARIZATION_FAILED_QUEUE, serialize_job(failure_payload))
     pipe.execute()
-    print(f"🛑 Final diarization failure for {file_id or 'unknown'}: {error_message}")
+    print(f"ðŸ›‘ Final diarization failure for {file_id or 'unknown'}: {error_message}")
 
 
 def fail_malformed_job(job_data, error):
@@ -215,7 +220,7 @@ def fail_malformed_job(job_data, error):
     pipe.lrem(DIARIZATION_PROCESSING_QUEUE, 1, job_data)
     pipe.lpush(DIARIZATION_FAILED_QUEUE, serialize_job(failure_payload))
     pipe.execute()
-    print(f"🛑 Final diarization failure for malformed job: {error_message}")
+    print(f"ðŸ›‘ Final diarization failure for malformed job: {error_message}")
 
 
 def handle_job_failure(job_data, job, error):
@@ -235,7 +240,7 @@ def recover_processing_jobs():
             break
         r.lpush(DIARIZATION_QUEUE, job_data)
         recovered += 1
-    print(f"🔁 Recovered {recovered} diarization processing jobs")
+    print(f"ðŸ” Recovered {recovered} diarization processing jobs")
     return recovered
 
 
@@ -260,7 +265,7 @@ def diarize_file(file_path):
         duration = segment.end - segment.start
         # Skip very short segments (less than 1 second)
         if duration < 1.0:
-            print(f"⏩ Skipping short segment: {speaker} ({duration:.2f}s)")
+            print(f"â© Skipping short segment: {speaker} ({duration:.2f}s)")
             continue
 
         raw_segments.append({
@@ -282,7 +287,7 @@ def diarize_file(file_path):
         if (next_segment["speaker"] == current_segment["speaker"] and gap < 0.5):
             # Extend current segment
             current_segment["end"] = next_segment["end"]
-            print(f"🔗 Merged segments: {current_segment['speaker']} "
+            print(f"ðŸ”— Merged segments: {current_segment['speaker']} "
                   f"({current_segment['start']}s-{current_segment['end']}s)")
         else:
             # Save current and start new
@@ -292,7 +297,7 @@ def diarize_file(file_path):
     # Don't forget the last segment
     merged_segments.append(current_segment)
 
-    print(f"📊 Segments: {len(raw_segments)} raw → {len(merged_segments)} after filtering & merging")
+    print(f"ðŸ“Š Segments: {len(raw_segments)} raw â†’ {len(merged_segments)} after filtering & merging")
 
     return merged_segments, rttm_path
 
@@ -364,7 +369,7 @@ def delete_qdrant_points(point_ids, label):
     resp = requests.post(url, json={"points": point_ids}, timeout=HTTP_TIMEOUT)
     if resp.status_code >= 300:
         raise QdrantUpdateError(f"failed to delete stale {label}: HTTP {resp.status_code} {resp.text}")
-    print(f"🧹 Deleted {len(point_ids)} stale {label}")
+    print(f"ðŸ§¹ Deleted {len(point_ids)} stale {label}")
 
 
 def upsert_qdrant_points(points, label):
@@ -430,7 +435,7 @@ def replace_segment_entries(file_id, segments, minio_url):
             f"segment count verification failed: expected {len(points)}, found {len(discovered)}"
         )
 
-    print(f"✅ Replaced segment set with {len(points)} Qdrant entries")
+    print(f"âœ… Replaced segment set with {len(points)} Qdrant entries")
     return transcription_jobs
 
 
@@ -447,7 +452,7 @@ def update_parent_metadata(file_id, segment_count):
     updated_payload.pop("diarization_error", None)
     updated_payload.pop("diarization_failed_at", None)
     upsert_qdrant_point(numeric_id, updated_payload, existing_vector, "parent")
-    print(f"✅ Updated parent metadata for file {file_id}")
+    print(f"âœ… Updated parent metadata for file {file_id}")
 
 
 def push_transcription_jobs(jobs):
@@ -456,7 +461,7 @@ def push_transcription_jobs(jobs):
     for job in jobs:
         pipe.lpush("transcription_queue", serialize_job(job))
     pipe.execute()
-    print(f"✅ Pushed {len(jobs)} transcription jobs")
+    print(f"âœ… Pushed {len(jobs)} transcription jobs")
 
 
 def download_audio_to_temp(minio_url):
@@ -475,7 +480,7 @@ def download_audio_to_temp(minio_url):
             try:
                 os.unlink(tmp_path)
             except Exception as cleanup_error:
-                print(f"⚠️ Failed to clean up partial temporary audio file: {cleanup_error}")
+                print(f"âš ï¸ Failed to clean up partial temporary audio file: {cleanup_error}")
         raise
 
 
@@ -484,9 +489,9 @@ def download_audio_to_temp(minio_url):
 # =========================
 
 def worker_loop():
-    print("🚀 Diarization worker started, waiting for jobs...")
-    print(f"🔍 Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
-    print(f"🔍 Connected to Qdrant at {QDRANT_HOST}")
+    print("ðŸš€ Diarization worker started, waiting for jobs...")
+    print(f"ðŸ” Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+    print(f"ðŸ” Connected to Qdrant at {QDRANT_HOST}")
     recover_processing_jobs()
     # Recovery assumes one real diarization worker for the FYP demonstration.
 
@@ -506,7 +511,7 @@ def worker_loop():
             if job_data is None:
                 continue
 
-            print("📥 Moved diarization job to processing queue")
+            print("ðŸ“¥ Moved diarization job to processing queue")
             try:
                 job = validate_job(decode_job(job_data))
             except DiarizationJobError as e:
@@ -525,13 +530,13 @@ def worker_loop():
             minio_url = job["minio_url"]
             attempt_number = int(job.get("attempts", 0) or 0) + 1
 
-            print(f"🎙️ Processing file {file_id} from {minio_url}")
+            print(f"ðŸŽ™ï¸ Processing file {file_id} from {minio_url}")
             print(f"   Attempt: {attempt_number}/{DIARIZATION_MAX_ATTEMPTS}")
 
             local_path = download_audio_to_temp(minio_url)
             segments, rttm_path = diarize_file(local_path)
-            print(f"🗂️ Diarization complete: {len(segments)} segments")
-            print(f"📝 RTTM written to {rttm_path}")
+            print(f"ðŸ—‚ï¸ Diarization complete: {len(segments)} segments")
+            print(f"ðŸ“ RTTM written to {rttm_path}")
 
             if not segments:
                 raise DiarizationJobError("diarization produced zero usable segments")
@@ -541,7 +546,7 @@ def worker_loop():
             push_transcription_jobs(transcription_jobs)
 
             remove_processing_job(job_data)
-            print(f"✅ Queued {len(transcription_jobs)} segments for transcription")
+            print(f"âœ… Queued {len(transcription_jobs)} segments for transcription")
             log_dagster_event(
                 "file_diarized",
                 "diarized_files",
@@ -553,7 +558,7 @@ def worker_loop():
             )
 
         except Exception as e:
-            print(f"⚠️ Error in diarization worker: {sanitize_error_message(e)}")
+            print(f"âš ï¸ Error in diarization worker: {sanitize_error_message(e)}")
             if job_data is not None:
                 if job is None:
                     fail_malformed_job(job_data, e)
@@ -565,7 +570,7 @@ def worker_loop():
                 try:
                     os.unlink(local_path)
                 except Exception as e:
-                    print(f"⚠️ Failed to clean up temporary audio file: {e}")
+                    print(f"âš ï¸ Failed to clean up temporary audio file: {e}")
 
 
 if __name__ == "__main__":

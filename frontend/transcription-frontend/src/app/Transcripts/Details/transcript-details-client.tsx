@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: transcript-details-client.tsx
+// Description: Frontend page or component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { AlertTriangle, ArrowLeft, BarChart3, Check, CheckSquare, ChevronDown, Edit3, FileDown, FileText, Folder as FolderIcon, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Square, Trash2, UserRound, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1209,7 +1214,7 @@ function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, high
           {edit.error && <p className="text-sm text-destructive">{edit.error}</p>}
           {edit.saved && <p className="flex items-center gap-1 text-sm text-[var(--accent-success)]"><Check className="h-4 w-4" /> Saved</p>}
           <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">{formatTimestamp(segment.startTime)} - {formatTimestamp(segment.endTime)} · {formatDuration(segment.startTime, segment.endTime)}</p>
+            <p className="text-xs text-muted-foreground">{formatTimestamp(segment.startTime)} - {formatTimestamp(segment.endTime)} Â· {formatDuration(segment.startTime, segment.endTime)}</p>
             <div className="flex flex-wrap items-center gap-2">
               {reviewable && (
                 <Button type="button" variant="ghost" size="sm" onClick={onToggleReview} disabled={segmentReviewSaving} className={cn("text-xs", segment.isReviewed ? "text-[var(--accent-success)]" : "text-muted-foreground")}>

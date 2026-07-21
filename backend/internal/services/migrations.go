@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: migrations.go
+// Description: Service layer for migrations
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package services
 
 import (
@@ -64,7 +69,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		if err = tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration %s: %w", version, err)
 		}
-		log.Printf("✅ Applied database migration: %s", version)
+		log.Printf("âœ… Applied database migration: %s", version)
 	}
 
 	return nil
@@ -108,7 +113,7 @@ func RunDataMigrations(ctx context.Context, db *sql.DB) error {
 		if _, err := db.ExecContext(ctx, `INSERT INTO data_migrations (version) VALUES ($1)`, m.version); err != nil {
 			return fmt.Errorf("record data migration %s: %w", m.version, err)
 		}
-		log.Printf("✅ Applied data migration: %s", m.version)
+		log.Printf("âœ… Applied data migration: %s", m.version)
 	}
 	return nil
 }
@@ -134,7 +139,7 @@ func migrateOldApprovedSegments() error {
 		}
 		segments, err := ListSegmentPointsByParent(jobID)
 		if err != nil {
-			log.Printf("⚠️  Could not load segments for %s: %v", jobID, err)
+			log.Printf("âš ï¸  Could not load segments for %s: %v", jobID, err)
 			continue
 		}
 		updated := 0
@@ -151,14 +156,14 @@ func migrateOldApprovedSegments() error {
 				"reviewed_by": "",
 				"reviewed_at": "",
 			}); err != nil {
-				log.Printf("⚠️  Could not update segment %s seg_idx=%d: %v", jobID, idx, err)
+				log.Printf("âš ï¸  Could not update segment %s seg_idx=%d: %v", jobID, idx, err)
 				continue
 			}
 			updated++
 		}
 		if updated > 0 {
 			if err := cacheReviewProgressOnParent(jobID, len(segments), len(segments)); err != nil {
-				log.Printf("⚠️  Could not cache review progress for %s: %v", jobID, err)
+				log.Printf("âš ï¸  Could not cache review progress for %s: %v", jobID, err)
 			}
 		}
 		log.Printf("  %s: marked %d of %d segments as reviewed (was Approved)", jobID, updated, len(segments))

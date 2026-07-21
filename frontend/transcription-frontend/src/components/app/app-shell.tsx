@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: app-shell.tsx
+// Description: App component: app-shell
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { Activity, Bell, BriefcaseBusiness, CheckCheck, CircleHelp, ClipboardList, FileText, FolderOpen, HeartPulse, History, Home, Inbox, LogOut, Menu, Search, Settings, UploadCloud, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";

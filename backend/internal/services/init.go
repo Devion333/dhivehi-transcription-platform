@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: init.go
+// Description: Service layer for init
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package services
 
 import (
@@ -37,7 +42,7 @@ func InitializeServices() error {
 		return fmt.Errorf("failed to initialize Qdrant: %v", err)
 	}
 	if err := EnsureTranscriptTextIndex(); err != nil {
-		log.Printf("⚠️ Warning: could not ensure transcript_text index: %v", err)
+		log.Printf("âš ï¸ Warning: could not ensure transcript_text index: %v", err)
 	}
 
 	// Initialize Redis
@@ -49,7 +54,7 @@ func InitializeServices() error {
 		return fmt.Errorf("failed to initialize database: %v", err)
 	}
 
-	log.Println("✅ All services initialized successfully")
+	log.Println("âœ… All services initialized successfully")
 	return nil
 }
 
@@ -66,7 +71,7 @@ func initDatabase(ctx context.Context) error {
 	if err := BootstrapInitialAdmin(ctx); err != nil {
 		return err
 	}
-	log.Println("✅ Database connection established")
+	log.Println("âœ… Database connection established")
 	return nil
 }
 
@@ -126,9 +131,9 @@ func initMinIO(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			log.Printf("✅ Created MinIO bucket: %s", bucketName)
+			log.Printf("âœ… Created MinIO bucket: %s", bucketName)
 		} else {
-			log.Printf("✅ MinIO bucket already exists: %s", bucketName)
+			log.Printf("âœ… MinIO bucket already exists: %s", bucketName)
 		}
 
 		// Set bucket policy to allow public read access
@@ -144,9 +149,9 @@ func initMinIO(ctx context.Context) error {
 
 		err = MinioClient.SetBucketPolicy(ctx, bucketName, policy)
 		if err != nil {
-			log.Printf("⚠️ Warning: Could not set bucket policy for %s: %v", bucketName, err)
+			log.Printf("âš ï¸ Warning: Could not set bucket policy for %s: %v", bucketName, err)
 		} else {
-			log.Printf("✅ Set public read policy for bucket: %s", bucketName)
+			log.Printf("âœ… Set public read policy for bucket: %s", bucketName)
 		}
 	}
 
@@ -201,9 +206,9 @@ func initQdrant() error {
 			return fmt.Errorf("failed to create Qdrant collection: %s", resp.Status)
 		}
 
-		log.Printf("✅ Created Qdrant collection: %s", collectionName)
+		log.Printf("âœ… Created Qdrant collection: %s", collectionName)
 	} else {
-		log.Printf("✅ Qdrant collection already exists: %s", collectionName)
+		log.Printf("âœ… Qdrant collection already exists: %s", collectionName)
 	}
 
 	return nil
@@ -231,6 +236,6 @@ func initRedis(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("✅ Redis connection established")
+	log.Println("âœ… Redis connection established")
 	return nil
 }

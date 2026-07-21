@@ -1,3 +1,8 @@
+-- Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+-- Program Name: 007_segment_review.sql
+-- Description: Database migration script
+-- First Written on: 03/07/2026
+-- Edited on: 21/07/2026
 -- Add segment review + full-review settings (keep old approval columns for backward compatibility)
 
 -- New system settings for full-review enforcement

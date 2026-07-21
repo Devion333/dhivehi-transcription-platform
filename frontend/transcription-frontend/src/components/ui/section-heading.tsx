@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: section-heading.tsx
+// Description: UI component: section-heading
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import type { ElementType, ReactNode } from "react";
 
 import { sectionToneClasses, type SectionTone } from "@/lib/section-styles";

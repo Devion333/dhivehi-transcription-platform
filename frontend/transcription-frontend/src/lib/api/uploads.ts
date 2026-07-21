@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: uploads.ts
+// Description: API client for uploads
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { BACKEND_URL } from "@/config";
 import { ApiError } from "./client";
 import type { ApiErrorBody, UploadMetadata, UploadResult } from "./types";

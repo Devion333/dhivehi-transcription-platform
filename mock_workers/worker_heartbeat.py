@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: worker_heartbeat.py
+# Description: Mock worker for development testing
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 import atexit
 import json
 import os
@@ -75,7 +80,7 @@ class HeartbeatPublisher:
         try:
             self.write_once()
         except Exception as exc:
-            print(f"⚠️ heartbeat write failed for {self.worker_type}: {exc}")
+            print(f"âš ï¸ heartbeat write failed for {self.worker_type}: {exc}")
 
     def _loop(self):
         while not self.stop_event.wait(self.interval):

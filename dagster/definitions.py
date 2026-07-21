@@ -1,3 +1,8 @@
+# Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+# Program Name: definitions.py
+# Description: Dagster pipeline definition
+# First Written on: 03/07/2026
+# Edited on: 21/07/2026
 from dagster import Definitions, asset, sensor, RunRequest, DefaultSensorStatus, SkipReason
 import requests
 import os
@@ -165,7 +170,7 @@ def redis_queue_sensor(context):
         
         context.log.info(f"Queue depths - Conversion: {conversion_queue}, Diarization: {diarization_queue}, Transcription: {transcription_queue}")
         
-        # 💡 NEW LOGIC: Trigger a run if there are any pending items in any queue
+        # ðŸ’¡ NEW LOGIC: Trigger a run if there are any pending items in any queue
         # This makes the sensor a true 'trigger' for the asset monitoring job
         if conversion_queue > 0 or diarization_queue > 0 or transcription_queue > 0:
             context.log.info("Queue activity detected. Triggering asset update run.")
@@ -180,7 +185,7 @@ def redis_queue_sensor(context):
         else:
             # Alert if queues are backing up (only run when no activity is detected to reduce noise)
             if transcription_queue > 50:
-                context.log.warning(f"⚠️ Transcription queue is backed up: {transcription_queue} items")
+                context.log.warning(f"âš ï¸ Transcription queue is backed up: {transcription_queue} items")
             
             yield SkipReason("No queue activity detected, skipping asset materialization.")
 

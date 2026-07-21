@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: main.go
+// Description: Application entrypoint
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 package main
 
 import (
@@ -22,7 +27,7 @@ func main() {
 
 	// Initialize all services (MinIO, Qdrant, Redis) with auto-creation
 	if err := services.InitializeServices(); err != nil {
-		log.Fatalf("❌ Failed to initialize services: %v", err)
+		log.Fatalf("âŒ Failed to initialize services: %v", err)
 	}
 	services.StartMaintenanceScheduler(ctx)
 
@@ -134,9 +139,9 @@ func main() {
 		}
 	}()
 
-	log.Println("🚀 Backend server starting on :8000")
+	log.Println("ðŸš€ Backend server starting on :8000")
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("❌ Failed to start server: %v", err)
+		log.Fatalf("âŒ Failed to start server: %v", err)
 	}
 }
 

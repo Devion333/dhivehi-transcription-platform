@@ -1,3 +1,8 @@
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: transcripts.ts
+// Description: API client for transcripts
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { request } from "./client";
 import { BACKEND_URL } from "@/config";
 import type { AnalysisReviewResponse, AnalysisReviewStatus, AnalysisTriggerResponse, BulkReviewResponse, SegmentReviewResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptReassignmentOptionsResponse, TranscriptReassignmentResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";

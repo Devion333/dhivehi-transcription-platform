@@ -1,5 +1,10 @@
 "use client";
 
+// Programmer Name : Mr. Reehan Mohamed Ashraf, TP077077, APD3F2511SE, Software Engineering Student, APU, Technology Park Malaysia
+// Program Name: search-client.tsx
+// Description: Frontend page or component
+// First Written on: 03/07/2026
+// Edited on: 21/07/2026
 import { ChevronLeft, ChevronRight, FileText, Search, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -227,7 +232,7 @@ function SearchResults({ items, query, returnTo }: { items: TranscriptSearchResu
                 <div className="min-w-0">
                   <CardTitle className="truncate text-base"><Link className="hover:underline" href={withReturnTo(detailsPath(item.jobId, item.segmentId), returnTo)}>{transcriptReferenceLabel(item.referenceNumber)}</Link></CardTitle>
                   <p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{safeValue(item.category, "Uncategorized")}{item.folderName ? ` · Folder: ${item.folderName}` : ""}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{safeValue(item.category, "Uncategorized")}{item.folderName ? ` Â· Folder: ${item.folderName}` : ""}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={item.transcriptStatus} />
