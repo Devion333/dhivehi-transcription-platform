@@ -6,13 +6,13 @@ import * as React from "react";
 
 import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
-import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
 import { TranscriptReassignmentDialog } from "@/components/transcripts/transcript-reassignment-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { reviewProgressBadgeClass, reviewProgressLabel } from "@/lib/analysis-review-status";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Pagination, TranscriptSummary } from "@/lib/api/types";
 import { withReturnTo } from "@/lib/navigation-utils";
@@ -67,7 +67,7 @@ export function AdminTranscriptsClient() {
                     <span>Owner: {item.ownerDisplayName || "Unassigned"}</span>
                     <span>Created: {formatDate(item.createdAt)}</span>
                     <span><StatusBadge status={item.status} /></span>
-                    <span className="inline-flex items-center gap-1">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span>
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${reviewProgressBadgeClass(item.reviewPercentage)}`}>{reviewProgressLabel(item.reviewedSegmentCount, item.totalSegmentCount, item.reviewPercentage)}</span>
                     <span>Segments: {item.segmentCount}</span>
                   </div>
                 </div>

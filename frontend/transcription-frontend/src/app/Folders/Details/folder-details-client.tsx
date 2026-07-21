@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FolderOpen, Pencil, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as React from "react";
@@ -13,8 +13,8 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { Textarea } from "@/components/ui/textarea";
+import { reviewProgressBadgeClass, reviewProgressLabel } from "@/lib/analysis-review-status";
 import { addTranscriptToFolder, deleteFolder, getFolder, removeTranscriptFromFolder, updateFolder } from "@/lib/api/folders";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Folder, TranscriptSummary } from "@/lib/api/types";
@@ -35,6 +35,8 @@ export function FolderDetailsClient() {
   const [description, setDescription] = React.useState("");
   const [selectedJobId, setSelectedJobId] = React.useState("");
   const [deleteArmed, setDeleteArmed] = React.useState(false);
+  const [showRename, setShowRename] = React.useState(false);
+  const [showAddTranscript, setShowAddTranscript] = React.useState(false);
   const [loading, setLoading] = React.useState(Boolean(folderId));
   const [error, setError] = React.useState<string | null>(null);
   const [reload, setReload] = React.useState(0);
@@ -61,12 +63,12 @@ export function FolderDetailsClient() {
   async function saveFolder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!folder) return;
-    try { await updateFolder(folder.id, { name, description }); setReload((value) => value + 1); } catch (err) { setError(err instanceof Error ? err.message : "Folder could not be updated"); }
+    try { await updateFolder(folder.id, { name, description }); setShowRename(false); setReload((value) => value + 1); } catch (err) { setError(err instanceof Error ? err.message : "Folder could not be updated"); }
   }
 
   async function addTranscript() {
     if (!folder || !selectedJobId) return;
-    try { await addTranscriptToFolder(folder.id, selectedJobId); setSelectedJobId(""); setReload((value) => value + 1); } catch (err) { setError(err instanceof Error ? err.message : "Transcript could not be added"); }
+    try { await addTranscriptToFolder(folder.id, selectedJobId); setSelectedJobId(""); setShowAddTranscript(false); setReload((value) => value + 1); } catch (err) { setError(err instanceof Error ? err.message : "Transcript could not be added"); }
   }
 
   async function removeTranscript(jobId: string) {
@@ -86,24 +88,139 @@ export function FolderDetailsClient() {
 
   return (
     <PageContainer>
-      <Back />
-      <PageHeader title={folder.name} description={folder.description || "No description"} />
-      {error && <div className="mb-4"><ErrorState title="Folder action failed" description={error} /></div>}
-      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="space-y-4">
-          <Card className={cn("border-t-4", sectionToneClasses.folder.border)}><CardContent className="space-y-3 p-4"><SectionHeading title="Folder" icon={FolderOpen} tone="folder" /><p className="text-sm text-muted-foreground">Owner: {auth.user?.role === "admin" ? folder.ownerDisplayName : "You"}</p><p className="text-sm text-muted-foreground">{transcripts.length} transcript{transcripts.length === 1 ? "" : "s"}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><form className="space-y-3" onSubmit={saveFolder}><SectionHeading title="Rename folder" icon={FolderOpen} tone="folder" /><Input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} /><Textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} /><Button type="submit">Save changes</Button></form></CardContent></Card>
-          <Card><CardContent className="space-y-3 p-4"><SectionHeading title="Add transcript" icon={Plus} tone="transcript" /><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedJobId} onChange={(event) => setSelectedJobId(event.target.value)}><option value="">Select transcript</option>{eligible.map((item) => <option key={item.jobId} value={item.jobId}>{transcriptReferenceLabel(item.referenceNumber)} - {item.filename}</option>)}</select><Button type="button" onClick={addTranscript} disabled={!selectedJobId}><Plus className="h-4 w-4" /> Add</Button></CardContent></Card>
-          <Card className="border-destructive/40"><CardContent className="space-y-3 p-4"><h2 className="font-semibold">Delete folder</h2><p className="text-sm text-muted-foreground">Only empty folders can be deleted. Transcripts are never deleted with a folder.</p><Button type="button" variant="outline" disabled={transcripts.length > 0} onClick={() => setDeleteArmed(true)}>Prepare deletion</Button><Button type="button" variant="destructive" disabled={!deleteArmed || transcripts.length > 0} onClick={deleteEmptyFolder}><Trash2 className="h-4 w-4" /> Delete empty folder</Button></CardContent></Card>
-        </aside>
-        <section className="space-y-3">
-          {transcripts.length === 0 ? <EmptyState title="No transcripts in this folder" /> : transcripts.map((item) => <Card key={item.jobId}><CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"><div className="min-w-0"><h2 className="truncate font-semibold"><Link className="hover:underline" href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`, currentPath)}>{transcriptReferenceLabel(item.referenceNumber)}</Link></h2><p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p><div className="mt-2"><StatusBadge status={item.status} /></div></div><Button type="button" variant="outline" onClick={() => void removeTranscript(item.jobId)}>Remove</Button></CardContent></Card>)}
-        </section>
+      <div className="mb-1"><Back /></div>
+
+      {/* Compact header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", sectionToneClasses.folder.icon)}>
+              <FolderOpen className="h-4 w-4" />
+            </span>
+            <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">{folder.name}</h1>
+          </div>
+          {folder.description && <p className="mt-1 text-sm text-muted-foreground">{folder.description}</p>}
+          <p className="mt-1 text-xs text-muted-foreground">
+            {transcripts.length} transcript{transcripts.length === 1 ? "" : "s"}
+            <span className="mx-1.5">·</span>
+            Owner: {auth.user?.role === "admin" ? folder.ownerDisplayName : "You"}
+            <span className="mx-1.5">·</span>
+            Updated {formatDate(folder.updatedAt)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => { setShowRename((v) => !v); setShowAddTranscript(false); setDeleteArmed(false); }}>
+            <Pencil className="h-4 w-4" /> Rename
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setShowAddTranscript((v) => !v); setShowRename(false); setDeleteArmed(false); }}>
+            <Plus className="h-4 w-4" /> Add transcript
+          </Button>
+          <Button size="sm" variant="outline" disabled={transcripts.length > 0} onClick={() => { setDeleteArmed((v) => !v); setShowRename(false); setShowAddTranscript(false); }}>
+            <Trash2 className="h-4 w-4 text-destructive" /> Delete
+          </Button>
+        </div>
       </div>
+
+      {error && <div className="mt-4"><ErrorState title="Folder action failed" description={error} /></div>}
+
+      {/* Collapsible rename panel */}
+      {showRename && (
+        <Card className="mt-4">
+          <CardContent className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Rename folder</h2>
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowRename(false)} aria-label="Close"><X className="h-4 w-4" /></Button>
+            </div>
+            <form className="space-y-3" onSubmit={saveFolder}>
+              <Input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} />
+              <Textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} placeholder="Description (optional)" />
+              <Button type="submit" size="sm">Save changes</Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Collapsible add transcript panel */}
+      {showAddTranscript && (
+        <Card className="mt-4">
+          <CardContent className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Add transcript</h2>
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowAddTranscript(false)} aria-label="Close"><X className="h-4 w-4" /></Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select className="h-10 flex-1 rounded-md border bg-background px-3 text-sm" value={selectedJobId} onChange={(event) => setSelectedJobId(event.target.value)}>
+                <option value="">Select transcript</option>
+                {eligible.map((item) => <option key={item.jobId} value={item.jobId}>{transcriptReferenceLabel(item.referenceNumber)} - {item.filename}</option>)}
+              </select>
+              <Button type="button" size="sm" onClick={addTranscript} disabled={!selectedJobId}><Plus className="h-4 w-4" /> Add</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Delete confirmation */}
+      {deleteArmed && (
+        <Card className="mt-4 border-destructive/40">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-destructive">Delete folder</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {transcripts.length > 0
+                    ? "Only empty folders can be deleted. Remove all transcripts first."
+                    : "Are you sure you want to delete this empty folder?"}
+                </p>
+              </div>
+              {transcripts.length === 0 && (
+                <Button type="button" variant="destructive" size="sm" onClick={deleteEmptyFolder}>
+                  <Trash2 className="h-4 w-4" /> Delete folder
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Transcripts section */}
+      <section className="mt-6">
+        {transcripts.length === 0 ? (
+          <EmptyState title="No transcripts in this folder" description="Add transcripts using the button above." />
+        ) : (
+          <div className="space-y-2">
+            {transcripts.map((item) => (
+              <TranscriptRow key={item.jobId} item={item} currentPath={currentPath} onRemove={() => void removeTranscript(item.jobId)} />
+            ))}
+          </div>
+        )}
+      </section>
     </PageContainer>
   );
 }
 
+function TranscriptRow({ item, currentPath, onRemove }: { item: TranscriptSummary; currentPath: string; onRemove: () => void }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/30">
+      <div className="min-w-0 flex-1">
+        <Link className="truncate text-sm font-medium hover:underline" href={withReturnTo(`/Transcripts/Details?job_id=${encodeURIComponent(item.jobId)}`, currentPath)}>
+          {transcriptReferenceLabel(item.referenceNumber)}
+        </Link>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={item.filename}>{item.filename}</p>
+      </div>
+      <StatusBadge status={item.status} />
+      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${reviewProgressBadgeClass(item.reviewPercentage)}`}>
+        {reviewProgressLabel(item.reviewedSegmentCount, item.totalSegmentCount, item.reviewPercentage)}
+      </span>
+      <Button type="button" variant="ghost" size="sm" onClick={onRemove} aria-label="Remove transcript">Remove</Button>
+    </div>
+  );
+}
+
 function Back() {
-  return <div className="mb-4"><Button asChild variant="ghost" size="sm" className="-ml-2 gap-2"><Link href="/Folders"><ArrowLeft className="h-4 w-4" /> Back</Link></Button></div>;
+  return <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2"><Link href="/Folders"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>;
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleDateString();
 }

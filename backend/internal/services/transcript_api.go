@@ -82,7 +82,11 @@ func NormalizePagination(page, pageSize int) (int, int) {
 	return page, pageSize
 }
 
-func GetAPITranscripts(ctx context.Context, scope TranscriptAccessScope, page, pageSize int, search, status, folderID string) (dtos.TranscriptListResponse, error) {
+func GetAPITranscripts(ctx context.Context, scope TranscriptAccessScope, page, pageSize int, search, status, folderID string, extraFilters ...string) (dtos.TranscriptListResponse, error) {
+	reviewProgress := ""
+	if len(extraFilters) > 0 {
+		reviewProgress = extraFilters[0]
+	}
 	page, pageSize = NormalizePagination(page, pageSize)
 	var folderJobIDs map[string]struct{}
 	if strings.TrimSpace(folderID) != "" {
@@ -109,6 +113,14 @@ func GetAPITranscripts(ctx context.Context, scope TranscriptAccessScope, page, p
 		}
 		if status != "" && status != "all" && publicParentStatus(getString(payload, "status", "uploaded")) != status {
 			continue
+		}
+		if reviewProgress != "" {
+			total := parentSegmentCount(payload)
+			reviewed := getInt(payload, "reviewed_segment_count", 0)
+			pct := reviewPercentage(reviewed, total)
+			if !matchesReviewProgressFilter(reviewProgress, pct, total) {
+				continue
+			}
 		}
 		if search != "" && !matchesParentSearch(payload, search) {
 			continue
@@ -236,6 +248,8 @@ func BuildTranscriptSearchResponse(filters TranscriptSearchFilters, segments, pa
 			continue
 		}
 		matchedBySegment[jobID] = struct{}{}
+		total := parentSegmentCount(parent)
+		reviewed := getInt(parent, "reviewed_segment_count", 0)
 		items = append(items, dtos.TranscriptSearchResult{
 			SegmentID:          SegmentIDFromPayload(jobID, segment.Payload),
 			JobID:              jobID,
@@ -253,15 +267,20 @@ func BuildTranscriptSearchResponse(filters TranscriptSearchFilters, segments, pa
 			StartTime:          getFloat(segment.Payload, "start_time", 0),
 			EndTime:            getFloat(segment.Payload, "end_time", 0),
 			TranscriptText:     text,
-			MatchedText:        MatchExcerpt(text, query, 48),
-			MatchExcerpt:       MatchExcerpt(text, query, 48),
+			MatchedText:             MatchExcerpt(text, query, 48),
+			MatchExcerpt:            MatchExcerpt(text, query, 48),
+			ReviewedSegmentCount:    reviewed,
+			TotalSegmentCount:       total,
+			ReviewPercentage:        reviewPercentage(reviewed, total),
 		})
 	}
 	for jobID, parent := range parentLookup {
 		if _, ok := matchedBySegment[jobID]; ok || !metadataMatchesQuery(parent, query) {
 			continue
 		}
-		items = append(items, dtos.TranscriptSearchResult{JobID: jobID, Filename: getString(parent, "filename", "Unknown"), ReferenceNumber: getString(parent, "reference_number", "N/A"), Category: getString(parent, "category", "Uncategorized"), TranscriptStatus: publicParentStatus(getString(parent, "status", "uploaded")), CreatedAt: getString(parent, "timestamp", ""), OwnerUserID: parentOwnerUserID(parent), OwnerDisplayName: getString(parent, "owner_display_name", ""), OwnerEmail: getString(parent, "owner_email", ""), MatchedText: metadataMatchText(parent, query), MatchExcerpt: metadataMatchText(parent, query)})
+		total := parentSegmentCount(parent)
+		reviewed := getInt(parent, "reviewed_segment_count", 0)
+		items = append(items, dtos.TranscriptSearchResult{JobID: jobID, Filename: getString(parent, "filename", "Unknown"), ReferenceNumber: getString(parent, "reference_number", "N/A"), Category: getString(parent, "category", "Uncategorized"), TranscriptStatus: publicParentStatus(getString(parent, "status", "uploaded")), CreatedAt: getString(parent, "timestamp", ""), OwnerUserID: parentOwnerUserID(parent), OwnerDisplayName: getString(parent, "owner_display_name", ""), OwnerEmail: getString(parent, "owner_email", ""), MatchedText: metadataMatchText(parent, query), MatchExcerpt: metadataMatchText(parent, query), ReviewedSegmentCount: reviewed, TotalSegmentCount: total, ReviewPercentage: reviewPercentage(reviewed, total)})
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -754,17 +773,41 @@ func UpdateSegmentTranscript(scope TranscriptAccessScope, jobID, segmentID, tran
 	}
 
 	updatedAt := time.Now().UTC().Format(time.RFC3339)
+	currentText := getString(target.Payload, "transcript_text", "")
+	textChanged := currentText != transcriptText
 	payload := map[string]interface{}{
 		"transcript_text": transcriptText,
 		"updated_at":      updatedAt,
+	}
+	if textChanged {
+		payload["is_reviewed"] = false
+		payload["reviewed_by"] = ""
+		payload["reviewed_at"] = ""
 	}
 	if err := updateSegmentPayloadByIndex(jobID, segmentIndex, payload); err != nil {
 		return dtos.Segment{}, err
 	}
 
+	if textChanged {
+		// Recalculate and cache review progress after clearing review state
+		segments, err = ListSegmentPointsByParent(jobID)
+		if err == nil {
+			allReviewSvc := 0
+			for _, seg := range segments {
+				if getBool(seg.Payload, "is_reviewed", false) {
+					allReviewSvc++
+				}
+			}
+			_ = cacheReviewProgressOnParent(jobID, allReviewSvc, len(segments))
+		}
+	}
+
 	updatedPayload := copyPayload(target.Payload)
 	updatedPayload["transcript_text"] = transcriptText
 	updatedPayload["updated_at"] = updatedAt
+	updatedPayload["is_reviewed"] = false
+	updatedPayload["reviewed_by"] = ""
+	updatedPayload["reviewed_at"] = ""
 	return MapSegment(parent.Payload, updatedPayload), nil
 }
 
@@ -797,6 +840,159 @@ func UpdateSpeakerName(scope TranscriptAccessScope, jobID, speakerKey, displayNa
 		return dtos.SpeakerRenameResponse{}, err
 	}
 	return dtos.SpeakerRenameResponse{SpeakerKey: speakerKey, DisplayName: SpeakerDisplayName(speakerKey, speakerNames), SpeakerNames: speakerNames, Reset: reset}, nil
+}
+
+func UpdateSegmentReviewState(scope TranscriptAccessScope, user dtos.AuthUser, jobID, segmentID string, isReviewed bool) (dtos.SegmentReviewResponse, error) {
+	if _, err := GetAuthorizedParentTranscriptPoint(scope, jobID); err != nil {
+		return dtos.SegmentReviewResponse{}, err
+	}
+	segments, err := ListSegmentPointsByParent(jobID)
+	if err != nil {
+		return dtos.SegmentReviewResponse{}, err
+	}
+	target, err := findSegmentForUpdate(jobID, segmentID, segments)
+	if err != nil {
+		return dtos.SegmentReviewResponse{}, err
+	}
+	if target == nil {
+		return dtos.SegmentReviewResponse{}, newServiceError(ErrCodeSegmentNotFound, ErrSegmentNotFound)
+	}
+	segmentIndex := getInt(target.Payload, "segment_index", -1)
+	if segmentIndex < 0 {
+		return dtos.SegmentReviewResponse{}, newServiceError(ErrCodeInternal, fmt.Errorf("segment missing segment_index"))
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	payload := map[string]interface{}{"is_reviewed": isReviewed}
+	if isReviewed {
+		payload["reviewed_by"] = user.ID
+		payload["reviewed_at"] = now
+	} else {
+		payload["reviewed_by"] = ""
+		payload["reviewed_at"] = ""
+	}
+	if err := updateSegmentPayloadByIndex(jobID, segmentIndex, payload); err != nil {
+		return dtos.SegmentReviewResponse{}, err
+	}
+
+	reviewed, total := segmentReviewCounts(segments, segmentIndex, isReviewed)
+	if err := cacheReviewProgressOnParent(jobID, reviewed, total); err != nil {
+		return dtos.SegmentReviewResponse{}, err
+	}
+	pct := reviewPercentage(reviewed, total)
+	var reviewer *string
+	var reviewedAt *string
+	if isReviewed {
+		reviewer = stringPtr(user.ID)
+		reviewedAt = stringPtr(now)
+	}
+	return dtos.SegmentReviewResponse{
+		SegmentID:            segmentID,
+		IsReviewed:           isReviewed,
+		ReviewedBy:           reviewer,
+		ReviewedAt:           reviewedAt,
+		ReviewedSegmentCount: reviewed,
+		TotalSegmentCount:    total,
+		ReviewPercentage:     pct,
+	}, nil
+}
+
+func BulkUpdateSegmentReviewState(scope TranscriptAccessScope, user dtos.AuthUser, jobID string, isReviewed bool) (dtos.BulkReviewResponse, error) {
+	if _, err := GetAuthorizedParentTranscriptPoint(scope, jobID); err != nil {
+		return dtos.BulkReviewResponse{}, err
+	}
+	segments, err := ListSegmentPointsByParent(jobID)
+	if err != nil {
+		return dtos.BulkReviewResponse{}, err
+	}
+	total := len(segments)
+	if total == 0 {
+		return dtos.BulkReviewResponse{
+			TotalSegmentCount:    0,
+			ReviewPercentage:     0,
+			Message:              "Transcript has no segments to update",
+		}, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, seg := range segments {
+		idx := getInt(seg.Payload, "segment_index", -1)
+		if idx < 0 {
+			continue
+		}
+		payload := map[string]interface{}{"is_reviewed": isReviewed}
+		if isReviewed {
+			payload["reviewed_by"] = user.ID
+			payload["reviewed_at"] = now
+		} else {
+			payload["reviewed_by"] = ""
+			payload["reviewed_at"] = ""
+		}
+		if err := updateSegmentPayloadByIndex(jobID, idx, payload); err != nil {
+			return dtos.BulkReviewResponse{}, err
+		}
+	}
+
+	reviewed := 0
+	if isReviewed {
+		reviewed = total
+	}
+	if err := cacheReviewProgressOnParent(jobID, reviewed, total); err != nil {
+		return dtos.BulkReviewResponse{}, err
+	}
+	pct := reviewPercentage(reviewed, total)
+	msg := fmt.Sprintf("Marked all %d segments as reviewed", total)
+	if !isReviewed {
+		msg = fmt.Sprintf("Marked all %d segments as not reviewed", total)
+	}
+	return dtos.BulkReviewResponse{
+		ReviewedSegmentCount: reviewed,
+		TotalSegmentCount:    total,
+		ReviewPercentage:     pct,
+		Message:              msg,
+	}, nil
+}
+
+func segmentReviewCounts(segments []QdrantPoint, changedIndex int, newValue bool) (int, int) {
+	total := len(segments)
+	reviewed := 0
+	for _, seg := range segments {
+		idx := getInt(seg.Payload, "segment_index", -1)
+		if idx == changedIndex {
+			if newValue {
+				reviewed++
+			}
+		} else if getBool(seg.Payload, "is_reviewed", false) {
+			reviewed++
+		}
+	}
+	return reviewed, total
+}
+
+func RequireFullReview(scope TranscriptAccessScope, jobID string) error {
+	parent, err := GetAuthorizedParentTranscriptPoint(scope, jobID)
+	if err != nil {
+		return err
+	}
+	reviewed := getInt(parent.Payload, "reviewed_segment_count", 0)
+	total := parentSegmentCount(parent.Payload)
+	if total == 0 || reviewed < total {
+		return newServiceError(ErrCodeReviewNotComplete, fmt.Errorf("all transcript segments must be reviewed before this action"))
+	}
+	return nil
+}
+
+func cacheReviewProgressOnParent(jobID string, reviewed, total int) error {
+	return updateParentPayloadByJobID(jobID, map[string]interface{}{
+		"reviewed_segment_count": reviewed,
+		"total_segment_count":    total,
+		"review_percentage":      reviewPercentage(reviewed, total),
+		"updated_at":             time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func validateSpeakerDisplayName(value string) error {
@@ -1137,6 +1333,9 @@ func qdrantHost() string {
 func MapParentSummary(payload map[string]interface{}) dtos.TranscriptSummary {
 	createdAt := getString(payload, "timestamp", "")
 	updatedAt := firstString(payload, "updated_at", "transcription_completed_at", "diarization_completed_at", "timestamp")
+	total := parentSegmentCount(payload)
+	reviewed := getInt(payload, "reviewed_segment_count", 0)
+	pct := reviewPercentage(reviewed, total)
 	return dtos.TranscriptSummary{
 		JobID:                getString(payload, "job_id", ""),
 		Filename:             getString(payload, "filename", "Unknown"),
@@ -1144,11 +1343,14 @@ func MapParentSummary(payload map[string]interface{}) dtos.TranscriptSummary {
 		ReferenceNumber:      getString(payload, "reference_number", "N/A"),
 		Notes:                getString(payload, "notes", ""),
 		Status:               publicParentStatus(getString(payload, "status", "uploaded")),
-		SegmentCount:         parentSegmentCount(payload),
+		SegmentCount:         total,
 		CreatedAt:            createdAt,
 		UpdatedAt:            updatedAt,
 		AnalysisStatus:       publicAnalysisStatus(getString(payload, "analysis_status", "not_started")),
 		AnalysisReviewStatus: MapAnalysisReview(payload).Status,
+		ReviewedSegmentCount: reviewed,
+		TotalSegmentCount:    total,
+		ReviewPercentage:     pct,
 		OwnerUserID:          parentOwnerUserID(payload),
 		OwnerDisplayName:     getString(payload, "owner_display_name", ""),
 		OwnerEmail:           getString(payload, "owner_email", ""),
@@ -1158,24 +1360,35 @@ func MapParentSummary(payload map[string]interface{}) dtos.TranscriptSummary {
 func MapTranscriptDetail(parent map[string]interface{}, segments []dtos.Segment) dtos.TranscriptDetail {
 	createdAt := getString(parent, "timestamp", "")
 	updatedAt := firstString(parent, "updated_at", "transcription_completed_at", "diarization_completed_at", "timestamp")
+	total := len(segments)
+	reviewed := 0
+	for _, s := range segments {
+		if s.IsReviewed {
+			reviewed++
+		}
+	}
+	pct := reviewPercentage(reviewed, total)
 	return dtos.TranscriptDetail{
-		JobID:            getString(parent, "job_id", ""),
-		Filename:         getString(parent, "filename", "Unknown"),
-		Category:         getString(parent, "category", "Uncategorized"),
-		ReferenceNumber:  getString(parent, "reference_number", "N/A"),
-		Notes:            getString(parent, "notes", ""),
-		Status:           publicParentStatus(getString(parent, "status", "uploaded")),
-		Speakers:         getInt(parent, "speakers", 0),
-		SegmentCount:     parentSegmentCount(parent),
-		MediaURL:         PublicMediaURL(getString(parent, "minio_url", "")),
-		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
-		AnalysisStatus:   publicAnalysisStatus(getString(parent, "analysis_status", "not_started")),
-		OwnerUserID:      parentOwnerUserID(parent),
-		OwnerDisplayName: getString(parent, "owner_display_name", ""),
-		OwnerEmail:       getString(parent, "owner_email", ""),
-		SpeakerNames:     MapSpeakerNames(parent),
-		Segments:         segments,
+		JobID:                getString(parent, "job_id", ""),
+		Filename:             getString(parent, "filename", "Unknown"),
+		Category:             getString(parent, "category", "Uncategorized"),
+		ReferenceNumber:      getString(parent, "reference_number", "N/A"),
+		Notes:                getString(parent, "notes", ""),
+		Status:               publicParentStatus(getString(parent, "status", "uploaded")),
+		Speakers:             getInt(parent, "speakers", 0),
+		SegmentCount:         total,
+		MediaURL:             PublicMediaURL(getString(parent, "minio_url", "")),
+		CreatedAt:            createdAt,
+		UpdatedAt:            updatedAt,
+		AnalysisStatus:       publicAnalysisStatus(getString(parent, "analysis_status", "not_started")),
+		OwnerUserID:          parentOwnerUserID(parent),
+		OwnerDisplayName:     getString(parent, "owner_display_name", ""),
+		OwnerEmail:           getString(parent, "owner_email", ""),
+		SpeakerNames:         MapSpeakerNames(parent),
+		Segments:             segments,
+		ReviewedSegmentCount: reviewed,
+		TotalSegmentCount:    total,
+		ReviewPercentage:     pct,
 	}
 }
 
@@ -1298,6 +1511,9 @@ func MapSegment(parent, payload map[string]interface{}) dtos.Segment {
 		TranscriptText: getString(payload, "transcript_text", ""),
 		Status:         getString(payload, "status", "pending_transcription"),
 		MediaURL:       PublicMediaURL(mediaURL),
+		IsReviewed:     getBool(payload, "is_reviewed", false),
+		ReviewedBy:     stringPtrIfNotEmpty(getString(payload, "reviewed_by", "")),
+		ReviewedAt:     stringPtrIfNotEmpty(getString(payload, "reviewed_at", "")),
 	}
 }
 
@@ -1395,6 +1611,21 @@ func stringPtrIfNotEmpty(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func matchesReviewProgressFilter(filter string, pct, total int) bool {
+	switch strings.ToLower(strings.TrimSpace(filter)) {
+	case "not_reviewed":
+		return total == 0 || pct == 0
+	case "in_progress":
+		return total > 0 && pct > 0 && pct < 100
+	case "fully_reviewed":
+		return total > 0 && pct == 100
+	case "", "all":
+		return true
+	default:
+		return true
+	}
 }
 
 func SegmentIDFromPayload(jobID string, payload map[string]interface{}) string {
@@ -1602,6 +1833,34 @@ func parseTimeOrZero(value string) time.Time {
 		return time.Time{}
 	}
 	return parsed
+}
+
+func getBool(payload map[string]interface{}, key string, fallback bool) bool {
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.ToLower(typed) == "true" || typed == "1"
+	case int:
+		return typed != 0
+	case int64:
+		return typed != 0
+	case float64:
+		return typed != 0
+	default:
+		return fallback
+	}
+}
+
+func reviewPercentage(reviewed, total int) int {
+	if total == 0 {
+		return 0
+	}
+	return reviewed * 100 / total
 }
 
 func copyPayload(payload map[string]interface{}) map[string]interface{} {

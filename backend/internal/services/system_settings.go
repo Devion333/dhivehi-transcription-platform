@@ -35,11 +35,13 @@ type SystemSettings struct {
 	SpeakerRenamingEnabled        bool      `json:"speakerRenamingEnabled"`
 	TranscriptDownloadsEnabled    bool      `json:"transcriptDownloadsEnabled"`
 	EnabledDownloadFormats        []string  `json:"enabledDownloadFormats"`
-	RequireApprovalBeforeDownload bool      `json:"requireApprovalBeforeDownload"`
-	AnalysisEnabled               bool      `json:"analysisEnabled"`
-	EnabledAnalysisOutputs        []string  `json:"enabledAnalysisOutputs"`
-	RequireApprovalBeforeAnalysis bool      `json:"requireApprovalBeforeAnalysis"`
-	UsersCanRerunAnalysis         bool      `json:"usersCanRerunAnalysis"`
+	RequireApprovalBeforeDownload    bool      `json:"requireApprovalBeforeDownload"`
+	RequireFullReviewBeforeDownload  bool      `json:"requireFullReviewBeforeDownload"`
+	AnalysisEnabled                  bool      `json:"analysisEnabled"`
+	EnabledAnalysisOutputs           []string  `json:"enabledAnalysisOutputs"`
+	RequireApprovalBeforeAnalysis    bool      `json:"requireApprovalBeforeAnalysis"`
+	RequireFullReviewBeforeAnalysis  bool      `json:"requireFullReviewBeforeAnalysis"`
+	UsersCanRerunAnalysis            bool      `json:"usersCanRerunAnalysis"`
 	CleanupEnabled                bool      `json:"cleanupEnabled"`
 	NotificationRetentionDays     int       `json:"notificationRetentionDays"`
 	AuditRetentionDays            int       `json:"auditRetentionDays"`
@@ -51,6 +53,7 @@ type SystemSettings struct {
 	NotifyAnalysisComplete        bool      `json:"notifyAnalysisComplete"`
 	NotifyTranscriptAssigned      bool      `json:"notifyTranscriptAssigned"`
 	NotifyReviewStatusChanged     bool      `json:"notifyReviewStatusChanged"`
+	NotifyReviewProgressChanged   bool      `json:"notifyReviewProgressChanged"`
 	MaintenanceMode               bool      `json:"maintenanceMode"`
 	MaintenanceMessage            string    `json:"maintenanceMessage"`
 	AnnouncementEnabled           bool      `json:"announcementEnabled"`
@@ -76,11 +79,13 @@ type PublicSystemSettings struct {
 	SpeakerRenamingEnabled        bool     `json:"speakerRenamingEnabled"`
 	TranscriptDownloadsEnabled    bool     `json:"transcriptDownloadsEnabled"`
 	EnabledDownloadFormats        []string `json:"enabledDownloadFormats"`
-	RequireApprovalBeforeDownload bool     `json:"requireApprovalBeforeDownload"`
-	AnalysisEnabled               bool     `json:"analysisEnabled"`
-	EnabledAnalysisOutputs        []string `json:"enabledAnalysisOutputs"`
-	RequireApprovalBeforeAnalysis bool     `json:"requireApprovalBeforeAnalysis"`
-	UsersCanRerunAnalysis         bool     `json:"usersCanRerunAnalysis"`
+	RequireApprovalBeforeDownload   bool     `json:"requireApprovalBeforeDownload"`
+	RequireFullReviewBeforeDownload bool     `json:"requireFullReviewBeforeDownload"`
+	AnalysisEnabled                 bool     `json:"analysisEnabled"`
+	EnabledAnalysisOutputs          []string `json:"enabledAnalysisOutputs"`
+	RequireApprovalBeforeAnalysis   bool     `json:"requireApprovalBeforeAnalysis"`
+	RequireFullReviewBeforeAnalysis bool     `json:"requireFullReviewBeforeAnalysis"`
+	UsersCanRerunAnalysis           bool     `json:"usersCanRerunAnalysis"`
 	MaintenanceMode               bool     `json:"maintenanceMode"`
 	MaintenanceMessage            string   `json:"maintenanceMessage"`
 	AnnouncementEnabled           bool     `json:"announcementEnabled"`
@@ -98,7 +103,7 @@ type SettingsChange struct {
 
 func DefaultSystemSettings() SystemSettings {
 	now := time.Now().UTC()
-	return SystemSettings{ID: 1, UploadsEnabled: true, MaximumUploadSizeMB: 1024, AllowedUploadFormats: append([]string{}, uploadFormats...), RequireCategory: true, ProcessingEnabled: true, AutomaticProcessing: true, AutomaticAnalysis: false, MaximumProcessingRetries: 3, RetryDelayMinutes: 5, TranscriptEditingEnabled: true, SpeakerRenamingEnabled: true, TranscriptDownloadsEnabled: true, EnabledDownloadFormats: append([]string{}, downloadFormats...), AnalysisEnabled: true, EnabledAnalysisOutputs: append([]string{}, analysisOutputs...), UsersCanRerunAnalysis: true, NotificationRetentionDays: 90, AuditRetentionDays: 365, SessionDurationMinutes: int(defaultSessionLife.Minutes()), MaximumFailedLoginAttempts: loginAttemptLimit, AccountLockoutMinutes: int(loginAttemptWindow.Minutes()), NotifyTranscriptionComplete: true, NotifyProcessingFailed: true, NotifyAnalysisComplete: true, NotifyTranscriptAssigned: true, NotifyReviewStatusChanged: true, CreatedAt: now, UpdatedAt: now, UpdatedAtText: now.Format(time.RFC3339)}
+	return SystemSettings{ID: 1, UploadsEnabled: true, MaximumUploadSizeMB: 1024, AllowedUploadFormats: append([]string{}, uploadFormats...), RequireCategory: true, ProcessingEnabled: true, AutomaticProcessing: true, AutomaticAnalysis: false, MaximumProcessingRetries: 3, RetryDelayMinutes: 5, TranscriptEditingEnabled: true, SpeakerRenamingEnabled: true, TranscriptDownloadsEnabled: true, EnabledDownloadFormats: append([]string{}, downloadFormats...), AnalysisEnabled: true, EnabledAnalysisOutputs: append([]string{}, analysisOutputs...), UsersCanRerunAnalysis: true, NotificationRetentionDays: 90, AuditRetentionDays: 365, SessionDurationMinutes: int(defaultSessionLife.Minutes()), MaximumFailedLoginAttempts: loginAttemptLimit, AccountLockoutMinutes: int(loginAttemptWindow.Minutes()), NotifyTranscriptionComplete: true, NotifyProcessingFailed: true, NotifyAnalysisComplete: true, NotifyTranscriptAssigned: true, NotifyReviewStatusChanged: true, NotifyReviewProgressChanged: true, CreatedAt: now, UpdatedAt: now, UpdatedAtText: now.Format(time.RFC3339)}
 }
 
 func GetSystemSettings(ctx context.Context) (SystemSettings, error) {
@@ -241,7 +246,7 @@ func writeSystemSettings(ctx context.Context, tx *sql.Tx, s SystemSettings, upda
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE system_settings SET uploads_enabled=$1, maximum_upload_size_mb=$2, allowed_upload_formats=$3::jsonb, require_reference_number=TRUE, require_category=$4, processing_enabled=$5, automatic_processing=$6, automatic_analysis=$7, maximum_processing_retries=$8, retry_delay_minutes=$9, transcript_editing_enabled=$10, speaker_renaming_enabled=$11, transcript_downloads_enabled=$12, enabled_download_formats=$13::jsonb, require_approval_before_download=$14, analysis_enabled=$15, enabled_analysis_outputs=$16::jsonb, require_approval_before_analysis=$17, users_can_rerun_analysis=$18, cleanup_enabled=$19, notification_retention_days=$20, audit_retention_days=$21, session_duration_minutes=$22, maximum_failed_login_attempts=$23, account_lockout_minutes=$24, notify_transcription_complete=$25, notify_processing_failed=$26, notify_analysis_complete=$27, notify_transcript_assigned=$28, notify_review_status_changed=$29, maintenance_mode=$30, maintenance_message=$31, announcement_enabled=$32, announcement_message=$33, announcement_expires_at=$34, organisation_name=$35, pdf_header_text=$36, updated_at=NOW(), updated_by=$37 WHERE id=1`, s.UploadsEnabled, s.MaximumUploadSizeMB, string(uploadJSON), s.RequireCategory, s.ProcessingEnabled, s.AutomaticProcessing, s.AutomaticAnalysis, s.MaximumProcessingRetries, s.RetryDelayMinutes, s.TranscriptEditingEnabled, s.SpeakerRenamingEnabled, s.TranscriptDownloadsEnabled, string(downloadJSON), s.RequireApprovalBeforeDownload, s.AnalysisEnabled, string(outputsJSON), s.RequireApprovalBeforeAnalysis, s.UsersCanRerunAnalysis, s.CleanupEnabled, s.NotificationRetentionDays, s.AuditRetentionDays, s.SessionDurationMinutes, s.MaximumFailedLoginAttempts, s.AccountLockoutMinutes, s.NotifyTranscriptionComplete, s.NotifyProcessingFailed, s.NotifyAnalysisComplete, s.NotifyTranscriptAssigned, s.NotifyReviewStatusChanged, s.MaintenanceMode, nullableSettingString(s.MaintenanceMessage), s.AnnouncementEnabled, nullableSettingString(s.AnnouncementMessage), expires, nullableSettingString(s.OrganisationName), nullableSettingString(s.PDFHeaderText), updater)
+	_, err = tx.ExecContext(ctx, `UPDATE system_settings SET uploads_enabled=$1, maximum_upload_size_mb=$2, allowed_upload_formats=$3::jsonb, require_reference_number=TRUE, require_category=$4, processing_enabled=$5, automatic_processing=$6, automatic_analysis=$7, maximum_processing_retries=$8, retry_delay_minutes=$9, transcript_editing_enabled=$10, speaker_renaming_enabled=$11, transcript_downloads_enabled=$12, enabled_download_formats=$13::jsonb, require_approval_before_download=$14, analysis_enabled=$15, enabled_analysis_outputs=$16::jsonb, require_approval_before_analysis=$17, users_can_rerun_analysis=$18, cleanup_enabled=$19, notification_retention_days=$20, audit_retention_days=$21, session_duration_minutes=$22, maximum_failed_login_attempts=$23, account_lockout_minutes=$24, notify_transcription_complete=$25, notify_processing_failed=$26, notify_analysis_complete=$27, notify_transcript_assigned=$28, notify_review_status_changed=$29, maintenance_mode=$30, maintenance_message=$31, announcement_enabled=$32, announcement_message=$33, announcement_expires_at=$34, organisation_name=$35, pdf_header_text=$36, updated_at=NOW(), updated_by=$37 WHERE id=1`, s.UploadsEnabled, s.MaximumUploadSizeMB, string(uploadJSON), s.RequireCategory, s.ProcessingEnabled, s.AutomaticProcessing, s.AutomaticAnalysis, s.MaximumProcessingRetries, s.RetryDelayMinutes, s.TranscriptEditingEnabled, s.SpeakerRenamingEnabled, s.TranscriptDownloadsEnabled, string(downloadJSON), s.RequireApprovalBeforeDownload, s.RequireFullReviewBeforeDownload, s.AnalysisEnabled, string(outputsJSON), s.RequireApprovalBeforeAnalysis, s.RequireFullReviewBeforeAnalysis, s.UsersCanRerunAnalysis, s.CleanupEnabled, s.NotificationRetentionDays, s.AuditRetentionDays, s.SessionDurationMinutes, s.MaximumFailedLoginAttempts, s.AccountLockoutMinutes, s.NotifyTranscriptionComplete, s.NotifyProcessingFailed, s.NotifyAnalysisComplete, s.NotifyTranscriptAssigned, s.NotifyReviewStatusChanged, s.NotifyReviewProgressChanged, s.MaintenanceMode, nullableSettingString(s.MaintenanceMessage), s.AnnouncementEnabled, nullableSettingString(s.AnnouncementMessage), expires, nullableSettingString(s.OrganisationName), nullableSettingString(s.PDFHeaderText), updater)
 	return err
 }
 
@@ -333,7 +338,9 @@ func publicSystemSettings(s SystemSettings) PublicSystemSettings {
 			s.AnnouncementExpiresAt = nil
 		}
 	}
-	return PublicSystemSettings{UploadsEnabled: s.UploadsEnabled, MaximumUploadSizeMB: s.MaximumUploadSizeMB, AllowedUploadFormats: s.AllowedUploadFormats, RequireCategory: s.RequireCategory, ProcessingEnabled: s.ProcessingEnabled, AutomaticProcessing: s.AutomaticProcessing, TranscriptEditingEnabled: s.TranscriptEditingEnabled, SpeakerRenamingEnabled: s.SpeakerRenamingEnabled, TranscriptDownloadsEnabled: s.TranscriptDownloadsEnabled, EnabledDownloadFormats: s.EnabledDownloadFormats, RequireApprovalBeforeDownload: s.RequireApprovalBeforeDownload, AnalysisEnabled: s.AnalysisEnabled, EnabledAnalysisOutputs: s.EnabledAnalysisOutputs, RequireApprovalBeforeAnalysis: s.RequireApprovalBeforeAnalysis, UsersCanRerunAnalysis: s.UsersCanRerunAnalysis, MaintenanceMode: s.MaintenanceMode, MaintenanceMessage: s.MaintenanceMessage, AnnouncementEnabled: s.AnnouncementEnabled, AnnouncementMessage: s.AnnouncementMessage, AnnouncementExpiresAt: s.AnnouncementExpiresAt, OrganisationName: s.OrganisationName, PDFHeaderText: s.PDFHeaderText}
+	return PublicSystemSettings{UploadsEnabled: s.UploadsEnabled, MaximumUploadSizeMB: s.MaximumUploadSizeMB, AllowedUploadFormats: s.AllowedUploadFormats, RequireCategory: s.RequireCategory, ProcessingEnabled: s.ProcessingEnabled, AutomaticProcessing: s.AutomaticProcessing, TranscriptEditingEnabled: s.TranscriptEditingEnabled, SpeakerRenamingEnabled: s.SpeakerRenamingEnabled, TranscriptDownloadsEnabled: s.TranscriptDownloadsEnabled, EnabledDownloadFormats: s.EnabledDownloadFormats, RequireApprovalBeforeDownload: s.RequireApprovalBeforeDownload,
+	RequireFullReviewBeforeDownload: s.RequireFullReviewBeforeDownload, AnalysisEnabled: s.AnalysisEnabled, EnabledAnalysisOutputs: s.EnabledAnalysisOutputs, RequireApprovalBeforeAnalysis: s.RequireApprovalBeforeAnalysis,
+	RequireFullReviewBeforeAnalysis: s.RequireFullReviewBeforeAnalysis, UsersCanRerunAnalysis: s.UsersCanRerunAnalysis, MaintenanceMode: s.MaintenanceMode, MaintenanceMessage: s.MaintenanceMessage, AnnouncementEnabled: s.AnnouncementEnabled, AnnouncementMessage: s.AnnouncementMessage, AnnouncementExpiresAt: s.AnnouncementExpiresAt, OrganisationName: s.OrganisationName, PDFHeaderText: s.PDFHeaderText}
 }
 
 func SetSystemSettingsProviderForTest(provider func(context.Context) (SystemSettings, error)) func() {

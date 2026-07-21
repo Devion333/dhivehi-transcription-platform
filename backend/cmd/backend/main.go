@@ -89,6 +89,8 @@ func main() {
 			protected.GET("/transcripts/:jobId", handlers.APIGetTranscript)
 			protected.PATCH("/transcripts/:jobId/speakers", handlers.APIUpdateSpeakerName)
 			protected.PATCH("/transcripts/:jobId/segments/:segmentId", handlers.APIUpdateSegment)
+			protected.PATCH("/transcripts/:jobId/segments/:segmentId/review", handlers.APIUpdateSegmentReview)
+			protected.POST("/transcripts/:jobId/segments/review", handlers.APIBulkUpdateSegmentReview)
 			protected.GET("/transcripts/:jobId/analysis", handlers.APIGetAnalysis)
 			protected.PATCH("/transcripts/:jobId/analysis/review", handlers.APIUpdateAnalysisReview)
 			protected.POST("/transcripts/:jobId/analyse", handlers.APIAnalyseTranscript)

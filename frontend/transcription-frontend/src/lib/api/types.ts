@@ -68,9 +68,11 @@ export interface PublicSystemSettings {
   transcriptDownloadsEnabled: boolean;
   enabledDownloadFormats: string[];
   requireApprovalBeforeDownload: boolean;
+  requireFullReviewBeforeDownload: boolean;
   analysisEnabled: boolean;
   enabledAnalysisOutputs: string[];
   requireApprovalBeforeAnalysis: boolean;
+  requireFullReviewBeforeAnalysis: boolean;
   usersCanRerunAnalysis: boolean;
   maintenanceMode: boolean;
   maintenanceMessage: string;
@@ -97,6 +99,7 @@ export interface SystemSettings extends PublicSystemSettings {
   notifyAnalysisComplete: boolean;
   notifyTranscriptAssigned: boolean;
   notifyReviewStatusChanged: boolean;
+  notifyReviewProgressChanged: boolean;
   updatedAt: string;
   updatedBy: string | null;
   updatedByDisplayName: string | null;
@@ -134,7 +137,11 @@ export type NotificationType =
   | "transcript_processing_failed"
   | "analysis_completed"
   | "analysis_failed"
-  | "transcript_assigned";
+  | "transcript_assigned"
+  | "segment_review_updated"
+  | "transcript_review_completed"
+  | "transcript_review_reopened"
+  | "transcript_bulk_review_updated";
 
 export interface NotificationItem {
   id: string;
@@ -431,6 +438,9 @@ export interface TranscriptSummary {
   segmentCount: number;
   analysisStatus: AnalysisStatus;
   analysisReviewStatus: AnalysisReviewStatus;
+  reviewedSegmentCount?: number;
+  totalSegmentCount?: number;
+  reviewPercentage?: number;
   folderId: string;
   folderName: string;
   ownerUserId: string;
@@ -447,6 +457,9 @@ export interface TranscriptSegment {
   transcriptText: string;
   status: string;
   mediaUrl: string;
+  isReviewed: boolean;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
 }
 
 export interface TranscriptDetail {
@@ -463,6 +476,9 @@ export interface TranscriptDetail {
   updatedAt: string;
   analysisStatus: AnalysisStatus;
   analysisReviewStatus: AnalysisReviewStatus;
+  reviewedSegmentCount?: number;
+  totalSegmentCount?: number;
+  reviewPercentage?: number;
   folderId: string;
   folderName: string;
   ownerUserId: string;
@@ -530,6 +546,7 @@ export interface TranscriptAnalysis {
 }
 
 export type AnalysisReviewStatus = "unreviewed" | "reviewed" | "approved" | "rejected";
+export type ReviewProgressStatus = "not_reviewed" | "in_progress" | "fully_reviewed";
 
 export interface AnalysisReview {
   status: AnalysisReviewStatus;
@@ -567,6 +584,9 @@ export interface TranscriptSearchResult {
   createdAt: string;
   ownerUserId?: string;
   ownerDisplayName?: string;
+  reviewedSegmentCount?: number;
+  totalSegmentCount?: number;
+  reviewPercentage?: number;
   ownerEmail?: string;
   folderId?: string;
   folderName?: string;
@@ -608,5 +628,22 @@ export interface UploadJob {
 
 export interface UploadResult {
   job: UploadJob;
+  message: string;
+}
+
+export interface SegmentReviewResponse {
+  segmentId: string;
+  isReviewed: boolean;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewedSegmentCount: number;
+  totalSegmentCount: number;
+  reviewPercentage: number;
+}
+
+export interface BulkReviewResponse {
+  reviewedSegmentCount: number;
+  totalSegmentCount: number;
+  reviewPercentage: number;
   message: string;
 }

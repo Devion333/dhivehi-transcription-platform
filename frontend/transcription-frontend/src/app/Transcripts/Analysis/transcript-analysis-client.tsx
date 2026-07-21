@@ -8,7 +8,6 @@ import * as React from "react";
 import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
-import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
 import { StatusBadge } from "@/components/app/status-badge";
 import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -130,7 +129,6 @@ export function TranscriptAnalysisClient() {
         <span className="break-words font-medium text-foreground">{transcriptReferenceLabel(detail.referenceNumber)}</span>
         <span title={detail.filename}>{detail.filename}</span>
         <StatusBadge status={analysis.status} />
-        <span>Transcript review: <AnalysisReviewStatusBadge status={analysis.review?.status ?? detail.analysisReviewStatus} /></span>
       </div>
 
       {!ready && <Card className={cn("mb-4", sectionToneClasses.warning.panel)}><CardContent className="p-4 text-sm">Transcript status: {detail.status.replace(/_/g, " ")}.</CardContent></Card>}
@@ -163,7 +161,7 @@ function BackToTranscript({ href }: { href: string }) {
 }
 
 function transcriptReviewHref(jobId: string) {
-  return `/Transcripts/Details?job_id=${encodeURIComponent(jobId)}&review=open`;
+  return `/Transcripts/Details?job_id=${encodeURIComponent(jobId)}`;
 }
 
 function AnalysisTextPanel({ title, icon: Icon, value, className, prominent }: { title: string; icon: typeof Sparkles; value: string; className?: string; prominent?: boolean }) {

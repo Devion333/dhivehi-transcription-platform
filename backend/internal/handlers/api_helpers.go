@@ -44,7 +44,9 @@ func writeServiceError(c *gin.Context, err error) {
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Transcript contains invalid timestamps", nil)
 		case services.ErrCodeAnalysisNotComplete:
 			writeAPIError(c, http.StatusConflict, serviceErr.Code, "Analysis is not complete", nil)
-		case services.ErrCodeInvalidReviewStatus:
+		case services.ErrCodeReviewNotComplete:
+		writeAPIError(c, http.StatusForbidden, serviceErr.Code, "All transcript segments must be reviewed before this action", nil)
+	case services.ErrCodeInvalidReviewStatus:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Review status is invalid", nil)
 		case services.ErrCodeInvalidReviewNote:
 			writeAPIError(c, http.StatusBadRequest, serviceErr.Code, "Review note is invalid", nil)

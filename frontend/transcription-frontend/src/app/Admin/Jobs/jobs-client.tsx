@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, ChevronLeft, ChevronRight, Eye, RefreshCw, RotateCcw, Search, ServerCog, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, RefreshCw, RotateCcw, Search, ServerCog, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -108,7 +108,6 @@ export function AdminJobsClient() {
   const hasFilters = Boolean(search || status !== "all" || stage !== "all" || failedOnly || dateFrom || dateTo);
 
   return <PageContainer><PageHeader title="Jobs" actions={<Button variant="outline" onClick={() => setRefreshToken((value) => value + 1)}><RefreshCw className="h-4 w-4" /> Refresh</Button>} />
-    <div className="mb-4 rounded-lg border border-[var(--accent-admin-border)] bg-card p-3"><SectionHeading title="Administration" icon={BriefcaseBusiness} tone="admin" /></div>
     <HealthSummary health={health} />
     <Card className="mb-5"><CardContent className="p-4"><div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_auto_auto_auto] xl:items-end"><form onSubmit={submitSearch} className="grid min-w-0 gap-2 sm:col-span-2 xl:col-span-1"><label htmlFor="job-search" className="text-sm font-medium">Search</label><div className="flex w-full min-w-0 gap-2"><div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input id="job-search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="File, reference, job" className="w-full pl-9" /></div><Button type="submit" variant="outline" className="shrink-0">Search</Button></div></form><SelectFilter id="job-stage" label="Stage" value={stage} values={adminJobStages} onChange={(value) => navigate({ page: 1, stage: value as typeof stage })} /><SelectFilter id="job-status" label="Status" value={status} values={adminJobStatuses} onChange={(value) => navigate({ page: 1, status: value as typeof status })} /><Button type="button" variant="ghost" onClick={() => router.push(pathname)} disabled={!hasFilters} className="min-w-0 w-full shrink-0 sm:w-auto"><X className="h-4 w-4" /> Reset</Button></div></CardContent></Card>
     {message && <div className="mb-4 rounded-lg border bg-card px-4 py-3 text-sm">{message}</div>}

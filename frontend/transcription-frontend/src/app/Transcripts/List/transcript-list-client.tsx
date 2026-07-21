@@ -8,13 +8,13 @@ import * as React from "react";
 import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
-import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
 import { listFolders } from "@/lib/api/folders";
+import { reviewProgressBadgeClass, reviewProgressLabel } from "@/lib/analysis-review-status";
 import { getTranscripts } from "@/lib/api/transcripts";
 import type { Folder, Pagination, TranscriptSummary } from "@/lib/api/types";
 import { withReturnTo } from "@/lib/navigation-utils";
@@ -25,11 +25,13 @@ import {
   fallbackText,
   formatTranscriptDate,
   normalizePageParam,
+  normalizeReviewProgressParam,
   normalizeSearchParam,
   normalizeStatusParam,
   segmentCountLabel,
   transcriptDetailPath,
   transcriptPageSize,
+  transcriptReviewProgressFilters,
   transcriptStatusFilters,
 } from "@/lib/transcript-list-utils";
 
@@ -46,6 +48,7 @@ export function TranscriptListClient() {
   const page = normalizePageParam(searchParams.get("page"));
   const search = normalizeSearchParam(searchParams.get("search"));
   const status = normalizeStatusParam(searchParams.get("status"));
+  const reviewProgress = normalizeReviewProgressParam(searchParams.get("reviewProgress"));
   const folderId = normalizeSearchParam(searchParams.get("folderId"));
   const [searchDraft, setSearchDraft] = React.useState(search);
   const [folders, setFolders] = React.useState<Folder[]>([]);
@@ -58,7 +61,7 @@ export function TranscriptListClient() {
     setSearchDraft(search);
   }, [search]);
 
-  const loadKey = `${page}:${search}:${status}:${folderId}:${retryToken}`;
+  const loadKey = `${page}:${search}:${status}:${reviewProgress}:${folderId}:${retryToken}`;
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -71,7 +74,7 @@ export function TranscriptListClient() {
     setLoading(true);
     setError(null);
 
-    getTranscripts({ page, pageSize: transcriptPageSize, search, status, folderId }, controller.signal)
+    getTranscripts({ page, pageSize: transcriptPageSize, search, status, folderId, reviewProgress }, controller.signal)
       .then((response) => {
         setData({ items: response.items, pagination: response.pagination });
       })
@@ -84,7 +87,7 @@ export function TranscriptListClient() {
       });
 
     return () => controller.abort();
-  }, [folderId, loadKey, page, search, status]);
+  }, [folderId, loadKey, page, search, status, reviewProgress]);
 
   React.useEffect(() => {
     if (loading || error || !data.items.some((item) => isProcessingTranscriptStatus(item.status))) return;
@@ -103,7 +106,7 @@ export function TranscriptListClient() {
       inFlight = true;
       controller = new AbortController();
       try {
-        const response = await getTranscripts({ page, pageSize: transcriptPageSize, search, status, folderId }, controller.signal);
+        const response = await getTranscripts({ page, pageSize: transcriptPageSize, search, status, folderId, reviewProgress }, controller.signal);
         if (!disposed) setData({ items: response.items, pagination: response.pagination });
       } catch (err) {
         if (!(err instanceof DOMException && err.name === "AbortError")) setError(err instanceof Error ? err.message : "Failed to refresh transcripts");
@@ -125,10 +128,10 @@ export function TranscriptListClient() {
       if (timeoutId) clearTimeout(timeoutId);
       controller?.abort();
     };
-  }, [data.items, error, folderId, loading, page, search, status]);
+  }, [data.items, error, folderId, loading, page, search, status, reviewProgress]);
 
-  function navigate(next: { page?: number; search?: string; status?: string; folderId?: string }) {
-    router.push(buildTranscriptListPath({ page, search, status, folderId, ...next }));
+  function navigate(next: { page?: number; search?: string; status?: string; folderId?: string; reviewProgress?: string }) {
+    router.push(buildTranscriptListPath({ page, search, status, folderId, reviewProgress, ...next }));
   }
 
   function retry() {
@@ -137,7 +140,7 @@ export function TranscriptListClient() {
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    navigate({ page: 1, search: searchDraft.trim(), status, folderId });
+    navigate({ page: 1, search: searchDraft.trim(), status, folderId, reviewProgress });
   }
 
   function clearFilters() {
@@ -147,7 +150,7 @@ export function TranscriptListClient() {
   const pagination = data.pagination;
   const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 0;
-  const hasFilters = Boolean(search || status !== "all" || folderId);
+  const hasFilters = Boolean(search || status !== "all" || reviewProgress !== "all" || folderId);
   const showPagination = !loading && !error && pagination && totalPages > 0;
   const isAdmin = auth.user?.role === "admin";
 
@@ -159,7 +162,7 @@ export function TranscriptListClient() {
       />
 
       <div className="mb-4 rounded-lg border border-[var(--accent-transcript-border)] bg-card/70 p-3 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto] lg:items-end">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_auto] lg:items-end">
           <form onSubmit={submitSearch} className="grid min-w-0 gap-2">
             <label htmlFor="transcript-search" className="text-sm font-medium">Search</label>
             <div className="flex gap-2">
@@ -184,7 +187,7 @@ export function TranscriptListClient() {
               <select
                 id="status-filter"
                 value={status}
-                onChange={(event) => navigate({ page: 1, status: event.target.value, search })}
+                onChange={(event) => navigate({ page: 1, status: event.target.value, search, reviewProgress, folderId })}
                 className="h-9 w-full min-w-0 rounded-md border border-input bg-background pl-9 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 {transcriptStatusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -193,8 +196,23 @@ export function TranscriptListClient() {
           </div>
 
           <div className="grid min-w-0 gap-2">
+            <label htmlFor="review-progress-filter" className="text-sm font-medium">Review progress</label>
+            <div className="relative">
+              <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <select
+                id="review-progress-filter"
+                value={reviewProgress}
+                onChange={(event) => navigate({ page: 1, reviewProgress: event.target.value, search, status, folderId })}
+                className="h-9 w-full min-w-0 rounded-md border border-input bg-background pl-9 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {transcriptReviewProgressFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid min-w-0 gap-2">
             <label htmlFor="folder-filter" className="text-sm font-medium">Folder</label>
-            <select id="folder-filter" value={folderId} onChange={(event) => navigate({ page: 1, folderId: event.target.value, search, status })} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+            <select id="folder-filter" value={folderId} onChange={(event) => navigate({ page: 1, folderId: event.target.value, search, status, reviewProgress })} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
               <option value="">All folders</option>
               {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
             </select>
@@ -229,10 +247,10 @@ export function TranscriptListClient() {
           </p>
           <div className="flex gap-2">
             <Button asChild variant="outline" aria-disabled={pagination.page <= 1} className={pagination.page <= 1 ? "pointer-events-none opacity-50" : ""}>
-              <Link href={buildTranscriptListPath({ page: pagination.page - 1, search, status, folderId })}><ChevronLeft className="h-4 w-4" /> Previous</Link>
+              <Link href={buildTranscriptListPath({ page: pagination.page - 1, search, status, folderId, reviewProgress })}><ChevronLeft className="h-4 w-4" /> Previous</Link>
             </Button>
             <Button asChild variant="outline" aria-disabled={!pagination.hasNextPage} className={!pagination.hasNextPage ? "pointer-events-none opacity-50" : ""}>
-              <Link href={buildTranscriptListPath({ page: pagination.page + 1, search, status, folderId })}>Next <ChevronRight className="h-4 w-4" /></Link>
+              <Link href={buildTranscriptListPath({ page: pagination.page + 1, search, status, folderId, reviewProgress })}>Next <ChevronRight className="h-4 w-4" /></Link>
             </Button>
           </div>
         </nav>
@@ -272,7 +290,7 @@ function TranscriptTable({ items, isAdmin, returnTo }: { items: TranscriptSummar
               <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
               <td className="px-4 py-4 text-muted-foreground">{segmentCountLabel(item.segmentCount)}</td>
               <td className="hidden px-4 py-4 2xl:table-cell"><StatusBadge status={item.analysisStatus} /></td>
-              <td className="hidden px-4 py-4 2xl:table-cell"><span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span></td>
+              <td className="hidden px-4 py-4 2xl:table-cell"><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${reviewProgressBadgeClass(item.reviewPercentage)}`}>{reviewProgressLabel(item.reviewedSegmentCount, item.totalSegmentCount, item.reviewPercentage)}</span></td>
               {isAdmin && <td className="hidden min-w-0 px-4 py-4 text-muted-foreground 2xl:table-cell"><div className="truncate" title={ownerLabel(item)}>{ownerLabel(item)}</div></td>}
               <td className="px-4 py-4 text-muted-foreground">{formatTranscriptDate(item.createdAt)}</td>
               <td className="px-4 py-4 text-right"><Button asChild size="sm" variant="outline"><Link href={withReturnTo(transcriptDetailPath(item.jobId), returnTo)}>View</Link></Button></td>
@@ -301,7 +319,7 @@ function TranscriptCards({ items, isAdmin, returnTo }: { items: TranscriptSummar
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2"><StatusBadge status={item.status} /><StatusBadge status={item.analysisStatus} /><span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Transcript review: <AnalysisReviewStatusBadge status={item.analysisReviewStatus} /></span></div>
+            <div className="flex flex-wrap items-center gap-2"><StatusBadge status={item.status} /><StatusBadge status={item.analysisStatus} /><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${reviewProgressBadgeClass(item.reviewPercentage)}`}>{reviewProgressLabel(item.reviewedSegmentCount, item.totalSegmentCount, item.reviewPercentage)}</span></div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div><dt className="text-muted-foreground">Category</dt><dd>{fallbackText(item.category, "Uncategorized")}</dd></div>
               <div><dt className="text-muted-foreground">Segments</dt><dd>{segmentCountLabel(item.segmentCount)}</dd></div>

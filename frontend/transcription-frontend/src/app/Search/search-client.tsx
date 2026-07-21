@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth/auth-provider";
+import { reviewProgressBadgeClass, reviewProgressLabel } from "@/lib/analysis-review-status";
 import { listFolders } from "@/lib/api/folders";
 import { searchTranscripts } from "@/lib/api/search";
 import type { Folder, Pagination, TranscriptSearchResult } from "@/lib/api/types";
@@ -228,7 +229,10 @@ function SearchResults({ items, query, returnTo }: { items: TranscriptSearchResu
                   <p className="mt-1 truncate text-sm text-muted-foreground" title={item.filename}>{item.filename}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{safeValue(item.category, "Uncategorized")}{item.folderName ? ` · Folder: ${item.folderName}` : ""}</p>
                 </div>
-                <StatusBadge status={item.transcriptStatus} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={item.transcriptStatus} />
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${reviewProgressBadgeClass(item.reviewPercentage)}`}>{reviewProgressLabel(item.reviewedSegmentCount, item.totalSegmentCount, item.reviewPercentage)}</span>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">

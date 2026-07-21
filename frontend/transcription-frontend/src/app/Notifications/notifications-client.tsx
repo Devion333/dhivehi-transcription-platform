@@ -108,6 +108,7 @@ export function NotificationsClient() {
 function notificationHref(item: NotificationItem) {
   const jobId = encodeURIComponent(item.resourceId);
   if (item.type === "analysis_completed" || item.type === "analysis_failed") return withReturnTo(`/Transcripts/Analysis?job_id=${jobId}`, "/Notifications");
+  if (item.type === "segment_review_updated" || item.type === "transcript_review_completed" || item.type === "transcript_review_reopened" || item.type === "transcript_bulk_review_updated") return withReturnTo(`/Transcripts/Details?job_id=${jobId}`, "/Notifications");
   return withReturnTo(`/Transcripts/Details?job_id=${jobId}`, "/Notifications");
 }
 

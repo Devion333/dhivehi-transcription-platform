@@ -20,6 +20,7 @@ const (
 	ErrCodeUnsupportedDownloadFormat  = "UNSUPPORTED_DOWNLOAD_FORMAT"
 	ErrCodeInvalidTranscriptTimestamp = "INVALID_TRANSCRIPT_TIMESTAMP"
 	ErrCodeAnalysisNotComplete        = "ANALYSIS_NOT_COMPLETE"
+	ErrCodeReviewNotComplete           = "REVIEW_NOT_COMPLETE"
 	ErrCodeInvalidReviewStatus        = "INVALID_REVIEW_STATUS"
 	ErrCodeInvalidReviewNote          = "INVALID_REVIEW_NOTE"
 	ErrCodeNotificationNotFound       = "NOTIFICATION_NOT_FOUND"

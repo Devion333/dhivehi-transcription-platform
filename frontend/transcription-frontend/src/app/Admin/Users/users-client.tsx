@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { SectionHeading } from "@/components/ui/section-heading";
 import {
   activateAdminUser,
   createAdminUser,
@@ -126,10 +125,6 @@ export function AdminUsersClient() {
   return (
     <PageContainer>
       <PageHeader title="Users" actions={<Button onClick={() => setDialog({ type: "create" })}><Plus className="h-4 w-4" /> Add user</Button>} />
-      <div className="mb-4 rounded-lg border border-[var(--accent-admin-border)] bg-card p-3">
-        <SectionHeading title="Administration" icon={Shield} tone="admin" />
-      </div>
-
       <Card className="mb-5">
         <CardContent className="p-4">
           <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_auto_auto_auto] xl:items-end">

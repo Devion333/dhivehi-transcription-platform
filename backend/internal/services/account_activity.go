@@ -22,8 +22,12 @@ var safeAccountActivityActions = map[string]struct{}{
 	"speaker_name_reset":            {},
 	"analysis.started":              {},
 	"analysis.completed":            {},
-	"analysis_review_updated":       {},
-	"transcript_download_succeeded": {},
+	"analysis_review_updated":        {},
+	"segment_review_updated":         {},
+	"transcript_review_completed":    {},
+	"transcript_review_reopened":     {},
+	"transcript_bulk_review_updated": {},
+	"transcript_download_succeeded":  {},
 	"export.pdf_generated":          {},
 	"password_change_succeeded":     {},
 	"profile_updated":               {},
@@ -143,6 +147,14 @@ func accountActivityText(action string) (string, string) {
 		return "Analysis requested", "You requested generated analysis."
 	case "analysis.completed":
 		return "Analysis completed", "Generated analysis completed."
+	case "segment_review_updated":
+		return "Segment review updated", "You updated a segment review status."
+	case "transcript_review_completed":
+		return "Transcript review completed", "All transcript segments are now reviewed."
+	case "transcript_review_reopened":
+		return "Transcript review reopened", "A previously fully reviewed transcript now has unreviewed segments."
+	case "transcript_bulk_review_updated":
+		return "Bulk review updated", "You performed a bulk review update on transcript segments."
 	case "analysis_review_updated":
 		return "Analysis review updated", "You updated human review status."
 	case "transcript_download_succeeded", "export.pdf_generated":

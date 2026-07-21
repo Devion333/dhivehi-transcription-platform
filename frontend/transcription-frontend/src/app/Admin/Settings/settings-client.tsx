@@ -120,7 +120,7 @@ export function AdminSettingsClient() {
   }
 
   return (
-    <PageContainer className="box-border flex h-full min-h-0 flex-col overflow-hidden">
+    <PageContainer className="box-border flex min-h-0 flex-1 flex-col overflow-hidden pt-8 pb-0">
       <PageHeader
         title="System Settings"
         description={dirty ? "Unsaved changes" : baseline?.updatedAt ? `Last updated ${formatDate(baseline.updatedAt)}` : undefined}
@@ -135,14 +135,23 @@ export function AdminSettingsClient() {
           {warning && <div className="rounded-lg border border-[var(--accent-warning-border)] bg-[var(--accent-warning-bg)] px-4 py-3 text-sm text-[var(--accent-warning)]">{warning}</div>}
           <div className="mt-4 flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
             <MobileSettingsNavigation activeSection={activeSection} onChange={handleSectionChange} />
-            <div className="grid min-h-0 flex-1 gap-8 overflow-hidden lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
-              <aside className="hidden h-full min-h-0 overflow-hidden lg:block">
+            <div className="flex min-h-0 flex-1 gap-8 overflow-hidden">
+              <aside className="hidden w-[280px] shrink-0 lg:block">
                 <SettingsNavigation activeSection={activeSection} onChange={handleSectionChange} />
               </aside>
-              <section className="h-full min-h-0 min-w-0 overflow-hidden">
-                <div ref={contentScrollRef} className="scrollbar-hidden h-full min-h-0 overflow-y-auto overscroll-contain pr-2" tabIndex={0} aria-label="Settings content">
+              <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <div
+                  ref={contentScrollRef}
+                  className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2"
+                  tabIndex={0}
+                  aria-label="Settings content"
+                >
                   <div className="min-w-0">
-                    <SettingsSection section={activeSection} settings={settings} update={update} />
+                    <SettingsSection
+                      section={activeSection}
+                      settings={settings}
+                      update={update}
+                    />
                   </div>
                 </div>
               </section>
@@ -194,7 +203,7 @@ function SettingsSection({ section, settings, update }: { section: SettingsSecti
     return <SectionRoot><Card><CardHeader><CardTitle>Processing</CardTitle></CardHeader><CardContent className="grid gap-6 p-6 md:grid-cols-2"><Check label="Processing enabled" checked={settings.processingEnabled} onChange={(value) => update("processingEnabled", value)} /><Check label="Automatic processing" checked={settings.automaticProcessing} onChange={(value) => update("automaticProcessing", value)} /><NumberField label="Maximum processing retries" value={settings.maximumProcessingRetries} onChange={(value) => update("maximumProcessingRetries", value)} min={0} max={10} /><NumberField label="Retry delay (minutes)" value={settings.retryDelayMinutes} onChange={(value) => update("retryDelayMinutes", value)} min={1} max={1440} /></CardContent></Card></SectionRoot>;
   }
   if (section === "transcripts") {
-    return <SectionRoot><Card><CardHeader><CardTitle>Transcripts and analysis</CardTitle></CardHeader><CardContent className="space-y-8 p-6"><SettingGroup title="Transcript editing"><div className="grid gap-6 md:grid-cols-2"><Check label="Transcript editing enabled" checked={settings.transcriptEditingEnabled} onChange={(value) => update("transcriptEditingEnabled", value)} /><Check label="Speaker renaming enabled" checked={settings.speakerRenamingEnabled} onChange={(value) => update("speakerRenamingEnabled", value)} /></div></SettingGroup><SettingGroup title="Downloads"><div className="grid gap-6 md:grid-cols-2"><Check label="Transcript downloads enabled" checked={settings.transcriptDownloadsEnabled} onChange={(value) => update("transcriptDownloadsEnabled", value)} /><TextField label="Enabled download formats" value={settings.enabledDownloadFormats.join(", ")} onChange={(value) => update("enabledDownloadFormats", list(value))} /></div></SettingGroup><SettingGroup title="Transcript review requirements"><div className="grid gap-6 md:grid-cols-2"><Check label="Require approval before download" checked={settings.requireApprovalBeforeDownload} onChange={(value) => update("requireApprovalBeforeDownload", value)} /><Check label="Require approval before analysis" checked={settings.requireApprovalBeforeAnalysis} onChange={(value) => update("requireApprovalBeforeAnalysis", value)} /></div></SettingGroup><SettingGroup title="Analysis availability"><div className="grid gap-6 md:grid-cols-2"><Check label="Analysis enabled" checked={settings.analysisEnabled} onChange={(value) => update("analysisEnabled", value)} /><Check label="Automatic analysis" checked={settings.automaticAnalysis} onChange={(value) => update("automaticAnalysis", value)} /></div></SettingGroup><SettingGroup title="Analysis outputs"><TextField label="Enabled analysis outputs" value={settings.enabledAnalysisOutputs.join(", ")} onChange={(value) => update("enabledAnalysisOutputs", list(value))} /></SettingGroup><SettingGroup title="Analysis permissions"><Check label="Users can rerun analysis" checked={settings.usersCanRerunAnalysis} onChange={(value) => update("usersCanRerunAnalysis", value)} /></SettingGroup></CardContent></Card></SectionRoot>;
+    return <SectionRoot><Card><CardHeader><CardTitle>Transcripts and analysis</CardTitle></CardHeader><CardContent className="space-y-8 p-6"><SettingGroup title="Transcript editing"><div className="grid gap-6 md:grid-cols-2"><Check label="Transcript editing enabled" checked={settings.transcriptEditingEnabled} onChange={(value) => update("transcriptEditingEnabled", value)} /><Check label="Speaker renaming enabled" checked={settings.speakerRenamingEnabled} onChange={(value) => update("speakerRenamingEnabled", value)} /></div></SettingGroup><SettingGroup title="Downloads"><div className="grid gap-6 md:grid-cols-2"><Check label="Transcript downloads enabled" checked={settings.transcriptDownloadsEnabled} onChange={(value) => update("transcriptDownloadsEnabled", value)} /><TextField label="Enabled download formats" value={settings.enabledDownloadFormats.join(", ")} onChange={(value) => update("enabledDownloadFormats", list(value))} /></div></SettingGroup><SettingGroup title="Transcript review requirements"><div className="grid gap-6 md:grid-cols-2"><Check label="Require full review before download" checked={settings.requireFullReviewBeforeDownload} onChange={(value) => update("requireFullReviewBeforeDownload", value)} /><Check label="Require full review before analysis" checked={settings.requireFullReviewBeforeAnalysis} onChange={(value) => update("requireFullReviewBeforeAnalysis", value)} /></div></SettingGroup><SettingGroup title="Analysis availability"><div className="grid gap-6 md:grid-cols-2"><Check label="Analysis enabled" checked={settings.analysisEnabled} onChange={(value) => update("analysisEnabled", value)} /><Check label="Automatic analysis" checked={settings.automaticAnalysis} onChange={(value) => update("automaticAnalysis", value)} /></div></SettingGroup><SettingGroup title="Analysis outputs"><TextField label="Enabled analysis outputs" value={settings.enabledAnalysisOutputs.join(", ")} onChange={(value) => update("enabledAnalysisOutputs", list(value))} /></SettingGroup><SettingGroup title="Analysis permissions"><Check label="Users can rerun analysis" checked={settings.usersCanRerunAnalysis} onChange={(value) => update("usersCanRerunAnalysis", value)} /></SettingGroup></CardContent></Card></SectionRoot>;
   }
   if (section === "security") {
     return <SectionRoot><Card><CardHeader><CardTitle>Security</CardTitle></CardHeader><CardContent className="grid gap-6 p-6 md:grid-cols-2 xl:grid-cols-3"><NumberField label="Session duration (minutes)" value={settings.sessionDurationMinutes} onChange={(value) => update("sessionDurationMinutes", value)} min={15} max={10080} /><NumberField label="Maximum failed login attempts" value={settings.maximumFailedLoginAttempts} onChange={(value) => update("maximumFailedLoginAttempts", value)} min={1} max={20} /><NumberField label="Account lockout (minutes)" value={settings.accountLockoutMinutes} onChange={(value) => update("accountLockoutMinutes", value)} min={1} max={1440} /></CardContent></Card></SectionRoot>;

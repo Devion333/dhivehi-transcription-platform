@@ -97,9 +97,11 @@ func APIAnalyseTranscript(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	if settings.RequireApprovalBeforeAnalysis && services.MapAnalysisReview(parent.Payload).Status != "approved" {
-		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Transcript review approval is required before analysis", nil)
-		return
+	if settings.RequireFullReviewBeforeAnalysis {
+		if err := services.RequireFullReview(transcriptAccessScope(c), jobID); err != nil {
+			writeServiceError(c, err)
+			return
+		}
 	}
 	if !settings.UsersCanRerunAnalysis && services.MapAnalysis(parent.Payload).Status == "complete" {
 		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Analysis reruns are disabled", nil)

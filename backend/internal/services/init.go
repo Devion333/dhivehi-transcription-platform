@@ -60,6 +60,9 @@ func initDatabase(ctx context.Context) error {
 	if err := RunMigrations(ctx, Database); err != nil {
 		return err
 	}
+	if err := RunDataMigrations(ctx, Database); err != nil {
+		return err
+	}
 	if err := BootstrapInitialAdmin(ctx); err != nil {
 		return err
 	}
