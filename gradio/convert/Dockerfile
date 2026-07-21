@@ -14,5 +14,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY convert.py .
-
+COPY worker_heartbeat.py .
 CMD ["python", "-u", "convert.py"]
