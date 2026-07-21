@@ -302,7 +302,7 @@ export default function UploadTranscriptPage() {
                     placeholder="Enter reference number"
                     className="h-10"
                   />
-                  <FieldHint current={referenceNumber.length} max={referenceNumberMaxLength} error={metadataErrors.referenceNumber} />
+                  <FieldHint current={referenceNumber.length} max={referenceNumberMaxLength} error={submitAttempted ? metadataErrors.referenceNumber : undefined} />
                 </div>
 
                 <div className="space-y-2">
@@ -316,10 +316,10 @@ export default function UploadTranscriptPage() {
                   >
                     {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
-                  {metadataErrors.category ? <p className="text-xs text-destructive">{metadataErrors.category}</p> : <div className="h-4" aria-hidden="true" />}
+                  {submitAttempted && metadataErrors.category ? <p className="text-xs text-destructive">{metadataErrors.category}</p> : <div className="h-4" aria-hidden="true" />}
                 </div>
 
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label htmlFor="requestedSpeakers">Expected speakers <span className="text-muted-foreground">(optional)</span></Label>
                 <Input
                   id="requestedSpeakers"
@@ -329,11 +329,12 @@ export default function UploadTranscriptPage() {
                   value={requestedSpeakers}
                   onChange={(event) => setRequestedSpeakers(Number(event.target.value))}
                   disabled={state === "uploading" || maintenanceUploadDisabled || uploadsDisabled}
+                  className="h-10"
                 />
-                {metadataErrors.requestedSpeakers && <p className="text-xs text-destructive">{metadataErrors.requestedSpeakers}</p>}
+                {submitAttempted && metadataErrors.requestedSpeakers && <p className="text-xs text-destructive">{metadataErrors.requestedSpeakers}</p>}
               </div>
 
-              <div className="grid gap-2 md:col-span-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="notes">Notes <span className="text-muted-foreground">(optional)</span></Label>
                 <Textarea
                   id="notes"
@@ -344,7 +345,7 @@ export default function UploadTranscriptPage() {
                   placeholder="Optional reviewer notes"
                   rows={5}
                 />
-                <FieldHint current={notes.length} max={notesMaxLength} error={metadataErrors.notes} />
+                <FieldHint current={notes.length} max={notesMaxLength} error={metadataErrors.notes} showOptional={false} />
               </div>
               </div>
 
@@ -411,10 +412,10 @@ function ValidationList({ items, tone }: { items: string[]; tone: "error" | "war
   );
 }
 
-function FieldHint({ current, max, error }: { current: number; max: number; error?: string }) {
+function FieldHint({ current, max, error, showOptional = true }: { current: number; max: number; error?: string; showOptional?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 text-xs">
-      <p className={error ? "text-destructive" : "text-muted-foreground"}>{error ?? "Optional"}</p>
+      <p className={error ? "text-destructive" : "text-muted-foreground"}>{error ?? (showOptional ? "Optional" : "")}</p>
       <p className="shrink-0 text-muted-foreground">{current}/{max}</p>
     </div>
   );

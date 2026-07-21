@@ -364,6 +364,9 @@ type TranscriptSummary struct {
 	UpdatedAt            string `json:"updatedAt"`
 	AnalysisStatus       string `json:"analysisStatus"`
 	AnalysisReviewStatus string `json:"analysisReviewStatus"`
+	ReviewedSegmentCount int    `json:"reviewedSegmentCount"`
+	TotalSegmentCount    int    `json:"totalSegmentCount"`
+	ReviewPercentage     int    `json:"reviewPercentage"`
 	FolderID             string `json:"folderId"`
 	FolderName           string `json:"folderName"`
 	OwnerUserID          string `json:"ownerUserId"`
@@ -380,28 +383,34 @@ type Segment struct {
 	TranscriptText string  `json:"transcriptText"`
 	Status         string  `json:"status"`
 	MediaURL       string  `json:"mediaUrl"`
+	IsReviewed     bool    `json:"isReviewed"`
+	ReviewedBy     *string `json:"reviewedBy"`
+	ReviewedAt     *string `json:"reviewedAt"`
 }
 
 type TranscriptDetail struct {
-	JobID            string            `json:"jobId"`
-	Filename         string            `json:"filename"`
-	Category         string            `json:"category"`
-	ReferenceNumber  string            `json:"referenceNumber"`
-	Notes            string            `json:"notes"`
-	Status           string            `json:"status"`
-	Speakers         int               `json:"speakers"`
-	SegmentCount     int               `json:"segmentCount"`
-	MediaURL         string            `json:"mediaUrl"`
-	CreatedAt        string            `json:"createdAt"`
-	UpdatedAt        string            `json:"updatedAt"`
-	AnalysisStatus   string            `json:"analysisStatus"`
-	FolderID         string            `json:"folderId"`
-	FolderName       string            `json:"folderName"`
-	OwnerUserID      string            `json:"ownerUserId"`
-	OwnerDisplayName string            `json:"ownerDisplayName"`
-	OwnerEmail       string            `json:"ownerEmail"`
-	SpeakerNames     map[string]string `json:"speakerNames"`
-	Segments         []Segment         `json:"segments"`
+	JobID                string            `json:"jobId"`
+	Filename             string            `json:"filename"`
+	Category             string            `json:"category"`
+	ReferenceNumber      string            `json:"referenceNumber"`
+	Notes                string            `json:"notes"`
+	Status               string            `json:"status"`
+	Speakers             int               `json:"speakers"`
+	SegmentCount         int               `json:"segmentCount"`
+	MediaURL             string            `json:"mediaUrl"`
+	CreatedAt            string            `json:"createdAt"`
+	UpdatedAt            string            `json:"updatedAt"`
+	AnalysisStatus       string            `json:"analysisStatus"`
+	FolderID             string            `json:"folderId"`
+	FolderName           string            `json:"folderName"`
+	OwnerUserID          string            `json:"ownerUserId"`
+	OwnerDisplayName     string            `json:"ownerDisplayName"`
+	OwnerEmail           string            `json:"ownerEmail"`
+	SpeakerNames         map[string]string `json:"speakerNames"`
+	Segments             []Segment         `json:"segments"`
+	ReviewedSegmentCount int               `json:"reviewedSegmentCount"`
+	TotalSegmentCount    int               `json:"totalSegmentCount"`
+	ReviewPercentage     int               `json:"reviewPercentage"`
 }
 
 type TranscriptStatusResponse struct {
@@ -449,6 +458,31 @@ type AnalysisReviewRequest struct {
 	Note   string `json:"note"`
 }
 
+type SegmentReviewRequest struct {
+	IsReviewed bool `json:"isReviewed"`
+}
+
+type SegmentReviewResponse struct {
+	SegmentID            string  `json:"segmentId"`
+	IsReviewed           bool    `json:"isReviewed"`
+	ReviewedBy           *string `json:"reviewedBy"`
+	ReviewedAt           *string `json:"reviewedAt"`
+	ReviewedSegmentCount int     `json:"reviewedSegmentCount"`
+	TotalSegmentCount    int     `json:"totalSegmentCount"`
+	ReviewPercentage     int     `json:"reviewPercentage"`
+}
+
+type BulkReviewRequest struct {
+	IsReviewed bool `json:"isReviewed"`
+}
+
+type BulkReviewResponse struct {
+	ReviewedSegmentCount int    `json:"reviewedSegmentCount"`
+	TotalSegmentCount    int    `json:"totalSegmentCount"`
+	ReviewPercentage     int    `json:"reviewPercentage"`
+	Message              string `json:"message"`
+}
+
 type AnalysisReviewResponse struct {
 	Review AnalysisReview `json:"review"`
 }
@@ -484,6 +518,9 @@ type TranscriptSearchResult struct {
 	TranscriptText     string  `json:"transcriptText,omitempty"`
 	MatchedText        string  `json:"matchedText"`
 	MatchExcerpt       string  `json:"matchExcerpt"`
+	ReviewedSegmentCount int   `json:"reviewedSegmentCount"`
+	TotalSegmentCount    int   `json:"totalSegmentCount"`
+	ReviewPercentage     int   `json:"reviewPercentage"`
 }
 
 type TranscriptDownloadSegment struct {

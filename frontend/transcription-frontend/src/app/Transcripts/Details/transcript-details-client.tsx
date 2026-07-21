@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, BarChart3, Check, ChevronDown, Edit3, FileDown, FileText, Folder as FolderIcon, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Trash2, UserRound, Volume1, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, Check, CheckSquare, ChevronDown, Edit3, FileDown, FileText, Folder as FolderIcon, Loader2, Pause, Play, RefreshCcw, RotateCcw, RotateCw, Save, Square, Trash2, UserRound, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -9,7 +9,8 @@ import { PageContainer } from "@/components/app/page-container";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
-import { AnalysisReviewStatusBadge } from "@/components/app/analysis-review-status-badge";
+
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { PdfExportDialog } from "@/components/transcripts/pdf-export-dialog";
 import { TranscriptReassignmentDialog } from "@/components/transcripts/transcript-reassignment-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -22,11 +23,12 @@ import { useTranscriptStatusPolling } from "@/hooks/use-transcript-status-pollin
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { addTranscriptToFolder, createFolder, listFolders, removeTranscriptFromFolder } from "@/lib/api/folders";
-import { deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateAnalysisReview, updateSegment, updateSpeakerName } from "@/lib/api/transcripts";
+import { bulkUpdateSegmentReview, deleteTranscript, downloadTranscript, getTranscript, getTranscriptAnalysis, getTranscriptDeletionPreview, updateSegment, updateSegmentReview, updateSpeakerName } from "@/lib/api/transcripts";
 import { ApiError } from "@/lib/api/client";
-import type { AnalysisReviewStatus, Folder, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
+import type { Folder, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDetail, TranscriptSegment, TranscriptStatusResponse } from "@/lib/api/types";
 import { getSafeInternalReturnPath, withReturnTo } from "@/lib/navigation-utils";
 import { sectionToneClasses } from "@/lib/section-styles";
+import { reviewProgressBadgeClass, reviewProgressLabel, reviewProgressTextClass } from "@/lib/analysis-review-status";
 import { hasTranscriptReference, transcriptIdentityTitle } from "@/lib/transcript-identity";
 import { transcriptStatusLabel } from "@/lib/transcript-status";
 import {
@@ -63,7 +65,6 @@ export function TranscriptDetailsClient() {
 	const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
-  const reviewParam = searchParams.get("review");
   const targetSegmentId = (searchParams.get("segment_id") ?? "").trim();
   const returnTo = getSafeInternalReturnPath(searchParams.get("returnTo"), "/Transcripts");
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -97,14 +98,12 @@ export function TranscriptDetailsClient() {
   const [downloadLoading, setDownloadLoading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const [exportAnalysis, setExportAnalysis] = React.useState<TranscriptAnalysis | null>(null);
-  const [reviewLoading, setReviewLoading] = React.useState(false);
-  const [reviewSaving, setReviewSaving] = React.useState(false);
-  const [reviewStatus, setReviewStatus] = React.useState<AnalysisReviewStatus>("unreviewed");
-  const [reviewNote, setReviewNote] = React.useState("");
-  const [reviewOpen, setReviewOpen] = React.useState(false);
-  const [reviewMessage, setReviewMessage] = React.useState<string | null>(null);
-  const [reviewError, setReviewError] = React.useState<string | null>(null);
+  const [segmentReviewSaving, setSegmentReviewSaving] = React.useState(false);
+  const [segmentReviewError, setSegmentReviewError] = React.useState<string | null>(null);
+  const [confirmBulkAction, setConfirmBulkAction] = React.useState<boolean | null>(null);
   const reloadedReadyRef = React.useRef(false);
+  const reviewSentinelRef = React.useRef<HTMLDivElement>(null);
+  const [stickyReview, setStickyReview] = React.useState(false);
 
   React.useEffect(() => {
     if (!jobId) return;
@@ -130,11 +129,6 @@ export function TranscriptDetailsClient() {
 				setReassignOpen(false);
 				setDownloadError(null);
 				setExportAnalysis(null);
-        setReviewStatus(response.analysisReviewStatus ?? "unreviewed");
-        setReviewNote("");
-        setReviewOpen(reviewParam === "open");
-        setReviewMessage(null);
-        setReviewError(null);
 			})
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -144,20 +138,16 @@ export function TranscriptDetailsClient() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [jobId, retryToken, reviewParam]);
+  }, [jobId, retryToken]);
 
   React.useEffect(() => {
     if (!detail || detail.analysisStatus !== "complete") return;
     const controller = new AbortController();
-    setReviewLoading(true);
     getTranscriptAnalysis(detail.jobId, controller.signal)
       .then((analysis) => {
         setExportAnalysis(analysis);
-        setReviewStatus(analysis.review?.status ?? detail.analysisReviewStatus ?? "unreviewed");
-        setReviewNote(analysis.review?.note ?? "");
       })
-      .catch(() => undefined)
-      .finally(() => { if (!controller.signal.aborted) setReviewLoading(false); });
+      .catch(() => undefined);
     return () => controller.abort();
   }, [detail]);
 
@@ -234,6 +224,19 @@ export function TranscriptDetailsClient() {
   React.useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;
   }, [playbackRate]);
+
+  React.useEffect(() => {
+    const el = reviewSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setStickyReview(!entry.isIntersecting);
+      },
+      { threshold: 0, rootMargin: "-1px 0px 0px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [detail?.reviewPercentage]);
 
   if (!jobId) {
     return (
@@ -390,22 +393,70 @@ export function TranscriptDetailsClient() {
 		}
 	}
 
-  async function saveTranscriptReview(nextStatus: AnalysisReviewStatus) {
-    if (!detail || reviewSaving || detail.analysisStatus !== "complete") return;
-    setReviewSaving(true);
-    setReviewError(null);
-    setReviewMessage(null);
+  async function toggleSegmentReview(segment: TranscriptSegment) {
+    if (!detail || segmentReviewSaving) return;
+    setSegmentReviewSaving(true);
+    setSegmentReviewError(null);
     try {
-      const response = await updateAnalysisReview(detail.jobId, { status: nextStatus, note: reviewNote });
-      setReviewStatus(response.review.status);
-      setReviewNote(response.review.note ?? "");
-      setExportAnalysis((current) => current ? { ...current, review: response.review } : current);
-      setDetail((current) => current ? { ...current, analysisReviewStatus: response.review.status } : current);
-      setReviewMessage("Transcript review saved.");
+      const response = await updateSegmentReview(detail.jobId, segment.id, !segment.isReviewed);
+      setDetail((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          reviewedSegmentCount: response.reviewedSegmentCount,
+          totalSegmentCount: response.totalSegmentCount,
+          reviewPercentage: response.reviewPercentage,
+          segments: current.segments.map((s) =>
+            s.id === segment.id
+              ? {
+                  ...s,
+                  isReviewed: response.isReviewed,
+                  reviewedBy: response.reviewedBy,
+                  reviewedAt: response.reviewedAt,
+                }
+              : s
+          ),
+        };
+      });
     } catch (err) {
-      setReviewError(err instanceof Error ? err.message : "Transcript review could not be saved.");
+      if (err instanceof ApiError && err.code === "maintenance_mode") {
+        setSegmentReviewError("Segment review is temporarily disabled during maintenance mode.");
+      } else {
+        setSegmentReviewError(err instanceof Error ? err.message : "Failed to update segment review");
+      }
     } finally {
-      setReviewSaving(false);
+      setSegmentReviewSaving(false);
+    }
+  }
+
+  async function bulkReview(isReviewed: boolean) {
+    if (!detail || segmentReviewSaving) return;
+    setSegmentReviewSaving(true);
+    setSegmentReviewError(null);
+    try {
+      const response = await bulkUpdateSegmentReview(detail.jobId, isReviewed);
+      setDetail((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          reviewedSegmentCount: response.reviewedSegmentCount,
+          totalSegmentCount: response.totalSegmentCount,
+          reviewPercentage: response.reviewPercentage,
+          segments: current.segments.map((s) => {
+            const bulkReviewedBy = isReviewed ? (auth.user?.id ?? "") : "";
+            const bulkReviewedAt = isReviewed ? new Date().toISOString() : "";
+            return { ...s, isReviewed, reviewedBy: bulkReviewedBy, reviewedAt: bulkReviewedAt };
+          }),
+        };
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "maintenance_mode") {
+        setSegmentReviewError("Bulk review is temporarily disabled during maintenance mode.");
+      } else {
+        setSegmentReviewError(err instanceof Error ? err.message : "Failed to bulk update review");
+      }
+    } finally {
+      setSegmentReviewSaving(false);
     }
   }
 
@@ -474,24 +525,34 @@ export function TranscriptDetailsClient() {
       </div>
       </header>
 
-      {transcriptReady && (
-        <div className="mb-4">
-          <TranscriptReviewCard
-            open={reviewOpen}
-            onOpenChange={setReviewOpen}
-            status={reviewStatus}
-            note={reviewNote}
-            analysis={exportAnalysis}
-            loading={reviewLoading}
-            saving={reviewSaving}
-            editable={detail.analysisStatus === "complete" && Boolean(exportAnalysis) && maintenance.canModifyDuringMaintenance}
-            message={reviewMessage}
-            error={reviewError}
-            onNote={setReviewNote}
-            onSave={(status) => void saveTranscriptReview(status)}
+      {transcriptReady && detail.reviewPercentage != null && (
+        <>
+          <div
+            className={cn(
+              "sticky top-0 z-10 mb-4 transition-all duration-150 ease-out",
+              stickyReview
+                ? "translate-y-0 opacity-100"
+                : "pointer-events-none -translate-y-2 opacity-0",
+            )}
+          >
+            <div className="rounded-xl border bg-card p-3 text-sm shadow-sm">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-[var(--accent-success)] transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(0, Math.round(detail.reviewPercentage)))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <div ref={reviewSentinelRef} />
+          <SegmentReviewProgressBar
+            reviewedSegmentCount={detail.reviewedSegmentCount ?? 0}
+            totalSegmentCount={detail.totalSegmentCount ?? detail.segmentCount}
+            reviewPercentage={detail.reviewPercentage}
           />
-        </div>
+        </>
       )}
+      {segmentReviewError && <p className="mb-3 text-sm text-destructive">{segmentReviewError}</p>}
 
       <AudioCard
         mediaUrl={detail.mediaUrl}
@@ -515,10 +576,20 @@ export function TranscriptDetailsClient() {
 
       <div className="mt-8 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         <section className="min-w-0 space-y-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <SectionHeading title="Transcript" description={`${detail.segments.length} segment${detail.segments.length === 1 ? "" : "s"}`} icon={FileText} tone="transcript" />
             </div>
+            {transcriptReady && maintenance.canModifyDuringMaintenance && detail.segments.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={segmentReviewSaving} onClick={() => setConfirmBulkAction(true)}>
+                  <CheckSquare className="h-3.5 w-3.5" /> Mark all reviewed
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={segmentReviewSaving} onClick={() => setConfirmBulkAction(false)}>
+                  <Square className="h-3.5 w-3.5" /> Mark all not reviewed
+                </Button>
+              </div>
+            )}
           </div>
           {isProcessingStatus(currentStatus) && (
             <Card className={sectionToneClasses.warning.panel}>
@@ -549,11 +620,14 @@ export function TranscriptDetailsClient() {
                   refCallback={(element) => { segmentRefs.current[segment.id] = element; }}
                   audioAvailable={Boolean(detail.mediaUrl) && !audioError}
                   editable={transcriptReady && maintenance.canModifyDuringMaintenance}
+                  reviewable={transcriptReady && maintenance.canModifyDuringMaintenance}
+                  segmentReviewSaving={segmentReviewSaving}
                   onPlay={() => playSegment(segment)}
                   onEdit={() => startEdit(segment)}
                   onCancel={() => cancelEdit(segment)}
                   onSave={() => saveEdit(segment)}
                   onDraft={(draft) => setEdits((current) => ({ ...current, [segment.id]: { ...(current[segment.id] ?? initialEditState(segment.transcriptText)), draft, saved: false, error: null } }))}
+                  onToggleReview={() => void toggleSegmentReview(segment)}
                 />
               ))}
             </div>
@@ -597,6 +671,23 @@ export function TranscriptDetailsClient() {
         open={reassignOpen}
         onOpenChange={setReassignOpen}
         onReassigned={() => setRetryToken((value) => value + 1)}
+      />
+      <ConfirmDialog
+        open={confirmBulkAction !== null}
+        title={confirmBulkAction ? "Mark all segments as reviewed?" : "Mark all segments as not reviewed?"}
+        description={
+          confirmBulkAction != null && detail
+            ? `This will ${confirmBulkAction ? "mark all " : "remove the reviewed state from all "}${detail.segments.length} segment${detail.segments.length === 1 ? "" : "s"} in reference ${detail.referenceNumber} as ${confirmBulkAction ? "reviewed" : "not reviewed"}.`
+            : undefined
+        }
+        confirmLabel={confirmBulkAction ? "Mark reviewed" : "Mark not reviewed"}
+        cancelLabel="Cancel"
+        destructive={confirmBulkAction === false}
+        onConfirm={() => {
+          setConfirmBulkAction(null);
+          void bulkReview(confirmBulkAction!);
+        }}
+        onCancel={() => setConfirmBulkAction(null)}
       />
     </PageContainer>
   );
@@ -715,56 +806,21 @@ function analysisActionLabel(status: string) {
   return "Analyse transcript";
 }
 
-function TranscriptReviewCard({ open, onOpenChange, status, note, analysis, loading, saving, editable, message, error, onNote, onSave }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  status: AnalysisReviewStatus;
-  note: string;
-  analysis: TranscriptAnalysis | null;
-  loading: boolean;
-  saving: boolean;
-  editable: boolean;
-  message: string | null;
-  error: string | null;
-  onNote: (note: string) => void;
-  onSave: (status: AnalysisReviewStatus) => void;
-}) {
-  const review = analysis?.review;
+function SegmentReviewProgressBar({ reviewedSegmentCount, totalSegmentCount, reviewPercentage }: { reviewedSegmentCount: number; totalSegmentCount: number; reviewPercentage: number }) {
+  const label = reviewProgressLabel(reviewedSegmentCount, totalSegmentCount, reviewPercentage);
+  const badgeClass = reviewProgressBadgeClass(reviewPercentage);
+  const textClass = reviewProgressTextClass(reviewPercentage);
+  const pct = Math.min(100, Math.max(0, Math.round(reviewPercentage)));
   return (
-    <section id="transcript-review" className="rounded-xl border bg-card text-sm">
-      <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-expanded={open} onClick={() => onOpenChange(!open)}>
-        <span className="flex min-w-0 flex-wrap items-center gap-2"><span className="font-semibold">Transcript review</span><AnalysisReviewStatusBadge status={status} /></span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="space-y-4 border-t px-4 py-4">
-          <p className="text-muted-foreground">Record whether the transcript has been checked by a person for accuracy and completeness.</p>
-          <div className="flex flex-wrap items-center gap-2"><span className="text-muted-foreground">Status:</span><AnalysisReviewStatusBadge status={status} /></div>
-          {review?.reviewedByDisplayName && <PreviewRow label="Reviewed by" value={review.reviewedByDisplayName} />}
-          {review?.reviewedAt && <PreviewRow label="Reviewed" value={formatDetailDate(review.reviewedAt)} />}
-          {review?.note && <div><p className="text-muted-foreground">Reviewer note</p><p className="mt-1 whitespace-pre-wrap">{review.note}</p></div>}
-          {!editable && <p className="rounded-md border bg-muted/30 p-3 text-muted-foreground">Transcript review editing is available after analysis has completed.</p>}
-          {editable && (
-            <>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant={status === "reviewed" ? "default" : "outline"} disabled={saving} onClick={() => onSave("reviewed")}>{saving && status === "reviewed" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Mark reviewed</Button>
-                <Button type="button" size="sm" variant={status === "approved" ? "default" : "outline"} disabled={saving} onClick={() => onSave("approved")}>Approve</Button>
-                <Button type="button" size="sm" variant={status === "rejected" ? "destructive" : "outline"} disabled={saving} onClick={() => onSave("rejected")}>Reject</Button>
-                {status !== "unreviewed" && <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => onSave("unreviewed")}>Reset to unreviewed</Button>}
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-muted-foreground" htmlFor="transcript-review-note">Optional reviewer note</label>
-                <Textarea id="transcript-review-note" value={note} onChange={(event) => onNote(event.target.value)} disabled={saving} maxLength={500} placeholder="Optional reviewer note" />
-              </div>
-              <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => onSave(status)}>Save note</Button>
-            </>
-          )}
-          {loading && <p className="text-muted-foreground">Loading review details...</p>}
-          {message && <p className="text-[var(--accent-success)]">{message}</p>}
-          {error && <p className="text-destructive">{error}</p>}
-        </div>
-      )}
-    </section>
+    <div className="mb-4 rounded-xl border bg-card p-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-semibold">Segment Review Progress</span>
+        <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-medium", badgeClass, textClass)}>{label}</span>
+      </div>
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-[var(--accent-success)] transition-all duration-500" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -1099,7 +1155,7 @@ function AudioCard({ mediaUrl, playing, audioReady, audioError, currentTime, dur
   );
 }
 
-function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, highlighted, edit, audioAvailable, editable, refCallback, onPlay, onEdit, onCancel, onSave, onDraft }: {
+function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, highlighted, edit, audioAvailable, editable, reviewable, segmentReviewSaving, refCallback, onPlay, onEdit, onCancel, onSave, onDraft, onToggleReview }: {
   segment: TranscriptSegment;
   speakerNames: Record<string, string>;
   speakerIndex: number;
@@ -1109,12 +1165,15 @@ function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, high
   edit: SegmentEditState;
   audioAvailable: boolean;
   editable: boolean;
+  reviewable: boolean;
+  segmentReviewSaving: boolean;
   refCallback: (element: HTMLDivElement | null) => void;
   onPlay: () => void;
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => void;
   onDraft: (value: string) => void;
+  onToggleReview: () => void;
 }) {
   const textProps = transcriptTextProps(edit.editing ? edit.draft : segment.transcriptText);
   const displayName = getSpeakerDisplayName(segment.speaker, speakerNames);
@@ -1126,6 +1185,7 @@ function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, high
         "group relative overflow-visible rounded-xl bg-muted/25 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4",
         active && "bg-[var(--accent-transcript-bg)] ring-1 ring-[var(--accent-transcript-border)]",
         highlighted && "ring-2 ring-[var(--accent-warning-border)] ring-offset-2 ring-offset-background",
+        segment.isReviewed && "border-l-4 border-l-[var(--accent-success)]",
       )}
     >
       <div className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-3">
@@ -1151,6 +1211,12 @@ function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, high
           <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">{formatTimestamp(segment.startTime)} - {formatTimestamp(segment.endTime)} · {formatDuration(segment.startTime, segment.endTime)}</p>
             <div className="flex flex-wrap items-center gap-2">
+              {reviewable && (
+                <Button type="button" variant="ghost" size="sm" onClick={onToggleReview} disabled={segmentReviewSaving} className={cn("text-xs", segment.isReviewed ? "text-[var(--accent-success)]" : "text-muted-foreground")}>
+                  {segment.isReviewed ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                  {segment.isReviewed ? "Reviewed" : "Mark reviewed"}
+                </Button>
+              )}
               <StatusBadge status={segment.status} />
               <Button type="button" variant="outline" size="sm" onClick={onPlay} disabled={!audioAvailable}><Play className="h-4 w-4" /> Play segment</Button>
               {edit.editing ? (

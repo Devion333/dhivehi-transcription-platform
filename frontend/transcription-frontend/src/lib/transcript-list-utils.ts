@@ -23,22 +23,37 @@ export function normalizeStatusParam(value: string | null | undefined) {
   return transcriptStatusFilters.some((option) => option.value === status) ? status : "all";
 }
 
+export const transcriptReviewProgressFilters = [
+  { value: "all", label: "All reviews" },
+  { value: "not_reviewed", label: "Not reviewed" },
+  { value: "in_progress", label: "In progress" },
+  { value: "fully_reviewed", label: "Fully reviewed" },
+] as const;
+
+export function normalizeReviewProgressParam(value: string | null | undefined) {
+  const rp = (value ?? "all").trim();
+  return transcriptReviewProgressFilters.some((option) => option.value === rp) ? rp : "all";
+}
+
 export function buildTranscriptListPath({
   page = 1,
   search = "",
   status = "all",
   folderId = "",
+  reviewProgress = "all",
 }: {
   page?: number;
   search?: string;
   status?: string;
   folderId?: string;
+  reviewProgress?: string;
 }) {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
   if (search.trim()) params.set("search", search.trim());
   if (status && status !== "all") params.set("status", status);
   if (folderId.trim()) params.set("folderId", folderId.trim());
+  if (reviewProgress && reviewProgress !== "all") params.set("reviewProgress", reviewProgress);
   const query = params.toString();
   return `/Transcripts${query ? `?${query}` : ""}`;
 }

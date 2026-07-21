@@ -1,6 +1,6 @@
 import { request } from "./client";
 import { BACKEND_URL } from "@/config";
-import type { AnalysisReviewResponse, AnalysisReviewStatus, AnalysisTriggerResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptReassignmentOptionsResponse, TranscriptReassignmentResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
+import type { AnalysisReviewResponse, AnalysisReviewStatus, AnalysisTriggerResponse, BulkReviewResponse, SegmentReviewResponse, SegmentUpdateResponse, SpeakerRenameResponse, TranscriptAnalysis, TranscriptDeletionPreview, TranscriptDeletionResponse, TranscriptDetail, TranscriptListResponse, TranscriptReassignmentOptionsResponse, TranscriptReassignmentResponse, TranscriptSegment, TranscriptStatusResponse } from "./types";
 
 export type TranscriptListParams = {
   page?: number;
@@ -8,6 +8,7 @@ export type TranscriptListParams = {
   search?: string;
   status?: string;
   folderId?: string;
+  reviewProgress?: string;
 };
 
 export function transcriptListQuery(params: TranscriptListParams = {}) {
@@ -17,6 +18,7 @@ export function transcriptListQuery(params: TranscriptListParams = {}) {
   if (params.search?.trim()) searchParams.set("search", params.search.trim());
   if (params.status?.trim() && params.status !== "all") searchParams.set("status", params.status.trim());
   if (params.folderId?.trim()) searchParams.set("folderId", params.folderId.trim());
+  if (params.reviewProgress?.trim()) searchParams.set("reviewProgress", params.reviewProgress.trim());
   return searchParams.toString();
 }
 
@@ -75,6 +77,47 @@ export function updateAnalysisReview(jobId: string, input: { status: AnalysisRev
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status: input.status, note: input.note ?? "" }),
   });
+}
+
+export function updateSegmentReview(
+  jobId: string,
+  segmentId: string,
+  isReviewed: boolean,
+  signal?: AbortSignal,
+): Promise<SegmentReviewResponse> {
+  const trimmedJobId = jobId.trim();
+  const trimmedSegmentId = segmentId.trim();
+  if (!trimmedJobId) throw new Error("A transcript job ID is required");
+  if (!trimmedSegmentId) throw new Error("A segment ID is required");
+
+  return request<SegmentReviewResponse>(
+    `/api/transcripts/${encodeURIComponent(trimmedJobId)}/segments/${encodeURIComponent(trimmedSegmentId)}/review`,
+    {
+      method: "PATCH",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isReviewed }),
+    },
+  );
+}
+
+export function bulkUpdateSegmentReview(
+  jobId: string,
+  isReviewed: boolean,
+  signal?: AbortSignal,
+): Promise<BulkReviewResponse> {
+  const trimmedJobId = jobId.trim();
+  if (!trimmedJobId) throw new Error("A transcript job ID is required");
+
+  return request<BulkReviewResponse>(
+    `/api/transcripts/${encodeURIComponent(trimmedJobId)}/segments/review`,
+    {
+      method: "POST",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isReviewed }),
+    },
+  );
 }
 
 export function updateSegment(

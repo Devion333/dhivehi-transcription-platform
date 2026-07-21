@@ -71,7 +71,7 @@ func APIListTranscripts(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	page, pageSize = services.NormalizePagination(page, pageSize)
 
-	result, err := services.GetAPITranscripts(c.Request.Context(), transcriptAccessScope(c), page, pageSize, c.Query("search"), c.Query("status"), c.Query("folderId"))
+	result, err := services.GetAPITranscripts(c.Request.Context(), transcriptAccessScope(c), page, pageSize, c.Query("search"), c.Query("status"), c.Query("folderId"), c.Query("reviewProgress"))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -141,14 +141,9 @@ func APIDownloadTranscript(c *gin.Context) {
 		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Transcript downloads are disabled for this format", nil)
 		return
 	}
-	if settings.RequireApprovalBeforeDownload {
-		parent, err := services.GetAuthorizedParentTranscriptPoint(transcriptAccessScope(c), jobID)
-		if err != nil {
+	if settings.RequireFullReviewBeforeDownload {
+		if err := services.RequireFullReview(transcriptAccessScope(c), jobID); err != nil {
 			writeServiceError(c, err)
-			return
-		}
-		if services.MapAnalysisReview(parent.Payload).Status != "approved" {
-			writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Transcript review approval is required before download", nil)
 			return
 		}
 	}
@@ -258,6 +253,105 @@ func APIGetAnalysis(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, analysis)
+}
+
+func APIUpdateSegmentReview(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	segmentID := strings.TrimSpace(c.Param("segmentId"))
+	if jobID == "" || segmentID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId and segmentId are required", nil)
+		return
+	}
+	user, ok := CurrentUser(c)
+	if !ok {
+		writeUnauthenticated(c)
+		return
+	}
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if settings.MaintenanceMode && user.Role != services.UserRoleAdmin {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Changes are temporarily disabled during maintenance mode", nil)
+		return
+	}
+	var request dtos.SegmentReviewRequest
+	if !decodeStrictAPIJSON(c, &request) {
+		return
+	}
+	result, err := services.UpdateSegmentReviewState(transcriptAccessScope(c), user, jobID, segmentID, request.IsReviewed)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	auditRequestEvent(c, services.AuditEventInput{
+		Action:     "segment_review_updated",
+		Category:   "transcript",
+		ResourceID: jobID,
+		Outcome:    services.AuditOutcomeSuccess,
+		Metadata: map[string]interface{}{
+			"jobId":                jobID,
+			"segmentId":            segmentID,
+			"isReviewed":           request.IsReviewed,
+			"reviewedSegmentCount": result.ReviewedSegmentCount,
+			"totalSegmentCount":    result.TotalSegmentCount,
+			"reviewPercentage":     result.ReviewPercentage,
+		},
+	})
+	c.JSON(http.StatusOK, result)
+}
+
+func APIBulkUpdateSegmentReview(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Param("jobId"))
+	if jobID == "" {
+		writeAPIError(c, http.StatusBadRequest, services.ErrCodeBadRequest, "jobId is required", nil)
+		return
+	}
+	user, ok := CurrentUser(c)
+	if !ok {
+		writeUnauthenticated(c)
+		return
+	}
+	settings, err := services.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if settings.MaintenanceMode && user.Role != services.UserRoleAdmin {
+		writeAPIError(c, http.StatusForbidden, services.ErrCodeForbidden, "Changes are temporarily disabled during maintenance mode", nil)
+		return
+	}
+	var request dtos.BulkReviewRequest
+	if !decodeStrictAPIJSON(c, &request) {
+		return
+	}
+	result, err := services.BulkUpdateSegmentReviewState(transcriptAccessScope(c), user, jobID, request.IsReviewed)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	action := "transcript_bulk_review_updated"
+	if result.ReviewPercentage == 100 && request.IsReviewed {
+		action = "transcript_review_completed"
+	}
+	if result.ReviewPercentage < 100 && !request.IsReviewed && result.TotalSegmentCount > 0 {
+		action = "transcript_review_reopened"
+	}
+	auditRequestEvent(c, services.AuditEventInput{
+		Action:     action,
+		Category:   "transcript",
+		ResourceID: jobID,
+		Outcome:    services.AuditOutcomeSuccess,
+		Metadata: map[string]interface{}{
+			"jobId":                jobID,
+			"bulkAction":           request.IsReviewed,
+			"reviewedSegmentCount": result.ReviewedSegmentCount,
+			"totalSegmentCount":    result.TotalSegmentCount,
+			"reviewPercentage":     result.ReviewPercentage,
+		},
+	})
+	c.JSON(http.StatusOK, result)
 }
 
 func APIUpdateAnalysisReview(c *gin.Context) {

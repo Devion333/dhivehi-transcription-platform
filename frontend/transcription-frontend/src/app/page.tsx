@@ -18,7 +18,7 @@ import { apiClient } from "@/lib/api/client";
 import type { AdminJobHealthResponse, StatsResponse, TranscriptSummary } from "@/lib/api/types";
 import type { SectionTone } from "@/lib/section-styles";
 import { sectionToneClasses } from "@/lib/section-styles";
-import { fallbackText, formatTranscriptDate, segmentCountLabel, transcriptDetailPath } from "@/lib/transcript-list-utils";
+import { fallbackText, formatTranscriptDate, transcriptDetailPath } from "@/lib/transcript-list-utils";
 import { cn } from "@/lib/utils";
 
 const emptyStats: StatsResponse = {
@@ -78,14 +78,14 @@ export default function DashboardPage() {
       {!loading && !error && data && (
         <div className="space-y-5">
           <MetricGrid stats={data.stats} />
-          <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-            <RecentTranscripts items={data.recent} />
-            <div className="grid content-start gap-5 md:grid-cols-2 xl:grid-cols-1">
-              <ProcessingOverview stats={data.stats} />
-              <QuickActions isAdmin={isAdmin} />
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+            <ProcessingOverview stats={data.stats} />
+            <div className="space-y-6">
               {isAdmin ? <WorkerStatus health={data.health} /> : <UserSummary stats={data.stats} />}
+              <QuickActions isAdmin={isAdmin} />
             </div>
           </div>
+          <RecentTranscripts items={data.recent} />
         </div>
       )}
     </PageContainer>
@@ -125,34 +125,27 @@ function MetricCard({ label, value, detail, icon: Icon, tone }: { label: string;
 
 function RecentTranscripts({ items }: { items: TranscriptSummary[] }) {
   return (
-    <Card className="min-w-0">
-      <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-4">
-        <div>
-          <SectionHeading title="Recent transcripts" description="Latest files and processing status." icon={FileText} tone="transcript" />
-        </div>
-        <Button asChild size="sm" variant="outline"><Link href="/Transcripts">View all</Link></Button>
-      </CardHeader>
-      <CardContent className="p-0">
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium text-muted-foreground">Recent transcripts</h2>
+        <Button asChild size="sm" variant="ghost" className="h-auto px-2 text-xs"><Link href="/Transcripts">View all</Link></Button>
+      </div>
+      <div className="divide-y rounded-xl border bg-card">
         {items.length === 0 ? (
-          <div className="p-5 text-sm text-muted-foreground">No transcripts yet. Upload media to start processing.</div>
+          <div className="p-4 text-sm text-muted-foreground">No transcripts yet. Upload media to start processing.</div>
         ) : (
-          <div className="divide-y">
-            {items.map((item) => (
-              <Link key={item.jobId} href={transcriptDetailPath(item.jobId)} className="grid min-w-0 gap-3 px-4 py-3 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium" title={item.filename}>{item.filename}</p>
-                  <p className="mt-1 truncate text-xs text-muted-foreground" title={fallbackText(item.referenceNumber, "No reference")}>{fallbackText(item.referenceNumber, "No reference")} · {formatTranscriptDate(item.createdAt)}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                  <StatusBadge status={item.status} />
-                  <span className="text-xs text-muted-foreground">{segmentCountLabel(item.segmentCount)}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+          items.map((item) => (
+            <Link key={item.jobId} href={transcriptDetailPath(item.jobId)} className="flex min-w-0 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium" title={item.filename}>{item.filename}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground" title={fallbackText(item.referenceNumber, "No reference")}>{fallbackText(item.referenceNumber, "No reference")} · {formatTranscriptDate(item.createdAt)}</p>
+              </div>
+              <StatusBadge status={item.status} />
+            </Link>
+          ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

@@ -161,7 +161,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     : mobileOpen ? "Close sidebar" : "Open sidebar";
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-muted/30">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-muted/30">
       <header className="z-40 flex h-16 shrink-0 items-center bg-background/95 backdrop-blur">
         <div className="flex h-full items-center gap-3 px-4">
           <Button
@@ -186,23 +186,23 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             {auth.user && (
               <DropdownMenu open={openHeaderPanel === "profile"} onOpenChange={(open) => setOpenHeaderPanel(open ? "profile" : null)}>
                 <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <UserCircle className="h-4 w-4" />
-                  <span className="hidden sm:inline">{auth.user.name}</span>
-                </Button>
+                  <Button variant="outline" className="gap-2">
+                    <UserCircle className="h-4 w-4" />
+                    <span className="hidden sm:inline">{auth.user.name}</span>
+                  </Button>
                 </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" avoidCollisions collisionPadding={16} className="w-56 p-2">
-                    <div className="px-2 py-2">
-                      <p className="font-medium">{auth.user.name}</p>
-                      <p className="text-xs text-muted-foreground">{auth.user.role}</p>
-                    </div>
-                    <DropdownMenuItem onSelect={() => router.push("/Account/Profile")} className="gap-2"><UserCircle className="h-4 w-4" /> Profile</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => router.push("/Account/Security")} className="gap-2"><UserCircle className="h-4 w-4" /> Change password</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => router.push("/About")} className="gap-2"><CircleHelp className="h-4 w-4" /> About</DropdownMenuItem>
-                    <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
-                      <LogOut className="h-4 w-4" /> Sign out
-                    </Button>
-                  </DropdownMenuContent>
+                <DropdownMenuContent align="end" avoidCollisions collisionPadding={16} className="w-56 p-2">
+                  <div className="px-2 py-2">
+                    <p className="font-medium">{auth.user.name}</p>
+                    <p className="text-xs text-muted-foreground">{auth.user.role}</p>
+                  </div>
+                  <DropdownMenuItem onSelect={() => router.push("/Account/Profile")} className="gap-2"><UserCircle className="h-4 w-4" /> Profile</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => router.push("/Account/Security")} className="gap-2"><UserCircle className="h-4 w-4" /> Change password</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => router.push("/About")} className="gap-2"><CircleHelp className="h-4 w-4" /> About</DropdownMenuItem>
+                  <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
+                    <LogOut className="h-4 w-4" /> Sign out
+                  </Button>
+                </DropdownMenuContent>
               </DropdownMenu>
             )}
           </div>
@@ -222,82 +222,88 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-      <aside className={cn("hidden min-h-0 shrink-0 overflow-hidden bg-background/95 backdrop-blur transition-[width] duration-200 ease-in-out lg:flex lg:flex-col", sidebarCollapsed ? "w-[68px]" : "w-60")}>
-        <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-          <nav className="space-y-5 pt-4">
-            <div className="space-y-1">
-              <div className="flex h-8 items-center px-3">
-                <span className={cn("block whitespace-nowrap text-xs font-medium uppercase tracking-wide text-muted-foreground transition-opacity duration-150 ease-out", sidebarCollapsed ? "pointer-events-none opacity-0" : "opacity-100 delay-100")}>Main</span>
-              </div>
-              {mainNavItems.map((item) => <NavLink key={item.href} {...item} collapsed={sidebarCollapsed} />)}
-            </div>
-            {auth.user?.role === "admin" && (
+        <aside className={cn("hidden min-h-0 shrink-0 overflow-hidden bg-background/95 backdrop-blur transition-[width] duration-200 ease-in-out lg:flex lg:flex-col", sidebarCollapsed ? "w-[68px]" : "w-60")}>
+          <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+            <nav className="space-y-5 pt-4">
               <div className="space-y-1">
-                <div className="relative flex h-8 items-center px-3">
-                  <span className={cn("block whitespace-nowrap text-xs font-medium uppercase tracking-wide text-muted-foreground transition-opacity duration-150 ease-out", sidebarCollapsed ? "pointer-events-none opacity-0" : "opacity-100 delay-100")}>Administration</span>
+                <div className="flex h-8 items-center px-3">
+                  <span className={cn("block whitespace-nowrap text-xs font-medium uppercase tracking-wide text-muted-foreground transition-opacity duration-150 ease-out", sidebarCollapsed ? "pointer-events-none opacity-0" : "opacity-100 delay-100")}>Main</span>
                 </div>
-                {adminNavItems.map((item) => <NavLink key={item.href} {...item} collapsed={sidebarCollapsed} />)}
+                {mainNavItems.map((item) => <NavLink key={item.href} {...item} collapsed={sidebarCollapsed} />)}
               </div>
-            )}
-          </nav>
-        </div>
-        {auth.user && (
-          <div className="shrink-0 px-3 py-3">
-            <Link href="/Account/Profile" title={sidebarCollapsed ? "Profile" : undefined} aria-label={sidebarCollapsed ? "Profile" : undefined} className="flex h-10 items-center rounded-lg text-sm font-medium text-muted-foreground transition-colors hover:bg-[var(--accent-primary-bg)] hover:text-[var(--accent-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center"><UserCircle className="h-5 w-5" /></span>
-              <span className={cn("ml-3 w-40 shrink-0 overflow-hidden whitespace-nowrap transition-opacity duration-150 ease-out", sidebarCollapsed ? "pointer-events-none invisible opacity-0" : "visible opacity-100 delay-100")}>{auth.user.name}</span>
-            </Link>
-          </div>
-        )}
-      </aside>
-
-      {mobileOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button
-            aria-label="Close navigation"
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="absolute inset-y-0 left-0 flex w-72 flex-col overflow-hidden border-r bg-background shadow-xl">
-            <div className="flex h-16 shrink-0 items-center justify-between px-4">
-              <Link href="/" className="whitespace-nowrap font-semibold" onClick={() => setMobileOpen(false)}>Transcript App</Link>
-            </div>
-            <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-              <nav className="space-y-5">
-                <div className="space-y-1">
-                  <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Main</p>
-                  {mainNavItems.map((item) => <NavLink key={item.href} {...item} onClick={() => setMobileOpen(false)} />)}
-                </div>
-                {auth.user?.role === "admin" && (
-                  <div className="space-y-1">
-                    <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Administration</p>
-                    {adminNavItems.map((item) => <NavLink key={item.href} {...item} onClick={() => setMobileOpen(false)} />)}
+              {auth.user?.role === "admin" && (
+                <div className="space-y-1 border-t border-border/40 pt-3">
+                  <div className="relative flex h-8 items-center px-3">
+                    <span className={cn("block whitespace-nowrap text-xs font-medium uppercase tracking-wide text-muted-foreground transition-opacity duration-150 ease-out", sidebarCollapsed ? "pointer-events-none opacity-0" : "opacity-100 delay-100")}>Administration</span>
                   </div>
-                )}
-              </nav>
-              {auth.user && (
-                <div className="mt-6 border-t pt-4">
-                  <p className="text-sm font-medium">{auth.user.name}</p>
-                  <p className="text-xs text-muted-foreground">{auth.user.role}</p>
-                  <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
-                    <Link href="/Account/Profile"><UserCircle className="h-4 w-4" /> Profile</Link>
-                  </Button>
-                  <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
-                    <Link href="/About"><CircleHelp className="h-4 w-4" /> About</Link>
-                  </Button>
-                  <Button variant="outline" className="mt-3 w-full justify-start gap-2" onClick={handleSignOut}>
-                    <LogOut className="h-4 w-4" /> Sign out
-                  </Button>
+                  {adminNavItems.map((item) => <NavLink key={item.href} {...item} collapsed={sidebarCollapsed} />)}
                 </div>
               )}
+            </nav>
+          </div>
+          {auth.user && (
+            <div className="shrink-0 px-3 py-3">
+              <Link href="/Account/Profile" title={sidebarCollapsed ? "Profile" : undefined} aria-label={sidebarCollapsed ? "Profile" : undefined} className="flex h-10 items-center rounded-lg text-sm font-medium text-muted-foreground transition-colors hover:bg-[var(--accent-primary-bg)] hover:text-[var(--accent-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center"><UserCircle className="h-5 w-5" /></span>
+                <span className={cn("ml-3 w-40 shrink-0 overflow-hidden whitespace-nowrap transition-opacity duration-150 ease-out", sidebarCollapsed ? "pointer-events-none invisible opacity-0" : "visible opacity-100 delay-100")}>{auth.user.name}</span>
+              </Link>
+            </div>
+          )}
+        </aside>
+
+        {mobileOpen && (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <button
+              aria-label="Close navigation"
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+              onClick={() => setMobileOpen(false)}
+            />
+            <div className="absolute inset-y-0 left-0 flex w-72 flex-col overflow-hidden border-r bg-background shadow-xl">
+              <div className="flex h-16 shrink-0 items-center justify-between px-4">
+                <Link href="/" className="whitespace-nowrap font-semibold" onClick={() => setMobileOpen(false)}>Transcript App</Link>
+              </div>
+              <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+                <nav className="space-y-5">
+                  <div className="space-y-1">
+                    <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Main</p>
+                    {mainNavItems.map((item) => <NavLink key={item.href} {...item} onClick={() => setMobileOpen(false)} />)}
+                  </div>
+                  {auth.user?.role === "admin" && (
+                    <div className="space-y-1 border-t border-border/40 pt-3">
+                      <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Administration</p>
+                      {adminNavItems.map((item) => <NavLink key={item.href} {...item} onClick={() => setMobileOpen(false)} />)}
+                    </div>
+                  )}
+                </nav>
+                {auth.user && (
+                  <div className="mt-6 border-t pt-4">
+                    <p className="text-sm font-medium">{auth.user.name}</p>
+                    <p className="text-xs text-muted-foreground">{auth.user.role}</p>
+                    <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
+                      <Link href="/Account/Profile"><UserCircle className="h-4 w-4" /> Profile</Link>
+                    </Button>
+                    <Button asChild variant="outline" className="mt-3 w-full justify-start gap-2" onClick={() => setMobileOpen(false)}>
+                      <Link href="/About"><CircleHelp className="h-4 w-4" /> About</Link>
+                    </Button>
+                    <Button variant="outline" className="mt-3 w-full justify-start gap-2" onClick={handleSignOut}>
+                      <LogOut className="h-4 w-4" /> Sign out
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <main className={cn("min-h-0 min-w-0 flex-1", pathname === "/Admin/Settings" ? "overflow-hidden" : "overflow-y-auto")}>
-        {children}
-      </main>
+        <main className={cn(
+          "min-h-0 min-w-0 flex-1",
+          pathname.startsWith("/Admin/Settings")
+            ? "flex flex-col overflow-hidden overscroll-none"
+            : "overflow-y-auto",
+        )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -387,40 +393,40 @@ function NotificationBell({ open, onOpenChange }: { open: boolean; onOpenChange:
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
-      <Button type="button" variant="outline" size="icon" aria-label="Notifications" aria-expanded={open}>
-        <Bell className="h-4 w-4" />
-        {unreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--accent-notification)] px-1 text-xs font-medium text-background ring-1 ring-background">{unreadCount > 99 ? "99+" : unreadCount}</span>}
-      </Button>
+        <Button type="button" variant="outline" size="icon" aria-label="Notifications" aria-expanded={open}>
+          <Bell className="h-4 w-4" />
+          {unreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--accent-notification)] px-1 text-xs font-medium text-background ring-1 ring-background">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+        </Button>
       </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" avoidCollisions collisionPadding={16} className="w-[min(380px,calc(100vw-2rem))] overflow-hidden border bg-popover p-0 shadow-lg">
-          <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-            <h2 className="min-w-0 truncate font-semibold">Notifications</h2>
-            {unreadCount > 0 && <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2" onClick={markAllRead}><CheckCheck className="h-4 w-4" /> Mark all read</Button>}
-          </div>
-          <div className="max-h-[460px] overflow-y-auto">
-            {loading && <p className="px-4 py-6 text-center text-sm text-muted-foreground">Loading notifications...</p>}
-            {error && <div className="space-y-2 px-4 py-3 text-sm"><p className="text-destructive">{error}</p><Button type="button" variant="outline" size="sm" onClick={() => void refreshList()}>Retry</Button></div>}
-            {!loading && !error && items.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>}
-            {!loading && !error && items.length > 0 && items.map((item) => (
-              <button key={item.id} type="button" className={cn("flex w-full gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none", !item.isRead && "bg-[var(--accent-notification-bg)]")} onClick={() => void openNotification(item)}>
-                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-2">
-                    <p className="min-w-0 flex-1 break-words text-sm font-medium leading-5">{item.title}</p>
-                    {!item.isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-notification)]" aria-label="Unread" />}
-                  </div>
-                  <p className="mt-1 truncate text-sm text-muted-foreground" title={item.message}>{item.message}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{formatNotificationDate(item.createdAt)}</p>
+      <DropdownMenuContent align="end" avoidCollisions collisionPadding={16} className="w-[min(380px,calc(100vw-2rem))] overflow-hidden border bg-popover p-0 shadow-lg">
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <h2 className="min-w-0 truncate font-semibold">Notifications</h2>
+          {unreadCount > 0 && <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2" onClick={markAllRead}><CheckCheck className="h-4 w-4" /> Mark all read</Button>}
+        </div>
+        <div className="max-h-[460px] overflow-y-auto">
+          {loading && <p className="px-4 py-6 text-center text-sm text-muted-foreground">Loading notifications...</p>}
+          {error && <div className="space-y-2 px-4 py-3 text-sm"><p className="text-destructive">{error}</p><Button type="button" variant="outline" size="sm" onClick={() => void refreshList()}>Retry</Button></div>}
+          {!loading && !error && items.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>}
+          {!loading && !error && items.length > 0 && items.map((item) => (
+            <button key={item.id} type="button" className={cn("flex w-full gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none", !item.isRead && "bg-[var(--accent-notification-bg)]")} onClick={() => void openNotification(item)}>
+              <Bell className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-2">
+                  <p className="min-w-0 flex-1 break-words text-sm font-medium leading-5">{item.title}</p>
+                  {!item.isRead && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent-notification)]" aria-label="Unread" />}
                 </div>
-              </button>
-            ))}
-          </div>
-          <div className="border-t px-2 py-2">
-            <Button asChild variant="ghost" className="w-full justify-start" onClick={() => onOpenChange(false)}>
-              <Link href="/Notifications">View all notifications</Link>
-            </Button>
-          </div>
-        </DropdownMenuContent>
+                <p className="mt-1 truncate text-sm text-muted-foreground" title={item.message}>{item.message}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatNotificationDate(item.createdAt)}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="border-t px-2 py-2">
+          <Button asChild variant="ghost" className="w-full justify-start" onClick={() => onOpenChange(false)}>
+            <Link href="/Notifications">View all notifications</Link>
+          </Button>
+        </div>
+      </DropdownMenuContent>
     </DropdownMenu>
   );
 }

@@ -1,3 +1,4 @@
+import { formatAuditAction } from "@/lib/format-audit-action";
 import type { AuditCategory, AuditOutcome } from "@/lib/api/types";
 
 export const auditPageSize = 50;
@@ -7,28 +8,18 @@ export const auditOutcomes = ["all", "success", "failure"] as const;
 export type AuditCategoryFilter = (typeof auditCategories)[number];
 export type AuditOutcomeFilter = (typeof auditOutcomes)[number];
 
-const actionLabels: Record<string, string> = {
-  "auth.login_succeeded": "Signed in",
-  "auth.login_failed": "Sign-in failed",
-  "auth.logout": "Signed out",
-  "admin.user_created": "User created",
-  "admin.user_updated": "User updated",
-  "admin.user_activated": "User activated",
-  "admin.user_deactivated": "User deactivated",
-  "admin.password_reset": "Password reset",
-  "admin.job_retry_requested": "Job retry requested",
-  "admin.job_retry_succeeded": "Job retry queued",
-  "admin.job_retry_failed": "Job retry failed",
-  "transcript.uploaded": "Transcript uploaded",
-  "transcript.viewed": "Transcript viewed",
-  "transcript.segment_updated": "Transcript edited",
-  "analysis.started": "Analysis started",
-  "analysis.completed": "Analysis completed",
-  "analysis.failed": "Analysis failed",
-  "search.executed": "Search executed",
-  "export.pdf_generated": "PDF exported",
-  "export.pdf_failed": "PDF export failed",
-};
+const actionLabels = Object.fromEntries(
+  [
+    "auth.login_succeeded", "auth.login_failed", "auth.logout",
+    "admin.user_created", "admin.user_updated", "admin.user_activated", "admin.user_deactivated",
+    "admin.password_reset",
+    "admin.job_retry_requested", "admin.job_retry_succeeded", "admin.job_retry_failed",
+    "transcript.uploaded", "transcript.viewed", "transcript.segment_updated",
+    "analysis.started", "analysis.completed", "analysis.failed",
+    "search.executed",
+    "export.pdf_generated", "export.pdf_failed",
+  ].map((key) => [key, formatAuditAction(key)])
+);
 
 export const auditActions = ["all", ...Object.keys(actionLabels)] as const;
 export type AuditActionFilter = (typeof auditActions)[number];
@@ -78,7 +69,7 @@ export function buildAuditPath({ page = 1, search = "", category = "all", action
 }
 
 export function auditActionLabel(action: string) {
-  return actionLabels[action] ?? action.replace(/[._]/g, " ");
+  return actionLabels[action] ?? formatAuditAction(action);
 }
 
 export function auditCategoryLabel(category: AuditCategory | string) {
