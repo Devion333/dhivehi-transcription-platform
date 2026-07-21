@@ -1,18 +1,62 @@
-
 services:
+  frontend:
+    build:
+      context: ./frontend/transcription-frontend
+      dockerfile: Dockerfile
+    container_name: transcript_frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "80:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - app_network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: transcript_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: transcript_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
 
   minio:
     image: minio/minio:latest
     container_name: transcript_minio
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
-      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
-      - "9001:9001"
     volumes:
       - minio_data:/data
     networks:
@@ -20,13 +64,53 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: qdrant
+    container_name: transcript_qdrant
     restart: unless-stopped
-    ports:
-      - "6333:6333"
-      - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    networks:
+      - app_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: transcript_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+
+      QDRANT_HOST: http://qdrant:6333
+
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME}
+      SESSION_LIFETIME: ${SESSION_LIFETIME}
+      SESSION_SECURE: ${SESSION_SECURE}
+
+      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD}
+
+      EXPECTED_WORKERS: ${EXPECTED_WORKERS}
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS}
+
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS}
+      NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      qdrant:
+        condition: service_started
     networks:
       - app_network
 
@@ -34,141 +118,108 @@ services:
     build: ./gradio/convert
     container_name: transcript_gradio_convert
     restart: on-failure:5
-    ports:
-      - "7860:7860"
-    depends_on:
-      - minio
-      - redis
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      MINIO_ENDPOINT: "minio:9000"
-      MINIO_ACCESS_KEY: "minio"
-      MINIO_SECRET_KEY: "minio123"
-      DAGSTER_ENABLED: "true"
-      DAGSTER_API_URL: "http://dagster:3000"
-      WORKER_INSTANCE_ID: gradio_convert
-      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
-      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      DAGSTER_ENABLED: "false"
+      WORKER_INSTANCE_ID: conversion
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS}
+    depends_on:
+      - redis
+      - minio
     networks:
       - app_network
 
   gradio_diarization:
     build: ./gradio/diarization
     container_name: transcript_gradio_diarization
-    command: [ "python", "-u", "diarization.py" ]
+    command: ["python", "-u", "diarization.py"]
     restart: on-failure:5
-    depends_on:
-      - redis
-      - qdrant
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       QDRANT_HOST: http://qdrant:6333
       QDRANT_COLLECTION: file_metadata
       HUGGINGFACE_ACCESS_TOKEN: ${HUGGINGFACE_ACCESS_TOKEN}
-      DAGSTER_ENABLED: "true"
-      DAGSTER_API_URL: "http://dagster:3000"
-      WORKER_INSTANCE_ID: gradio_diarization
-      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
-      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
-
+      DAGSTER_ENABLED: "false"
+      WORKER_INSTANCE_ID: diarization
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS}
+      HF_HOME: /root/.cache/huggingface
     volumes:
-      - ./gradio/diarization/outputs:/app/outputs
-      - ./models/pyannote:/root/.cache/huggingface/hub
+      - diarization_outputs:/app/outputs
+      - hf_cache:/root/.cache/huggingface
+    depends_on:
+      - redis
+      - qdrant
     networks:
       - app_network
 
   gradio_transcription:
-    build: ./gradio/transcription
-    container_name: transcript_gradio_transcription
-    restart: on-failure:5
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - qdrant
-      - minio
+    build:
+      context: ./gradio/transcription
+      dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       QDRANT_HOST: http://qdrant:6333
       QDRANT_COLLECTION: file_metadata
-      MINIO_ACCESS_KEY: "minio"
-      MINIO_SECRET_KEY: "minio123"
-      DAGSTER_ENABLED: "true"
-      DAGSTER_API_URL: "http://dagster:3000"
-      WORKER_INSTANCE_ID: gradio_transcription
-      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
-      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+
+      HUGGINGFACE_ACCESS_TOKEN: ${HUGGINGFACE_ACCESS_TOKEN}
+      HF_TOKEN: ${HUGGINGFACE_ACCESS_TOKEN}
+
       HF_HOME: /root/.cache/huggingface
-      TRANSFORMERS_OFFLINE: "1"
-      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_CACHE: /root/.cache/huggingface
+
+      WORKER_INSTANCE_ID: transcription
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS}
     volumes:
-      - /data/911/911_whisper_model:/app/models
-      - hf_cache:/root/.cache/huggingface
-    networks:
-      - app_network
-
-  redis:
-    image: redis:7
-    container_name: transcript_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    networks:
-      - app_network
-
-  backend:
-    build: ./backend
-    container_name: transcript_backend
-    restart: unless-stopped
-    ports:
-      - "8000:8000" # expose backend to LAN
-    environment:
-      MINIO_ENDPOINT: "minio:9000"
-      MINIO_ACCESS_KEY: "minio"
-      MINIO_SECRET_KEY: "minio123"
-      MINIO_PUBLIC_URL: "http://localhost:9000"
-      QDRANT_HOST: "http://qdrant:6333"
-      EXPECTED_WORKERS: ${EXPECTED_WORKERS:-conversion,diarization,transcription,analysis}
-      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-15}
-      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS:-60}
+      - huggingface_cache:/root/.cache/huggingface
     depends_on:
+      - redis
+      - qdrant
       - minio
     networks:
       - app_network
 
-  dagster:
-    image: python:3.10-slim
-    container_name: transcript_dagster
+  analysis:
+    build: ./gradio/analysis
+    container_name: transcript_analysis
     restart: on-failure:5
-    working_dir: /opt/dagster
-    ports:
-      - "3070:3000" 
     environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      QDRANT_HOST: http://qdrant:6333
-    volumes:
-      - ./dagster:/opt/dagster/app
-      - dagster_home:/opt/dagster/dagster_home
-    networks:
-      - app_network
+      WORKER_INSTANCE_ID: analysis
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS}
+      WORKER_HEARTBEAT_TTL_SECONDS: ${WORKER_HEARTBEAT_TTL_SECONDS}
     depends_on:
       - redis
-      - qdrant
-    command: >
-      sh -c " pip install dagster dagster-webserver dagster-postgres redis requests && dagster dev -h 0.0.0.0 -p 3000 -f /opt/dagster/app/definitions.py "
+    networks:
+      - app_network
+
+  
 
 networks:
   app_network:
     driver: bridge
 
 volumes:
+  postgres_data:
+  redis_data:
   minio_data:
   qdrant_data:
-  dagster_home:
   hf_cache:
-    name: transcript-app_hf_cache
+  transcription_models:
+  diarization_outputs:
+  huggingface_cache:

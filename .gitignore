@@ -1,8 +1,18 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# =========================
+# ENVIRONMENT AND SECRETS
+# =========================
 
-# dependencies
-/node_modules
-/.pnp
+.env
+.env.*
+!.env.example
+
+
+# =========================
+# DEPENDENCIES AND BUILDS
+# =========================
+
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,63 +20,83 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+.next/
+out/
+build/
+coverage/
+dist/
 
-# next.js
-/.next/
-/out/
+# =========================
+# LOGS AND DEBUG FILES
+# =========================
 
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files (can opt-in for committing if needed)
-.env*
+# =========================
+# TYPESCRIPT
+# =========================
 
-# vercel
-.vercel
-
-# typescript
 *.tsbuildinfo
 next-env.d.ts
 
-/gradio/diarization/outputs/*
+# =========================
+# PYTHON
+# =========================
 
-# Go binaries
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# =========================
+# GO
+# =========================
+
 *.exe
 backend/cmd/backend/server
 backend/cmd/backend/backend
 
-# ML model caches
+# =========================
+# GENERATED OUTPUTS
+# =========================
+
+gradio/diarization/outputs/
+gradio/analysis/outputs/
+
+# =========================
+# ML MODELS AND CACHES
+# =========================
+
 models/
 *.bin
 *.pt
+*.pth
 *.onnx
+*.safetensors
+
+# Hugging Face cache
+.cache/huggingface/
+huggingface_cache/
 
 # =========================
-# PROJECT-SPECIFIC IGNORES
+# PROJECT-SPECIFIC
 # =========================
 
-# AI / agent config
 AGENTS.md
-
-# Docker compose dev file
-!compose.dev.yml
-
-# Mock workers (entire folder)
-!mock_workers/
-!mock_workers/**
-
-# Gradio outputs (if generated data)
-gradio/analysis/outputs/docs/
+legacy/
 docs/
+
+# =========================
+# OPERATING SYSTEM / IDE
+# =========================
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
