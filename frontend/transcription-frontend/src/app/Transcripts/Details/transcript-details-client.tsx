@@ -67,7 +67,7 @@ type SpeakerEditState = {
 export function TranscriptDetailsClient() {
   const auth = useAuth();
   const maintenance = useMaintenanceAccess();
-	const router = useRouter();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = (searchParams.get("job_id") ?? "").trim();
   const targetSegmentId = (searchParams.get("segment_id") ?? "").trim();
@@ -92,14 +92,14 @@ export function TranscriptDetailsClient() {
   const [activeSegmentId, setActiveSegmentId] = React.useState<string | null>(null);
   const [highlightedSegmentId, setHighlightedSegmentId] = React.useState<string | null>(null);
   const [edits, setEdits] = React.useState<Record<string, SegmentEditState>>({});
-	const [speakerEdit, setSpeakerEdit] = React.useState<SpeakerEditState | null>(null);
-	const [deletePreview, setDeletePreview] = React.useState<TranscriptDeletionPreview | null>(null);
-	const [deleteLoading, setDeleteLoading] = React.useState(false);
-	const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
-	const [deleteConfirmation, setDeleteConfirmation] = React.useState("");
-	const [deleteError, setDeleteError] = React.useState<string | null>(null);
-	const [reassignOpen, setReassignOpen] = React.useState(false);
-	const [exportOpen, setExportOpen] = React.useState(false);
+  const [speakerEdit, setSpeakerEdit] = React.useState<SpeakerEditState | null>(null);
+  const [deletePreview, setDeletePreview] = React.useState<TranscriptDeletionPreview | null>(null);
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState("");
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [reassignOpen, setReassignOpen] = React.useState(false);
+  const [exportOpen, setExportOpen] = React.useState(false);
   const [downloadLoading, setDownloadLoading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const [exportAnalysis, setExportAnalysis] = React.useState<TranscriptAnalysis | null>(null);
@@ -126,15 +126,15 @@ export function TranscriptDetailsClient() {
         setAudioError(null);
         setCurrentTime(0);
         setDuration(0);
-				setActiveSegmentId(null);
-				setSpeakerEdit(null);
-				setDeletePreview(null);
-				setDeleteConfirmation("");
-				setDeleteError(null);
-				setReassignOpen(false);
-				setDownloadError(null);
-				setExportAnalysis(null);
-			})
+        setActiveSegmentId(null);
+        setSpeakerEdit(null);
+        setDeletePreview(null);
+        setDeleteConfirmation("");
+        setDeleteError(null);
+        setReassignOpen(false);
+        setDownloadError(null);
+        setExportAnalysis(null);
+      })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Failed to load transcript");
@@ -354,49 +354,49 @@ export function TranscriptDetailsClient() {
     }
   }
 
-	async function saveSpeakerName(speakerKey: string, displayName: string) {
-		if (!detail || speakerEdit?.saving) return;
-		const validationError = validateSpeakerDisplayName(displayName);
-		if (validationError) {
-			setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: validationError });
-			return;
-		}
-		setSpeakerEdit({ speakerKey, draft: displayName, saving: true, error: null });
-		try {
-			const response = await updateSpeakerName(detail.jobId, speakerKey, displayName);
-			setDetail((current) => current ? { ...current, speakerNames: response.speakerNames } : current);
-			setSpeakerEdit(null);
-		} catch (err) {
-			setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: speakerRenameError(err) });
-		}
-	}
+  async function saveSpeakerName(speakerKey: string, displayName: string) {
+    if (!detail || speakerEdit?.saving) return;
+    const validationError = validateSpeakerDisplayName(displayName);
+    if (validationError) {
+      setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: validationError });
+      return;
+    }
+    setSpeakerEdit({ speakerKey, draft: displayName, saving: true, error: null });
+    try {
+      const response = await updateSpeakerName(detail.jobId, speakerKey, displayName);
+      setDetail((current) => current ? { ...current, speakerNames: response.speakerNames } : current);
+      setSpeakerEdit(null);
+    } catch (err) {
+      setSpeakerEdit({ speakerKey, draft: displayName, saving: false, error: speakerRenameError(err) });
+    }
+  }
 
-	async function loadDeletionPreview() {
-		if (!detail || deleteLoading) return;
-		setDeleteLoading(true);
-		setDeleteError(null);
-		try {
-			setDeletePreview(await getTranscriptDeletionPreview(detail.jobId));
-		} catch (err) {
-			setDeleteError(deletionErrorMessage(err));
-		} finally {
-			setDeleteLoading(false);
-		}
-	}
+  async function loadDeletionPreview() {
+    if (!detail || deleteLoading) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      setDeletePreview(await getTranscriptDeletionPreview(detail.jobId));
+    } catch (err) {
+      setDeleteError(deletionErrorMessage(err));
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
 
-	async function confirmDelete() {
-		if (!detail || deleteSubmitting || deleteConfirmation !== detail.jobId) return;
-		setDeleteSubmitting(true);
-		setDeleteError(null);
-		try {
-			await deleteTranscript(detail.jobId, deleteConfirmation);
-			router.replace("/Transcripts");
-		} catch (err) {
-			setDeleteError(deletionErrorMessage(err));
-		} finally {
-			setDeleteSubmitting(false);
-		}
-	}
+  async function confirmDelete() {
+    if (!detail || deleteSubmitting || deleteConfirmation !== detail.jobId) return;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      await deleteTranscript(detail.jobId, deleteConfirmation);
+      router.replace("/Transcripts");
+    } catch (err) {
+      setDeleteError(deletionErrorMessage(err));
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }
 
   async function toggleSegmentReview(segment: TranscriptSegment) {
     if (!detail || segmentReviewSaving) return;
@@ -414,11 +414,11 @@ export function TranscriptDetailsClient() {
           segments: current.segments.map((s) =>
             s.id === segment.id
               ? {
-                  ...s,
-                  isReviewed: response.isReviewed,
-                  reviewedBy: response.reviewedBy,
-                  reviewedAt: response.reviewedAt,
-                }
+                ...s,
+                isReviewed: response.isReviewed,
+                reviewedBy: response.reviewedBy,
+                reviewedAt: response.reviewedAt,
+              }
               : s
           ),
         };
@@ -494,40 +494,40 @@ export function TranscriptDetailsClient() {
     <PageContainer>
       <div className="mb-4"><BackToList href={returnTo} /></div>
       <header className="mb-3 space-y-3">
-      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0 flex-1">
-          <h1 className="line-clamp-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground md:text-3xl" title={transcriptIdentityTitle(detail.referenceNumber, detail.filename)}>{transcriptIdentityTitle(detail.referenceNumber, detail.filename)}</h1>
-          {hasTranscriptReference(detail.referenceNumber) ? <p className="mt-1 break-words text-sm text-muted-foreground" title={detail.filename}>{detail.filename}</p> : <p className="mt-1 text-sm text-[var(--accent-warning)]">No reference</p>}
-          <CompactMetadata detail={detail} status={currentStatus} />
-          <MetadataDetailsPanel detail={detail} />
+        <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <h1 className="line-clamp-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground md:text-3xl" title={transcriptIdentityTitle(detail.referenceNumber, detail.filename)}>{transcriptIdentityTitle(detail.referenceNumber, detail.filename)}</h1>
+            {hasTranscriptReference(detail.referenceNumber) ? <p className="mt-1 break-words text-sm text-muted-foreground" title={detail.filename}>{detail.filename}</p> : <p className="mt-1 text-sm text-[var(--accent-warning)]">No reference</p>}
+            <CompactMetadata detail={detail} status={currentStatus} />
+            <MetadataDetailsPanel detail={detail} />
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-start gap-2 xl:justify-end">
+            <TranscriptFolderButton detail={detail} disabled={!maintenance.canModifyDuringMaintenance} onChanged={() => setRetryToken((value) => value + 1)} />
+            {speakers.length > 0 && (
+              <SpeakerManagementMenu
+                speakers={speakers}
+                speakerNames={detail.speakerNames}
+                edit={speakerEdit}
+                disabled={!maintenance.canModifyDuringMaintenance}
+                onEdit={(speakerKey) => setSpeakerEdit({ speakerKey, draft: getSpeakerDisplayName(speakerKey, detail.speakerNames), saving: false, error: null })}
+                onCancel={() => setSpeakerEdit(null)}
+                onDraft={(draft) => setSpeakerEdit((current) => current ? { ...current, draft, error: null } : current)}
+                onSave={(speakerKey, displayName) => saveSpeakerName(speakerKey, displayName)}
+                onReset={(speakerKey) => saveSpeakerName(speakerKey, speakerKey)}
+              />
+            )}
+            <DownloadMenu loading={downloadLoading} disabled={!transcriptReady || detail.segments.length === 0} onDownload={startDownload} />
+            {transcriptReady ? maintenance.canModifyDuringMaintenance ? (
+              <Button asChild variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)}><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {analysisActionLabel(detail.analysisStatus)}</Link></Button>
+            ) : (
+              <Button type="button" variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)} disabled title={maintenanceMutationMessage}><BarChart3 className="h-4 w-4" /> {analysisActionLabel(detail.analysisStatus)}</Button>
+            ) : (
+              <Button type="button" variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)} disabled><BarChart3 className="h-4 w-4" /> Analysing...</Button>
+            )}
+            {isAdmin && <OwnershipControl detail={detail} onReassign={() => setReassignOpen(true)} />}
+            <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setRetryToken((value) => value + 1)}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
+          </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-start gap-2 xl:justify-end">
-          <TranscriptFolderButton detail={detail} disabled={!maintenance.canModifyDuringMaintenance} onChanged={() => setRetryToken((value) => value + 1)} />
-          {speakers.length > 0 && (
-            <SpeakerManagementMenu
-              speakers={speakers}
-              speakerNames={detail.speakerNames}
-              edit={speakerEdit}
-              disabled={!maintenance.canModifyDuringMaintenance}
-              onEdit={(speakerKey) => setSpeakerEdit({ speakerKey, draft: getSpeakerDisplayName(speakerKey, detail.speakerNames), saving: false, error: null })}
-              onCancel={() => setSpeakerEdit(null)}
-              onDraft={(draft) => setSpeakerEdit((current) => current ? { ...current, draft, error: null } : current)}
-              onSave={(speakerKey, displayName) => saveSpeakerName(speakerKey, displayName)}
-              onReset={(speakerKey) => saveSpeakerName(speakerKey, speakerKey)}
-            />
-          )}
-          <DownloadMenu loading={downloadLoading} disabled={!transcriptReady || detail.segments.length === 0} onDownload={startDownload} />
-          {transcriptReady ? maintenance.canModifyDuringMaintenance ? (
-            <Button asChild variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)}><Link href={analysisHref}><BarChart3 className="h-4 w-4" /> {analysisActionLabel(detail.analysisStatus)}</Link></Button>
-          ) : (
-            <Button type="button" variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)} disabled title={maintenanceMutationMessage}><BarChart3 className="h-4 w-4" /> {analysisActionLabel(detail.analysisStatus)}</Button>
-          ) : (
-            <Button type="button" variant="outline" size="sm" className={cn("shrink-0", sectionToneClasses.analysis.text)} disabled><BarChart3 className="h-4 w-4" /> Analysing...</Button>
-          )}
-          {isAdmin && <OwnershipControl detail={detail} onReassign={() => setReassignOpen(true)} />}
-          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setRetryToken((value) => value + 1)}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
-        </div>
-      </div>
       </header>
 
       {transcriptReady && detail.reviewPercentage != null && (
@@ -579,7 +579,7 @@ export function TranscriptDetailsClient() {
 
       {downloadError && <p className="mt-3 text-sm text-destructive">{downloadError}</p>}
 
-      <div className="mt-8 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="mt-8 min-w-0">
         <section className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -639,21 +639,21 @@ export function TranscriptDetailsClient() {
           )}
         </section>
 
-		<aside className="space-y-4 xl:order-last">
-			{isAdmin && (
-				<TranscriptDeletionCard
-					detail={detail}
-					preview={deletePreview}
-					loading={deleteLoading}
-					submitting={deleteSubmitting}
-					confirmation={deleteConfirmation}
-					error={deleteError}
-					onPreview={loadDeletionPreview}
-					onConfirmation={setDeleteConfirmation}
-					onDelete={confirmDelete}
-				/>
-			)}
-		</aside>
+        {isAdmin && (
+          <div className="mt-8 border-t pt-6">
+            <TranscriptDeletionCard
+              detail={detail}
+              preview={deletePreview}
+              loading={deleteLoading}
+              submitting={deleteSubmitting}
+              confirmation={deleteConfirmation}
+              error={deleteError}
+              onPreview={loadDeletionPreview}
+              onConfirmation={setDeleteConfirmation}
+              onDelete={confirmDelete}
+            />
+          </div>
+        )}
       </div>
 
       {detail.mediaUrl && <audio ref={audioRef} src={detail.mediaUrl} preload="metadata" />}
@@ -1049,35 +1049,65 @@ function TranscriptDeletionCard({ detail, preview, loading, submitting, confirma
 }) {
   const owner = preview?.owner.displayName || preview?.owner.email || "Unknown owner";
   const blocked = preview && !preview.canDelete;
+
   return (
-    <Card className="border-destructive/30 bg-destructive/5 shadow-none">
-      <CardHeader><CardTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-5 w-5" /> Delete transcript</CardTitle></CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <p className="text-muted-foreground">Permanently remove this transcript and its related media. This action cannot be undone.</p>
-        {!preview ? (
-          <Button type="button" variant="outline" onClick={onPreview} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Preview deletion</Button>
-        ) : (
-          <div className="space-y-4">
-            <dl className="space-y-2 rounded-lg border border-destructive/20 bg-background/70 p-3">
-              <PreviewRow label="Filename" value={preview.filename || detail.filename} />
-              <PreviewRow label="Owner" value={owner} />
-              <PreviewRow label="Segments" value={String(preview.segmentCount)} />
-              <PreviewRow label="Media objects" value={String(preview.mediaObjects)} />
-              <PreviewRow label="Status" value={preview.status} />
-            </dl>
-            {blocked && <p className={cn("rounded-md border p-3", sectionToneClasses.warning.panel)}>Deletion unavailable: {preview.blockingReason === "TRANSCRIPT_PROCESSING" ? "transcript is currently processing" : preview.blockingReason}</p>}
-            {!blocked && (
-              <div className="space-y-2">
-                <label htmlFor="delete-confirmation" className="font-medium">Type <span className="font-mono">{detail.jobId}</span> to confirm</label>
-                <Input id="delete-confirmation" value={confirmation} onChange={(event) => onConfirmation(event.target.value)} disabled={submitting} autoComplete="off" />
-                <Button type="button" variant="destructive" onClick={onDelete} disabled={submitting || confirmation !== detail.jobId}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete transcript</Button>
-              </div>
-            )}
-          </div>
+    <section aria-labelledby="danger-zone-title" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="danger-zone-title" className="text-sm font-semibold text-destructive">Danger zone</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Permanently delete this transcript and its related media.
+          </p>
+        </div>
+        {!preview && (
+          <Button type="button" variant="destructive" onClick={onPreview} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Delete transcript
+          </Button>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
-      </CardContent>
-    </Card>
+      </div>
+
+      {preview && (
+        <div className="max-w-2xl space-y-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          <div className="flex items-center gap-2 font-medium text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+            Confirm transcript deletion
+          </div>
+          <dl className="space-y-2 rounded-lg border border-destructive/20 bg-background/70 p-3">
+            <PreviewRow label="Filename" value={preview.filename || detail.filename} />
+            <PreviewRow label="Owner" value={owner} />
+            <PreviewRow label="Segments" value={String(preview.segmentCount)} />
+            <PreviewRow label="Media objects" value={String(preview.mediaObjects)} />
+            <PreviewRow label="Status" value={preview.status} />
+          </dl>
+          {blocked && (
+            <p className={cn("rounded-md border p-3", sectionToneClasses.warning.panel)}>
+              Deletion unavailable: {preview.blockingReason === "TRANSCRIPT_PROCESSING" ? "transcript is currently processing" : preview.blockingReason}
+            </p>
+          )}
+          {!blocked && (
+            <div className="space-y-2">
+              <label htmlFor="delete-confirmation" className="font-medium">
+                Type <span className="font-mono">{detail.jobId}</span> to confirm
+              </label>
+              <Input
+                id="delete-confirmation"
+                value={confirmation}
+                onChange={(event) => onConfirmation(event.target.value)}
+                disabled={submitting}
+                autoComplete="off"
+              />
+              <Button type="button" variant="destructive" onClick={onDelete} disabled={submitting || confirmation !== detail.jobId}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Permanently delete transcript
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </section>
   );
 }
 
@@ -1201,7 +1231,7 @@ function SegmentCard({ segment, speakerNames, speakerIndex, isLast, active, high
           {!isLast && <div className={cn("absolute bottom-[-1.125rem] left-1/2 top-10 -translate-x-1/2 border-l border-border", active && "border-[var(--accent-transcript-border)]")} aria-hidden="true" />}
         </div>
 
-          <div className="min-w-0 space-y-2">
+        <div className="min-w-0 space-y-2">
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold text-foreground" title={displayName}>{displayName}</h3>
             {segment.speaker !== displayName && <p className="text-xs text-muted-foreground">{segment.speaker}</p>}

@@ -59,7 +59,7 @@ export function TranscriptAnalysisClient() {
         return;
       }
       try {
-        const nextAnalysis = await getTranscriptAnalysis(jobId);
+        const nextAnalysis = normalizeAnalysis(await getTranscriptAnalysis(jobId));
         setAnalysis(nextAnalysis);
         if (nextAnalysis.status === "complete" || nextAnalysis.status === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
@@ -84,9 +84,10 @@ export function TranscriptAnalysisClient() {
     setError(null);
     Promise.all([getTranscript(jobId, controller.signal), getTranscriptAnalysis(jobId, controller.signal)])
       .then(([nextDetail, nextAnalysis]) => {
+        const normalizedAnalysis = normalizeAnalysis(nextAnalysis);
         setDetail(nextDetail);
-        setAnalysis(nextAnalysis);
-        if (nextAnalysis.status === "processing") {
+        setAnalysis(normalizedAnalysis);
+        if (normalizedAnalysis.status === "processing") {
           setRunning(true);
           startPolling();
         }
@@ -111,7 +112,7 @@ export function TranscriptAnalysisClient() {
     setRunError(null);
     try {
       const response = await analyseTranscript(jobId);
-      setAnalysis(response.analysis);
+      setAnalysis(normalizeAnalysis(response.analysis));
       startPolling();
     } catch (err) {
       setRunError(err instanceof Error ? err.message : "Failed to start analysis");
@@ -202,6 +203,28 @@ export function TranscriptAnalysisClient() {
       />
     </PageContainer>
   );
+}
+
+
+function normalizeAnalysis(value: TranscriptAnalysis): TranscriptAnalysis {
+  const raw = value as TranscriptAnalysis & {
+    keywords?: unknown;
+    entities?: unknown;
+    summary?: unknown;
+    classification?: unknown;
+    englishTranslation?: unknown;
+  };
+
+  return {
+    ...value,
+    keywords: Array.isArray(raw.keywords)
+      ? raw.keywords.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+    entities: raw.entities ?? [],
+    summary: typeof raw.summary === "string" ? raw.summary : "",
+    classification: typeof raw.classification === "string" ? raw.classification : "",
+    englishTranslation: typeof raw.englishTranslation === "string" ? raw.englishTranslation : "",
+  };
 }
 
 function BackToTranscript({ href }: { href: string }) {

@@ -11,18 +11,41 @@ export type EntityGroup = {
   values: string[];
 };
 
+export function normalizeAnalysis(analysis: TranscriptAnalysis | null): TranscriptAnalysis {
+  if (!analysis) {
+    return {
+      status: "not_started",
+      keywords: [],
+      entities: null,
+      summary: "",
+      classification: "",
+      englishTranslation: "",
+      review: { status: "unreviewed", reviewedByUserId: null, reviewedByDisplayName: null, reviewedAt: null, note: null },
+    };
+  }
+  return {
+    ...analysis,
+    keywords: Array.isArray(analysis.keywords) ? analysis.keywords : [],
+    summary: typeof analysis.summary === "string" ? analysis.summary : "",
+    classification: typeof analysis.classification === "string" ? analysis.classification : "",
+    englishTranslation: typeof analysis.englishTranslation === "string" ? analysis.englishTranslation : "",
+    review: analysis.review && typeof analysis.review === "object" ? analysis.review : { status: "unreviewed", reviewedByUserId: null, reviewedByDisplayName: null, reviewedAt: null, note: null },
+  };
+}
+
 export function canRunAnalysis(detail: TranscriptDetail | null) {
   return detail?.status === "transcribed";
 }
 
 export function hasAnalysisContent(analysis: TranscriptAnalysis | null) {
   if (!analysis) return false;
+  const safe = normalizeAnalysis(analysis);
   return Boolean(
-    analysis.summary.trim() ||
-      analysis.classification.trim() ||
-      analysis.englishTranslation.trim() ||
-      analysis.keywords.length > 0 ||
-      normalizeEntities(analysis.entities).some((group) => group.values.length > 0),
+    safe.summary.trim() ||
+      safe.classification.trim() ||
+      safe.englishTranslation.trim() ||
+      safe.keywords.length > 0 ||
+      normalizeEntities(safe.entities).some((group) => group.values.length > 0),
   );
 }
 

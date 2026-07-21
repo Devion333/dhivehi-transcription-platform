@@ -11,7 +11,6 @@ import puppeteer, { type Browser, type Page } from "puppeteer";
 
 import type { PdfExportPayload, PdfExportSegment } from "@/lib/pdf-export-types";
 import { escapeHtml, formatPdfTimestamp, groupSegmentsBySpeaker, hasUsableAnalysis, pdfDownloadFilename, sortPdfSegments, toPdfAnalysis } from "@/lib/pdf-export-utils";
-import { BACKEND_URL } from "@/config";
 import { analysisReviewStatusLabel } from "@/lib/analysis-review-status";
 import type { TranscriptAnalysis, TranscriptDetail } from "@/lib/api/types";
 import { getSpeakerDisplayName } from "@/lib/transcript-details-utils";
@@ -21,6 +20,11 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 1_500_000;
 const PDF_TIMEOUT_MS = 45_000;
 const AUTH_CHECK_TIMEOUT_MS = 5_000;
+const BACKEND_INTERNAL_URL = process.env.BACKEND_INTERNAL_URL ?? "http://backend:8000";
+
+function backendUrl(pathname: string) {
+  return new URL(pathname, BACKEND_INTERNAL_URL).toString();
+}
 
 type RouteError = {
   status: number;
@@ -89,7 +93,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function requireTranscriptAnalysis(request: NextRequest, jobId: string) {
-  const response = await fetch(`${BACKEND_URL}/api/transcripts/${encodeURIComponent(jobId)}/analysis`, {
+  const response = await fetch(backendUrl(`/api/transcripts/${encodeURIComponent(jobId)}/analysis`), {
     method: "GET",
     headers: { Cookie: request.headers.get("cookie") ?? "", Accept: "application/json" },
     cache: "no-store",
@@ -103,7 +107,7 @@ async function requireTranscriptAnalysis(request: NextRequest, jobId: string) {
 }
 
 async function requireTranscriptAccess(request: NextRequest, jobId: string) {
-  const response = await fetch(`${BACKEND_URL}/api/transcripts/${encodeURIComponent(jobId)}`, {
+  const response = await fetch(backendUrl(`/api/transcripts/${encodeURIComponent(jobId)}`), {
     method: "GET",
     headers: { Cookie: request.headers.get("cookie") ?? "", Accept: "application/json" },
     cache: "no-store",
@@ -142,7 +146,7 @@ function withAuthorizedTranscript(payload: PdfExportPayload, transcript: Transcr
 }
 
 async function recordPDFExportAudit(request: NextRequest, payload: PdfExportPayload, outcome: "success" | "failure") {
-  await fetch(`${BACKEND_URL}/api/audit/pdf-export`, {
+  await fetch(backendUrl("/api/audit/pdf-export"), {
     method: "POST",
     headers: { Cookie: request.headers.get("cookie") ?? "", "Content-Type": "application/json", Accept: "application/json" },
     cache: "no-store",
@@ -153,7 +157,7 @@ async function recordPDFExportAudit(request: NextRequest, payload: PdfExportPayl
 async function requireAuthenticated(request: NextRequest) {
   const cookie = request.headers.get("cookie") ?? "";
   if (!cookie) throw routeError(401, "UNAUTHENTICATED", "Authentication is required");
-  const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+  const response = await fetch(backendUrl("/api/auth/me"), {
     method: "GET",
     headers: { Cookie: cookie, Accept: "application/json" },
     cache: "no-store",
@@ -327,10 +331,10 @@ function buildAnalysisHtml(analysis: NonNullable<PdfExportPayload["analysis"]>) 
   const review = analysis.review;
   const reviewDetails = review.status !== "unreviewed"
     ? [
-        review.reviewedByDisplayName ? `Reviewer: ${review.reviewedByDisplayName}` : "",
-        review.reviewedAt ? `Reviewed: ${formatDate(review.reviewedAt)}` : "",
-        review.note ? `Note: ${review.note}` : "",
-      ].filter(Boolean).join("\n")
+      review.reviewedByDisplayName ? `Reviewer: ${review.reviewedByDisplayName}` : "",
+      review.reviewedAt ? `Reviewed: ${formatDate(review.reviewedAt)}` : "",
+      review.note ? `Note: ${review.note}` : "",
+    ].filter(Boolean).join("\n")
     : "";
   const sections = [
     `<div class="analysis-card"><h3>Transcript Review</h3><span class="pill">${escapeHtml(analysisReviewStatusLabel(review.status))}</span>${reviewDetails ? `<p>${escapeHtml(reviewDetails)}</p>` : ""}</div>`,
