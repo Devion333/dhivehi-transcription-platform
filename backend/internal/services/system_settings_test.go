@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -100,6 +102,34 @@ func TestNotificationSwitchesSuppressCreation(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSystemSettingsUpdateSQLPlaceholderCountMatchesArgs(t *testing.T) {
+	placeholderPattern := regexp.MustCompile(`\$(\d+)`)
+	matches := placeholderPattern.FindAllStringSubmatch(updateSystemSettingsSQL, -1)
+	if len(matches) == 0 {
+		t.Fatal("expected update SQL to contain placeholders")
+	}
+	maxPlaceholder := 0
+	for _, match := range matches {
+		value, err := strconv.Atoi(match[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if value > maxPlaceholder {
+			maxPlaceholder = value
+		}
+	}
+	settings := DefaultSystemSettings()
+	args := systemSettingsUpdateArgs(settings, []byte(`[]`), []byte(`[]`), []byte(`[]`), nil, nil)
+	if maxPlaceholder != len(args) {
+		t.Fatalf("placeholder count mismatch: highest placeholder $%d, args %d", maxPlaceholder, len(args))
+	}
+	for _, column := range []string{"require_full_review_before_download", "require_full_review_before_analysis", "notify_review_progress_changed"} {
+		if !strings.Contains(updateSystemSettingsSQL, column) {
+			t.Fatalf("update SQL missing %s", column)
+		}
 	}
 }
 
